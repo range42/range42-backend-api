@@ -1,0 +1,15 @@
+
+
+- hosts: px-testing
+  gather_facts: false
+  vars_files:
+    - "/home/grml/_products.git-hyde-repo/range42-ansible_roles-private-devkit//secrets/px-testing.cr42_tailscale.yaml"
+  tasks:
+    - name: RUN range42-ansible_roles-proxmox_controller - GET VM_LIST
+      include_role:
+        name: range42-ansible_roles-proxmox_controller
+      vars:
+        proxmox_vm_action: "vm_list"
+        proxmox_node: "px-testing"
+
+
