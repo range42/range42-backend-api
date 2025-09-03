@@ -1,0 +1,51 @@
+# editors 
+.idea/
+.vscode/
+*.iml
+
+# python 
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+downloads/
+wheels/
+pip-wheel-metadata/
+.env
+.venv
+env/
+venv/
+ENV/
+.venv*/
+
+# nodejs 
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+
+# generic  
+out/
+*.manifest
+*.spec
+
+# logs 
+*.log
+logs/
+
+# misc 
+*.swp
+*.swo
+*.tmp
+*.bak
+
