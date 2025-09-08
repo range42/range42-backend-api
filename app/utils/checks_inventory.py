@@ -7,8 +7,6 @@ from venv import logger
 from fastapi import HTTPException
 
 
-
-
 def resolve_inventory(inventory_name: str) -> Path:
     """ resolve inventory file path """
 

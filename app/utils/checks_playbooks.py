@@ -57,7 +57,9 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
 
     return main_filepath
 
+
 ####
+
 
 def _resolve_file(actions_dir: Path,
                  actions_regex_pattern: re.Pattern[str],
