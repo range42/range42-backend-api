@@ -3,13 +3,9 @@ from typing import  List
 from pydantic import BaseModel, Field
 
 #
-# from enum import Enum
-# from typing import Optional, Literal, List
-# from pydantic import BaseModel, Field
+# ISSUE - #2
 #
 
-#### #### #### #### #### #### #### #### #### #### #### #### #### ####
-#### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
 class Request_ProxmoxVms_VmList(BaseModel):
 
