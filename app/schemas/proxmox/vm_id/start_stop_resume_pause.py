@@ -2,11 +2,10 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 
-# from typing import Optional, Literal
-# from pydantic import BaseModel, Field
+#
+# ISSUE - #3
+#
 
-#### #### #### #### #### #### #### #### #### #### #### #### #### ####
-#### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
 class Request_ProxmoxVmsVMID_StartStopPauseResume(BaseModel):
 
