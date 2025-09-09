@@ -30,12 +30,11 @@ debug = 1
 @router.post(
     path="/{action_name}/run",
     summary="Run action",
-    description="Run generic action default (and static) extras_vars ",
-    tags=["run - actions - ping"],
+    description="Run generic action with default (and static) extras_vars ",
+    tags=["runner"],
 )
 
 def debug_ping(action_name: str, req: Request_DebugPing):
-
 
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
     checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
