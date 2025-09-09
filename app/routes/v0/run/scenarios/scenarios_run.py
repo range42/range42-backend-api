@@ -17,32 +17,27 @@ from app import utils
 
 router = APIRouter()
 
-# PROJECT_ROOT = Path(__file__).resolve().parents[5]
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
-
-# PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "ping.yml"
-# PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
-# INVENTORY_NAME =  "hosts"
 
 debug = 1
 
 @router.post(
-    path="/{action_name}/run",
-    summary="Run action",
-    description="Run generic action with default (and static) extras_vars ",
+    path="/{scenario_name}/run",
+    summary="Run scenario",
+    description="Run generic scenario with default (and static) extras_vars ",
     tags=["runner"],
 )
 
-def debug_ping(action_name: str, req: Request_DebugPing):
+def debug_ping(scenario_name: str, req: Request_DebugPing):
 
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
+    checked_playbook_filepath  = utils.resolve_scenarios_playbook(scenario_name, "public_github")
 
     #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
     if debug ==1:
-        print("::  ACTION_NAME", action_name)
+        print("::  SCENARIO_NAME", scenario_name)
         print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
@@ -107,6 +102,5 @@ def request_checks(req: Request_DebugPing) -> dict[Any, Any]:
 
 
     # extravars["hosts"] = "proxmox"
-
     return extravars
 
