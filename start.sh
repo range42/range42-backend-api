@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# dirty & temp fix : 
+
+ansible-galaxy collection install community.general -p ~/.ansible/collections
+ansible-galaxy collection install ansible.posix -p ~/.ansible/collections
+ansible-galaxy collection install ansible.windows -p ~/.ansible/collections
+
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
 PROJECT_ROOT="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
@@ -17,7 +23,6 @@ export API_BACKEND_VAULT_FILE="$HOME/_products.git-hyde-repo/range42-ansible_rol
 #
 export VAULT_PASSWORD_FILE="/tmp/vault/vault_pass.txt"
 #export VAULT_PASSWORD="redacted.
-
 
 HOST="0.0.0.0"
 PORT="8000"

@@ -16,3 +16,8 @@ httpx==0.27.2
 # Others
 setuptools>=70.0.0
 wheel>=0.43.0
+
+
+# for wazuh ?
+# pywinrm
+# requests-ntlm
