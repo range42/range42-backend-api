@@ -45,7 +45,6 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
     response_description="Start result",
 )
 
-@router.post("/resume")
 def proxmox_vms_vm_id_resume(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     """ This endpoint resume the target virtual machine (VM"""
 
