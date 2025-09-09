@@ -9,17 +9,36 @@ from pydantic import BaseModel, Field
 
 class Request_ProxmoxVmsVMID_StartStopPauseResume(BaseModel):
 
-    vm_id: str | None = Field(
-        default="1000",
+    proxmox_node: str = Field(
+        ...,
+        # default= "px-testing",
+        description = "Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$"
+    )
+
+    vm_id: str = Field(
+        ...,
+        # default="1000",
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
 
-    proxmox_node: str | None = "px-testing"
-    as_json: bool | None = Field(
+    as_json: bool = Field(
         default=True,
         description="If true : JSON output else : raw output"
     )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "px-testing",
+                "vm_id": "2000",
+                "vm_new_id": "3000",
+                "vm_name":"test-cloned",
+                "vm_description":"my description"
+            }
+        }
+    }
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 #### #### #### #### #### #### #### #### #### #### #### #### #### ####

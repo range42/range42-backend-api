@@ -1,5 +1,5 @@
 from typing import Any
-
+import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -19,6 +19,7 @@ import os
 debug = 0
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # PROJECT_ROOT = Path(__file__).resolve().parents[6]
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()

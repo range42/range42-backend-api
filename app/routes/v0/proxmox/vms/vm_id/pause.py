@@ -1,5 +1,5 @@
 from typing import Any
-from venv import logger
+import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -19,6 +19,7 @@ import os
 debug = 0
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # PROJECT_ROOT = Path(__file__).resolve().parents[6]
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
@@ -49,23 +50,9 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     """ This endpoint pauses the target virtual machine (VM)."""
 
-    # if debug ==1:
-    #     print("::  REQUEST ::", req.dict())
-    #     print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-    #     # print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
-    #     # print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")
-
-    #
-    # if not INVENTORY_SRC.exists():
-    #     err = f":: err - MISSING INVENTORY : {INVENTORY_SRC}"
-    #     logger.error(err)
-    #     raise HTTPException(status_code=400, detail=err)
-    #
-    #
-
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
-        logger.error(err)
+        logging.error(err)
         raise HTTPException(status_code=400, detail=err)
 
     checked_playbook_filepath  = PLAYBOOK_SRC
