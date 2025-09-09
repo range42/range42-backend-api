@@ -9,17 +9,16 @@ from . import vault
 
 
 def print_env_vars(envvars: dict):
-    """ debug func - print env variables"""
+    print(f"ANSIBLE_ROLES_PATH           : {envvars.get('ANSIBLE_ROLES_PATH', '')}")
+    print(f"ANSIBLE_COLLECTIONS_PATH     : {envvars.get('ANSIBLE_COLLECTIONS_PATH','')}")
+    print(f"ANSIBLE_COLLECTIONS_PATHS    : {envvars.get('ANSIBLE_COLLECTIONS_PATHS','')}")
+    print(f"ANSIBLE_LIBRARY              : {envvars.get('ANSIBLE_LIBRARY', '')}")
+    print(f"ANSIBLE_FILTER_PLUGINS       : {envvars.get('ANSIBLE_FILTER_PLUGINS', '')}")
+    print(f"ANSIBLE_HOST_KEY_CHECKING    : {envvars.get('ANSIBLE_HOST_KEY_CHECKING', 'False')}")
+    print(f"ANSIBLE_DEPRECATION_WARNINGS : {envvars.get('ANSIBLE_DEPRECATION_WARNINGS', 'False')}")
+    print(f"PYTHONWARNINGS               : {envvars.get('PYTHONWARNINGS', 'ignore::DeprecationWarning')}")
+    print(f"ANSIBLE_INVENTORY_ENABLED    : {envvars.get('ANSIBLE_INVENTORY_ENABLED', 'yaml,ini')}")
 
-    print(f"ANSIBLE_ROLES_PATH          : {envvars.get('ANSIBLE_ROLES_PATH', '')}")
-    print(f"ANSIBLE_COLLECTIONS_PATHS    : {envvars.get("ANSIBLE_COLLECTIONS_PATHS",'')}")
-    print(f"ANSIBLE_LIBRARY              : {envvars.get("ANSIBLE_LIBRARY", "yaml,ini")}")
-    print(f"ANSIBLE_FILTER_PLUGINS       : {envvars.get("ANSIBLE_FILTER_PLUGINS", '')}")
-
-    print(f"ANSIBLE_HOST_KEY_CHECKING    : {envvars.get("ANSIBLE_HOST_KEY_CHECKING", 'False')}")
-    print(f"ANSIBLE_DEPRECATION_WARNINGS : {envvars.get("ANSIBLE_DEPRECATION_WARNINGS", 'False')}")
-    print(f"PYTHONWARNINGS               : {envvars.get("PYTHONWARNINGS", 'ignore::DeprecationWarning')}")
-    print(f"ANSIBLE_INVENTORY_ENABLED    : {envvars.get("ANSIBLE_INVENTORY_ENABLED", 'yaml,ini')}")
 
 def set_env_vars(tmp_dir: Path):
     """ write env file in tmp_dir """
@@ -40,22 +39,39 @@ def set_env_vars(tmp_dir: Path):
     # if os.getenv("ANSIBLE_CALLBACK_PLUGINS"): envvars["ANSIBLE_CALLBACK_PLUGINS"] = os.environ["ANSIBLE_CALLBACK_PLUGINS"]
     # #if os.getenv("ANSIBLE_STDOUT_CALLBACK"): envvars["ANSIBLE_STDOUT_CALLBACK"] = os.environ["ANSIBLE_STDOUT_CALLBACK"]
     #
+
+    home_collections = os.path.expanduser("~/.ansible/collections")
+    sys_collections = "/usr/share/ansible/collections"
+    coll_paths = f"{home_collections}:{sys_collections}"
+
     envvars = {
         "ANSIBLE_HOST_KEY_CHECKING": "True",
         "ANSIBLE_DEPRECATION_WARNINGS": "False",
         "ANSIBLE_INVENTORY_ENABLED": "yaml,ini",
         "PYTHONWARNINGS": "ignore::DeprecationWarning",
         "ANSIBLE_ROLES_PATH": os.environ.get("ANSIBLE_ROLES_PATH", ""),
-        "ANSIBLE_COLLECTIONS_PATHS": os.environ.get("ANSIBLE_COLLECTIONS_PATHS", ""),
-        "ANSIBLE_LIBRARY": os.environ.get("ANSIBLE_LIBRARY", ""),
+        # "ANSIBLE_COLLECTIONS_PATHS": os.environ.get("ANSIBLE_COLLECTIONS_PATHS", "/home/grml/_products.git-hyde-repo/range42-backend-api/collections/"),
+        # "ANSIBLE_LIBRARY": os.environ.get("ANSIBLE_LIBRARY", ""),
         "ANSIBLE_FILTER_PLUGINS": os.environ.get("ANSIBLE_FILTER_PLUGINS", ""),
+
+        # ⬇️ corrections
+        "ANSIBLE_COLLECTIONS_PATH": os.environ.get("ANSIBLE_COLLECTIONS_PATH", coll_paths),
+        "ANSIBLE_COLLECTIONS_PATHS": os.environ.get("ANSIBLE_COLLECTIONS_PATHS", coll_paths),
+        # ⬆️ corrections
+        "ANSIBLE_LIBRARY": os.environ.get("ANSIBLE_LIBRARY", ""),
     }
 
     # VAULT ENV VARS - SET PRIORITY ENV VAR FIRST
-    if os.getenv("VAULT_PASSWORD_FILE"):          envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = os.environ["VAULT_PASSWORD_FILE"]
+    if os.getenv("VAULT_PASSWORD_FILE"):
+        envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = os.environ["VAULT_PASSWORD_FILE"]
 
     elif vault.get_vault_path():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault.get_vault_path())
+
+
+    if os.getenv("ANSIBLE_CONFIG"):
+        envvars["ANSIBLE_CONFIG"] = os.environ["ANSIBLE_CONFIG"]
+
 
     # WRITE ENV IN tmp_dir/env/envvars
     env_dir = tmp_dir / "env"
