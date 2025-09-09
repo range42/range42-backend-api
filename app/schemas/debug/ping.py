@@ -12,22 +12,35 @@ from pydantic import BaseModel, Field
 
 class Request_DebugPing(BaseModel):
 
-    hosts: str | None = Field(
-        default="all",
-        description="Targeted ansible hosts",
-        pattern=r"^[A-Za-z0-9\._-]+$"
+    proxmox_node: str = Field(
+        ...,
+        # default="px-testing",
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$"
     )
 
-    proxmox_node: str | None = Field(
-        default="px-testing",
-        description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9_-]+$"
+    hosts: str | None = Field(
+        ...,
+        # default="all",
+        description="Targeted ansible hosts",
+        pattern=r"^[A-Za-z0-9\._-]+$"
     )
 
     as_json: bool | None = Field(
         default=False,
         description="If true : JSON output else : raw output"
     )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "px-testing",
+                "hosts": "all",
+                "as_json": False
+            }
+        }
+    }
+
 
 # #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 # #### #### #### #### #### #### #### #### #### #### #### #### #### ####
