@@ -11,7 +11,9 @@ from app.schemas.debug.ping import Request_DebugPing
 
 from app import utils
 
-####
+#
+# ISSUE - #15
+#
 
 router = APIRouter()
 
@@ -36,7 +38,7 @@ def debug_ping(action_name: str, req: Request_DebugPing):
 
 
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    checked_playbook_filepath  =  utils.resolve_actions_playbook(action_name, "public_github")
+    checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
 
     #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 

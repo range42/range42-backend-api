@@ -9,13 +9,26 @@ from pydantic import BaseModel, Field
 
 class Request_ProxmoxVms_VmList(BaseModel):
 
-    proxmox_node: str | None = Field(
-        default="px-testing",
-        description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]+$"
+    proxmox_node: str = Field(
+        ...,
+        # default= "px-testing",
+        description = "Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$"
     )
 
-    as_json: bool | None = True
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "px-testing",
+                "as_json": True
+            }
+        }
+    }
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 #### #### #### #### #### #### #### #### #### #### #### #### #### ####

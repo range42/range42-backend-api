@@ -1,5 +1,5 @@
 from typing import Any
-from venv import logger
+import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -16,10 +16,10 @@ import os
 # ISSUE - #2
 #
 
-
 debug = 0
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # PROJECT_ROOT = Path(__file__).resolve().parents[5]
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
@@ -63,12 +63,12 @@ def proxmox_vms_list_router(req: Request_ProxmoxVms_VmList):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
-        logger.error(err)
+        logging.error(err)
         raise HTTPException(status_code=400, detail=err)
 
     if not INVENTORY_SRC.exists():
         err = f":: err - MISSING INVENTORY : {INVENTORY_SRC}"
-        logger.error(err)
+        logging.error(err)
         raise HTTPException(status_code=400, detail=err)
 
     #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
