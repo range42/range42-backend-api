@@ -7,7 +7,8 @@ from fastapi import APIRouter
 # from app.routes.proxmox.snapshots.vm import router as snaps_vm_router
 # from app.routes.run.actions.catalog_run import catalog_run_router
 
-from app.routes.v0.run.actions.catalog_run import router as catalog_run_router
+from app.routes.v0.run.actions.actions_run import router as actions_run_router
+from app.routes.v0.run.scenarios.scenarios_run import router as scenarios_run_router
 from app.routes.v0.proxmox.vms.list import router        as proxmox_vms_list_router
 
 #
@@ -19,6 +20,10 @@ from app.routes.v0.proxmox.vms.vm_id.stop import router       as proxmox_vms_vm_
 from app.routes.v0.proxmox.vms.vm_id.pause import router      as proxmox_vms_vm_id_pause_router
 from app.routes.v0.proxmox.vms.vm_id.resume import router     as proxmox_vms_vm_id_resume_router
 from app.routes.v0.proxmox.vms.vm_id.stop_force import router as proxmox_vms_vm_id_stop_force_router
+
+from app.routes.v0.proxmox.vms.vm_id.delete import router as proxmox_vms_vm_id_delete_router
+from app.routes.v0.proxmox.vms.vm_id.clone import router as proxmox_vms_vm_id_clone_router
+from app.routes.v0.proxmox.vms.vm_id.create import router as proxmox_vms_vm_id_create_router
 
 #
 # debug routes
@@ -45,9 +50,14 @@ router.include_router(proxmox_vms_vm_id_stop_force_router,  prefix="/v0/proxmox/
 router.include_router(proxmox_vms_vm_id_pause_router,       prefix="/v0/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_resume_router,      prefix="/v0/proxmox/vms/vm_id")
 
+router.include_router(proxmox_vms_vm_id_delete_router,      prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_clone_router,       prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_create_router,      prefix="/v0/proxmox/vms/vm_id")
+
 
 # /v0/run/catalog/
-router.include_router(catalog_run_router, prefix="/v0/run/actions")
+router.include_router(actions_run_router, prefix="/v0/run/actions")
+router.include_router(scenarios_run_router, prefix="/v0/run/scenarios")
 
 #
 # temp notes :

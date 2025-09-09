@@ -1,0 +1,10 @@
+
+- hosts: px-testing
+  gather_facts: false
+  #  vars_files:
+  #    - "/old/reference/_redacted/_to_vault.yml"
+  tasks:
+    - name:  RUN ACTION - range42-ansible_roles-proxmox_controller
+      include_role:
+        name: range42-ansible_roles-proxmox_controller
+      vars:
