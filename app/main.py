@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import inspect
+import json
 import os, shutil, stat, tempfile
 import sys
 from pathlib import Path
@@ -122,34 +123,66 @@ app = FastAPI(
 if debug:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """ schema validation handler with  debug output  """
 
-        logger.error("")
-        logger.error(":: 422 on %s %s", request.method, request.url.path)
+        # request context : method + url_path  + url_query
+        logger.error(" :::: 422 on %s %s %s", request.method, request.url.path, request.url.query)
+
+        body_text = ""
 
         try:
-            body = (await request.body()).decode("utf-8", "ignore")
-            logger.error("")
-            logger.error("Request body: %s", body)
+            raw = await request.body()
+
+            if raw:
+                body_text = raw.decode("utf-8", "ignore")
+
         except Exception:
-            pass
+            logger.exception(" :::: Failed to read request body.")
 
-        pretty = []
+        #### #### Get errors details - json or raw format
 
-        for e in exc.errors():
-            loc = ".".join(str(p) for p in e.get("loc", []))
-            msg = e.get("msg")
-            typ = e.get("type")
-            ctx = e.get("ctx")
-            inp = e.get("input")
+        if body_text.strip():
 
-            logger.error("")
-            logger.error("field=%s | msg=%s | type=%s ", loc, msg, typ)
-            logger.error("input=%r | ctx=%s",  inp, ctx)
-            logger.error("")
-            pretty.append({"field": loc, "msg": msg, "type": typ, "ctx": ctx})
-            logger.error("")
+            try:
+                parsed = json.loads(body_text)
+                logger.error(" :::: Request - body - pretty_json :\n%s", json.dumps(parsed, indent=2, ensure_ascii=False))
 
-        return JSONResponse(status_code=422, content={"detail": pretty})
+            except json.JSONDecodeError:
+                logger.error(" :::: Request - body - raw : %s", body_text)
+
+        else:
+            logger.error(" :::: Request body: <empty>")
+
+
+        #### Post rendering error msg.
+
+        details = []
+
+        for err in exc.errors():
+
+            err_loc   = ".".join(str(p) for p in err.get("loc", []))
+            err_msg   = err.get("msg", "")
+            err_type  = err.get("type", "")
+            err_input = err.get("input", None)
+            err_ctx   = err.get("ctx", None)
+
+            logger.error(" :::: field=%s | msg=%s | type=%s", err_loc, err_msg, err_type)
+
+            if err_input is not None:
+                logger.error(" :::: input=%r", err_input)
+
+            if err_ctx:
+                logger.error(" :::: ctx=%s", err_ctx)
+
+            details.append({
+                "field": err_loc,
+                "msg": err_msg,
+                "type": err_type,
+                "input": err_input,
+                "ctx": err_ctx,
+            })
+
+        return JSONResponse(status_code=422, content={"detail": details})
 
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
