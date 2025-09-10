@@ -32,13 +32,13 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
     path="/delete",
     summary="Delete a specific VM",
     description="This endpoint delete the target virtual machine (VM).",
-    tags=["proxmox - vm lifecycle"],
+    tags=["proxmox - vm management"],
     #
     response_model=Reply_ProxmoxVmsVMID_Delete,
     response_description="Delete result",
 )
 
-def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_Delete):
+def proxmox_vms_vm_id_delete(req: Request_ProxmoxVmsVMID_Delete):
     """ This endpoint pauses the target virtual machine (VM)."""
 
     if not PLAYBOOK_SRC.exists():

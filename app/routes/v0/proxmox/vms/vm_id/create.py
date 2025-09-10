@@ -35,13 +35,13 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
     path="/create",
     summary="Create a specific VM",
     description="This endpoint create the target virtual machine (VM).",
-    tags=["proxmox - vm create"],
+    tags=["proxmox - vm management"],
     #
     response_model=Reply_ProxmoxVmsVMID_Create,
     response_description="Delete result",
 )
 
-def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_Create):
+def proxmox_vms_vm_id_create(req: Request_ProxmoxVmsVMID_Create):
     """ This endpoint clone the target virtual machine (VM)."""
 
     if not PLAYBOOK_SRC.exists():
