@@ -35,16 +35,21 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # ):
 
 #
-# => /api/proxmox/vms/vmd_id/pause
+# => /api/proxmox/vms/vmd_id/vm_get_config
+#
+# todo :
+## should be move into api/proxmox/vms/vm_id/config/vm
+## should be move into api/proxmox/vms/vm_id/config/cdrom
+## should be move into api/proxmox/vms/vm_id/config/cpu
+## should be move into api/proxmox/vms/vm_id/config/ram
 #
 @router.post(
     path="/vm_get_config",
-    summary="Get cdrom configuration of a specific VM -",
-    description="This endpoint get the target virtual machine (VM) cdrom configuration details.",
-    tags=["proxmox - vm lifecycle"],
-    #
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
+    tags=["proxmox - vm configuration"],
     response_model=Reply_ProxmoxVmsVMID_VmGetConfig,
-    response_description="Start result",
+    response_description="VM configuration details",
 )
 
 def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_VmGetConfig):
