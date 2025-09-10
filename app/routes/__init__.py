@@ -28,6 +28,8 @@ from app.routes.v0.proxmox.vms.vm_id.vm_get_config import router       as proxmo
 from app.routes.v0.proxmox.vms.vm_id.vm_get_config_cdrom import router as proxmox_vms_vm_id_vm_get_config_cdrom_router
 from app.routes.v0.proxmox.vms.vm_id.vm_get_config_cpu import router   as proxmox_vms_vm_id_vm_get_config_cpu_router
 from app.routes.v0.proxmox.vms.vm_id.vm_get_config_ram import router   as proxmox_vms_vm_id_vm_get_config_ram_router
+from app.routes.v0.proxmox.vms.vm_id.vm_set_tag import router          as proxmox_vms_vm_id_vm_set_tags_router
+from app.routes.v0.proxmox.vms.list_usage import router                as proxmox_vms_list_usage_router
 
 #
 # debug routes
@@ -46,21 +48,23 @@ router.include_router(debug_ping, prefix="/v0/debug")
 
 # /v0/proxmox/vms
 router.include_router(proxmox_vms_list_router, prefix="/v0/proxmox/vms")
+router.include_router(proxmox_vms_list_usage_router,                prefix="/v0/proxmox/vms")
 
 # /v0/proxmox/vms/vm_id/
-router.include_router(proxmox_vms_vm_id_start,                 prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_stop_router,           prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_stop_force_router,     prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_pause_router,          prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_resume_router,         prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_start,                      prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_stop_router,                prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_stop_force_router,          prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_pause_router,               prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_resume_router,              prefix="/v0/proxmox/vms/vm_id")
 
-router.include_router(proxmox_vms_vm_id_delete_router,         prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_clone_router,          prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_create_router,         prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_vm_get_config_router,  prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_vm_get_config_cdrom_router,  prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_vm_get_config_cpu_router,    prefix="/v0/proxmox/vms/vm_id")
-router.include_router(proxmox_vms_vm_id_vm_get_config_ram_router,    prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_delete_router,              prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_clone_router,               prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_create_router,              prefix="/v0/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_vm_get_config_router,       prefix="/v0/proxmox/vms/vm_id/config")
+router.include_router(proxmox_vms_vm_id_vm_get_config_cdrom_router, prefix="/v0/proxmox/vms/vm_id/config")
+router.include_router(proxmox_vms_vm_id_vm_get_config_cpu_router,   prefix="/v0/proxmox/vms/vm_id/config")
+router.include_router(proxmox_vms_vm_id_vm_get_config_ram_router,   prefix="/v0/proxmox/vms/vm_id/config")
+router.include_router(proxmox_vms_vm_id_vm_set_tags_router,         prefix="/v0/proxmox/vms/vm_id/config")
 
 
 # /v0/run/catalog/
