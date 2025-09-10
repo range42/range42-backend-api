@@ -42,12 +42,15 @@ class Request_ProxmoxVmsVMID_VmGetConfigCpu(BaseModel):
 
 class Reply_ProxmoxVmsVMID_VmGetConfigCpuItem(BaseModel):
 
-    action: Literal["vm_get_config"]
+    action: Literal["vm_get_config_cpu"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id: int = Field(..., ge=1)
-    vm_name: str
-    raw_data: str = Field(..., description="Raw string returned by proxmox")
+    vm_id       : str # int = Field(..., ge=1)
+    vm_arch     : str #to fix ?
+    vm_cores    : str #to fix ?
+    vm_sockets  : str #to fix ?
+    # vm_name: str
+    # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class Reply_ProxmoxVmsVMID_VmGetConfigCpu(BaseModel):
@@ -61,7 +64,7 @@ class Reply_ProxmoxVmsVMID_VmGetConfigCpu(BaseModel):
                 "rc": 0,
                 "result": [
                     {
-                        "action":"vm_get_config_ram",
+                        "action":"vm_get_config_cpu",
                         "proxmox_node":"px-testing",
                         "source":"proxmox",
                         "vm_arch":"host",

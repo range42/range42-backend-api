@@ -50,8 +50,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
     response_model=Reply_ProxmoxVmsVMID_VmGetConfigCdrom,
     response_description="cdrom configuration details",
 )
-def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_VmGetConfigCdrom):
-    """ This endpoint pauses the target virtual machine (VM)."""
+def proxmox_vms_vm_id_vm_get_config_cdrom(req: Request_ProxmoxVmsVMID_VmGetConfigCdrom):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"

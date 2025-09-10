@@ -42,12 +42,17 @@ class Request_ProxmoxVmsVMID_VmGetConfigCdrom(BaseModel):
 
 class Reply_ProxmoxVmsVMID_VmGetConfigCdromItem(BaseModel):
 
-    action: Literal["vm_get_config"]
+    action: Literal["vm_get_config_cdrom"]
     source: Literal["proxmox"]
-    proxmox_node: str
-    vm_id: int = Field(..., ge=1)
-    vm_name: str
-    raw_data: str = Field(..., description="Raw string returned by proxmox")
+    proxmox_node   : str
+    vm_id          : str # int = Field(..., ge=1)
+    vm_cdrom_device: str
+    vm_cdrom_iso   : str
+    vm_cdrom_media : str
+    vm_cdrom_size  : str
+
+    # vm_name: str
+    # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class Reply_ProxmoxVmsVMID_VmGetConfigCdrom(BaseModel):

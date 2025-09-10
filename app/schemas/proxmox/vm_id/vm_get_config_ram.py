@@ -42,12 +42,14 @@ class Request_ProxmoxVmsVMID_VmGetConfigRam(BaseModel):
 
 class Reply_ProxmoxVmsVMID_VmGetConfigRamItem(BaseModel):
 
-    action: Literal["vm_get_config"]
+    action: Literal["vm_get_config_ram"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id: int = Field(..., ge=1)
-    vm_name: str
-    raw_data: str = Field(..., description="Raw string returned by proxmox")
+    vm_id           : str # int = Field(..., ge=1)
+    vm_ram_allocated: str # wtf... - fix todo
+
+    # vm_name: str
+    # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class Reply_ProxmoxVmsVMID_VmGetConfigRam(BaseModel):
