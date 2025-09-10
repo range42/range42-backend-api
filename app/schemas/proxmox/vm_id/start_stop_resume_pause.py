@@ -33,9 +33,9 @@ class Request_ProxmoxVmsVMID_StartStopPauseResume(BaseModel):
             "example": {
                 "proxmox_node": "px-testing",
                 "vm_id": "2000",
-                "vm_new_id": "3000",
-                "vm_name":"test-cloned",
-                "vm_description":"my description"
+                # "vm_new_id": "3000",
+                # "vm_name":"test-cloned",
+                # "vm_description":"my description"
             }
         }
     }
@@ -47,9 +47,11 @@ class Reply_ProxmoxVmsVMID_StartStopPauseResumeItem(BaseModel):
 
     action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force" ]
     source: Literal["proxmox"]
+
     proxmox_node: str
-    vm_id: int = Field(..., ge=1)
-    vm_name: str
+    vm_id       : str  # int = Field(..., ge=1)
+    vm_new_id   : str  # int = Field(..., ge=1)
+    vm_name     : str
     vm_status: Literal["running", "stopped", "paused"]
 
 class Reply_ProxmoxVmsVMID_StartStopPauseResume(BaseModel):

@@ -46,7 +46,9 @@ class Reply_ProxmoxVmsVMID_DeleteItem(BaseModel):
     action: Literal["vm_delete"]
     source: Literal["proxmox"]
     proxmox_node: str
+
     vm_id: int = Field(..., ge=1)
+
     vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 

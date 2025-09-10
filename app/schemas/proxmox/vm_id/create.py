@@ -116,15 +116,15 @@ class Reply_ProxmoxVmsVMID_CreateItem(BaseModel):
     action: Literal["vm_create"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id: int = Field(..., ge=1)
-    vm_name: str
-    vm_cpu: str
-    vm_cores: int = Field(..., ge=1)
+    vm_id     : int = Field(..., ge=1)
+    vm_name   : str
+    vm_cpu    : str
+    vm_cores  : int = Field(..., ge=1)
     vm_sockets: int = Field(..., ge=1)
-    vm_memory: int = Field(..., ge=1)
-    vm_net0: str
-    vm_scsi0: str
-    raw_data: str = Field(..., description="Raw string returned by Proxmox")
+    vm_memory : int = Field(..., ge=1)
+    vm_net0   : str
+    vm_scsi0  : str
+    raw_data  : str = Field(..., description="Raw string returned by Proxmox")
 
 
 class Reply_ProxmoxVmsVMID_Create(BaseModel):
