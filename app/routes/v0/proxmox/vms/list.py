@@ -26,34 +26,25 @@ PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
-
 # @router.post("/{vm_id}/start")
 # def proxmox_vms_vm_id_start(
 #     vm_id: int,
 #     req: Request_ProxmoxVmsVMID_StartStopPauseResume,
 # ):
 
-
-#
-# => /api/proxmox/vms/list
-#
-
 ####
-
 # => /api/proxmox/vms/list
-
-
 @router.post(
     path="/list",
     summary="List VMs and LXC containers",
     description="This endpoint retrieves all virtual machines (VMs) and LXC containers from Proxmox.",
-    tags=["proxmox"],
+    tags=["proxmox - usage"],
     #
     response_model=Reply_ProxmoxVmList,
     response_description="List VM result",
 )
 
-def proxmox_vms_list_router(req: Request_ProxmoxVms_VmList):
+def proxmox_vms_list(req: Request_ProxmoxVms_VmList):
 
     if debug ==1:
         print("::  REQUEST ::", req.dict())
