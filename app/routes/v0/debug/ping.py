@@ -28,12 +28,10 @@ debug = 0
     path="/ping",
     summary="Run Ansible ping utility",
     description="This endpoint runs the Ansible ping module to check connectivity with target hosts.",
-    tags=["utils - debug"],
+    tags=["runner"],
 )
 
 def debug_ping(req: Request_DebugPing):
-
-
 
     if debug ==1:
         print("::  REQUEST ::", req.dict())

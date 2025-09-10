@@ -3,8 +3,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.schemas.proxmox.vm_id.vm_get_config import Request_ProxmoxVmsVMID_VmGetConfig
-from app.schemas.proxmox.vm_id.vm_get_config import Reply_ProxmoxVmsVMID_VmGetConfig
+from app.schemas.proxmox.vm_id.config.vm_get_config import Request_ProxmoxVmsVMID_VmGetConfig
+from app.schemas.proxmox.vm_id.config.vm_get_config import Reply_ProxmoxVmsVMID_VmGetConfig
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results

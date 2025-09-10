@@ -24,11 +24,12 @@ from app.routes.v0.proxmox.vms.vm_id.stop_force import router as proxmox_vms_vm_
 from app.routes.v0.proxmox.vms.vm_id.delete import router              as proxmox_vms_vm_id_delete_router
 from app.routes.v0.proxmox.vms.vm_id.clone import router               as proxmox_vms_vm_id_clone_router
 from app.routes.v0.proxmox.vms.vm_id.create import router              as proxmox_vms_vm_id_create_router
-from app.routes.v0.proxmox.vms.vm_id.vm_get_config import router       as proxmox_vms_vm_id_vm_get_config_router
-from app.routes.v0.proxmox.vms.vm_id.vm_get_config_cdrom import router as proxmox_vms_vm_id_vm_get_config_cdrom_router
-from app.routes.v0.proxmox.vms.vm_id.vm_get_config_cpu import router   as proxmox_vms_vm_id_vm_get_config_cpu_router
-from app.routes.v0.proxmox.vms.vm_id.vm_get_config_ram import router   as proxmox_vms_vm_id_vm_get_config_ram_router
-from app.routes.v0.proxmox.vms.vm_id.vm_set_tag import router          as proxmox_vms_vm_id_vm_set_tags_router
+
+from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config import router       as proxmox_vms_vm_id_vm_get_config_router
+from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_cdrom import router as proxmox_vms_vm_id_vm_get_config_cdrom_router
+from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_cpu import router   as proxmox_vms_vm_id_vm_get_config_cpu_router
+from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_ram import router   as proxmox_vms_vm_id_vm_get_config_ram_router
+from app.routes.v0.proxmox.vms.vm_id.config.vm_set_tag import router          as proxmox_vms_vm_id_vm_set_tags_router
 from app.routes.v0.proxmox.vms.list_usage import router                as proxmox_vms_list_usage_router
 
 #

@@ -3,8 +3,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.schemas.proxmox.vm_id.vm_get_config_cdrom import Request_ProxmoxVmsVMID_VmGetConfigCdrom
-from app.schemas.proxmox.vm_id.vm_get_config_cdrom import Reply_ProxmoxVmsVMID_VmGetConfigCdrom
+from app.schemas.proxmox.vm_id.config.vm_set_tag import Request_ProxmoxVmsVMID_VmSetTag
+from app.schemas.proxmox.vm_id.config.vm_set_tag import Reply_ProxmoxVmsVMID_VmSetTag
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results
@@ -13,7 +13,7 @@ from pathlib import Path
 import os
 
 #
-# ISSUE - #5
+# ISSUE - #7
 #
 
 debug = 0
@@ -34,6 +34,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 #     req: Request_ProxmoxVmsVMID_StartStopPauseResume,
 # ):
 
+#
 # => /api/proxmox/vms/vmd_id/vm_get_config
 #
 # todo :
@@ -43,14 +44,15 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 ## should be move into api/proxmox/vms/vm_id/config/ram
 #
 @router.post(
-    path="/vm_get_config_cdrom",
-    summary="Get cdrom configuration of a VM",
-    description="Returns the cdrom configuration details of the specified virtual machine (VM).",
+    path="/vm_set_tag",
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
     tags=["proxmox - vm configuration"],
-    response_model=Reply_ProxmoxVmsVMID_VmGetConfigCdrom,
-    response_description="cdrom configuration details",
+    response_model=Reply_ProxmoxVmsVMID_VmSetTag,
+    response_description="VM configuration details",
 )
-def proxmox_vms_vm_id_vm_get_config_cdrom(req: Request_ProxmoxVmsVMID_VmGetConfigCdrom):
+
+def proxmox_vms_vm_id_vm_set_tags(req: Request_ProxmoxVmsVMID_VmSetTag):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -107,7 +109,7 @@ def reply_processing(events: list[dict] | list[Any],
                      extravars: dict[Any, Any],
                      log_plain: str,
                      rc,
-                     req: Request_ProxmoxVmsVMID_VmGetConfigCdrom) -> dict[str, list | Any]:
+                     req: Request_ProxmoxVmsVMID_VmSetTag) -> dict[str, list | Any]:
 
     """ reply post-processing - json or ansible raw output """
 
@@ -136,17 +138,20 @@ def reply_processing(events: list[dict] | list[Any],
     return payload
 
 
-def request_checks(req: Request_ProxmoxVmsVMID_VmGetConfigCdrom) -> dict[Any, Any]:
+def request_checks(req: Request_ProxmoxVmsVMID_VmSetTag) -> dict[Any, Any]:
     """ request checks """
 
     extravars = {}
-    extravars["proxmox_vm_action"] = "vm_get_config_cdrom"
+    extravars["proxmox_vm_action"] = "vm_set_tag"
 
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
+
+    if req.proxmox_node:
+         extravars["vm_tag_name"] = req.vm_tag_name
 
     # nothing :
     if not extravars:
