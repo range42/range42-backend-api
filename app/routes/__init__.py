@@ -9,7 +9,9 @@ from fastapi import APIRouter
 
 from app.routes.v0.run.actions.actions_run import router as actions_run_router
 from app.routes.v0.run.scenarios.scenarios_run import router as scenarios_run_router
+
 from app.routes.v0.proxmox.vms.list import router        as proxmox_vms_list_router
+from app.routes.v0.proxmox.vms.list_usage import router  as proxmox_vms_list_usage_router
 
 #
 # proxmox vm life cycle mgmt
@@ -30,7 +32,14 @@ from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_cdrom import router as
 from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_cpu import router   as proxmox_vms_vm_id_vm_get_config_cpu_router
 from app.routes.v0.proxmox.vms.vm_id.config.vm_get_config_ram import router   as proxmox_vms_vm_id_vm_get_config_ram_router
 from app.routes.v0.proxmox.vms.vm_id.config.vm_set_tag import router          as proxmox_vms_vm_id_vm_set_tags_router
-from app.routes.v0.proxmox.vms.list_usage import router                as proxmox_vms_list_usage_router
+
+
+from app.routes.v0.proxmox.vms.vm_id.snapshots.vm_create import router as proxmox_vms_vm_id_vm_snapshot_create_router
+from app.routes.v0.proxmox.vms.vm_id.snapshots.vm_list   import router as proxmox_vms_vm_id_vm_snapshot_list_router
+from app.routes.v0.proxmox.vms.vm_id.snapshots.vm_delete import router as proxmox_vms_vm_id_vm_snapshot_delete_router
+from app.routes.v0.proxmox.vms.vm_id.snapshots.vm_revert import router as proxmox_vms_vm_id_vm_snapshot_revert_router
+
+
 
 #
 # debug routes
@@ -61,11 +70,18 @@ router.include_router(proxmox_vms_vm_id_resume_router,              prefix="/v0/
 router.include_router(proxmox_vms_vm_id_delete_router,              prefix="/v0/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_clone_router,               prefix="/v0/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_create_router,              prefix="/v0/proxmox/vms/vm_id")
+
 router.include_router(proxmox_vms_vm_id_vm_get_config_router,       prefix="/v0/proxmox/vms/vm_id/config")
 router.include_router(proxmox_vms_vm_id_vm_get_config_cdrom_router, prefix="/v0/proxmox/vms/vm_id/config")
 router.include_router(proxmox_vms_vm_id_vm_get_config_cpu_router,   prefix="/v0/proxmox/vms/vm_id/config")
 router.include_router(proxmox_vms_vm_id_vm_get_config_ram_router,   prefix="/v0/proxmox/vms/vm_id/config")
 router.include_router(proxmox_vms_vm_id_vm_set_tags_router,         prefix="/v0/proxmox/vms/vm_id/config")
+
+
+router.include_router(proxmox_vms_vm_id_vm_snapshot_create_router, prefix="/v0/proxmox/vms/vm_id/snapshot")
+router.include_router(proxmox_vms_vm_id_vm_snapshot_list_router,   prefix="/v0/proxmox/vms/vm_id/snapshot")
+router.include_router(proxmox_vms_vm_id_vm_snapshot_delete_router, prefix="/v0/proxmox/vms/vm_id/snapshot")
+router.include_router(proxmox_vms_vm_id_vm_snapshot_revert_router, prefix="/v0/proxmox/vms/vm_id/snapshot")
 
 
 # /v0/run/catalog/
