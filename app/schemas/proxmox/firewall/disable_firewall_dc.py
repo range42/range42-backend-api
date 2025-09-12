@@ -49,13 +49,13 @@ class Reply_ProxmoxFirewallWithStorageName_DisableFirewallDcItem(BaseModel):
     proxmox_node: str
     ##
     # vm_id: int = Field(..., ge=1)
-    iso_content: str
-    iso_ctime: int
-    iso_format: str
-    iso_size: int
-    iso_vol_id: str
-    local: str
-    storage_name: str
+    # iso_content: str
+    # iso_ctime: int
+    # iso_format: str
+    # iso_size: int
+    # iso_vol_id: str
+    # local: str
+    # storage_name: str
 
 class Reply_ProxmoxFirewallWithStorageName_DisableFirewallDc(BaseModel):
 
