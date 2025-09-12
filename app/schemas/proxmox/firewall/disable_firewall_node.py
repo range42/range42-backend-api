@@ -44,7 +44,7 @@ class Reply_ProxmoxFirewallWithStorageName_DistableFirewallNodeItem(BaseModel):
     # vm_id: int = Field(..., ge=1)
     node_firewall: str
 
-class Reply_ProxmoxFirewallWithStorageName_DistableFirewallNode(BaseModel):
+class Reply_ProxmoxFirewallWithStorageName_DisableFirewallNode(BaseModel):
 
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[Reply_ProxmoxFirewallWithStorageName_DistableFirewallNodeItem]

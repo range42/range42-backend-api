@@ -25,24 +25,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
-
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /api/proxmox/firewall/datacenter/disable
 #
-
 @router.post(
-    path="/list_iso",
-    summary="Retrieve configuration of a VM",
-    description="Returns the configuration details of the specified virtual machine (VM).",
+    path="/datacenter/disable",
+    summary="Disable datacenter firewall",
+    description="Disable the proxmox firewall at the datacenter level",
     tags=["proxmox - firewall"],
     response_model=Reply_ProxmoxFirewallWithStorageName_DisableFirewallDc,
-    response_description="VM configuration details",
+    response_description="Details of the disabled datacenter firewall",
 )
-
-
-def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxFirewall_DisableFirewallDc):
+def proxmox_firewall_dc_disable(req: Request_ProxmoxFirewall_DisableFirewallDc):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -134,11 +130,13 @@ def request_checks(req: Request_ProxmoxFirewall_DisableFirewallDc) -> dict[Any, 
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_dc_disable"
 
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
-
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
+
+    ####
+
+    if req.proxmox_api_host:
+        extravars["proxmox_api_host"] = req.proxmox_api_host
 
     # nothing :
     if not extravars:

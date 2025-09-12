@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.schemas.proxmox.firewall.disable_firewall_vm import Request_ProxmoxFirewall_DistableFirewallVm
-from app.schemas.proxmox.firewall.disable_firewall_vm import Reply_ProxmoxFirewallWithStorageName_DistableFirewallVm
+from app.schemas.proxmox.firewall.disable_firewall_vm import Reply_ProxmoxFirewallWithStorageName_DisableFirewallVm
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results
@@ -25,24 +25,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
-
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /api/proxmox/firewall/vm/disable
 #
-
 @router.post(
-    path="/list_iso",
-    summary="Retrieve configuration of a VM",
-    description="Returns the configuration details of the specified virtual machine (VM).",
+    path="/vm/disable",
+    summary="Disable VM firewall",
+    description="Disable the proxmox firewall for a specific virtual machine",
     tags=["proxmox - firewall"],
-    response_model=Reply_ProxmoxFirewallWithStorageName_DistableFirewallVm,
-    response_description="VM configuration details",
+    response_model=Reply_ProxmoxFirewallWithStorageName_DisableFirewallVm,
+    response_description="Details of the disabled VM firewall",
 )
-
-
-def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxFirewall_DistableFirewallVm):
+def proxmox_firewall_vm_disable(req: Request_ProxmoxFirewall_DistableFirewallVm):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -134,12 +130,20 @@ def request_checks(req: Request_ProxmoxFirewall_DistableFirewallVm) -> dict[Any,
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_vm_disable"
 
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
-
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
+    ####
+
+    if req.vm_id:
+        extravars["vm_id"] = req.vm_id
+
+    if req.vm_name:
+        extravars["vm_name"] = req.vm_name
+
+
+    if req.storage_name is not None:
+        extravars["storage_name"] = req.storage_name
     # nothing :
     if not extravars:
         extravars = None

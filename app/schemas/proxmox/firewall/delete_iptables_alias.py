@@ -19,6 +19,13 @@ class Request_ProxmoxFirewall_DeleteIptablesAlias(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    vm_id: str = Field(
+        ...,
+        # default="4000",
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$"
+    )
+
     vm_fw_alias_name: str = Field(
         ...,
         description="Firewall alias name",

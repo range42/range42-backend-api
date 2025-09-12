@@ -25,24 +25,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
-
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /api/proxmox/firewall/vm/rules/apply ---- should rename to rules/add ?
 #
-
 @router.post(
-    path="/list_iso",
-    summary="Retrieve configuration of a VM",
-    description="Returns the configuration details of the specified virtual machine (VM).",
+    path="/vm/rules/apply",
+    summary="Apply firewall rules",
+    description="Apply the received firewall rules to the proxmox firewall",
     tags=["proxmox - firewall"],
     response_model=Reply_ProxmoxFirewallWithStorageName_ApplyIptablesRules,
-    response_description="VM configuration details",
+    response_description="Details of the applied firewall rules",
 )
-
-
-def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxFirewall_ApplyIptablesRules):
+def proxmox_firewall_vm_rules_add(req: Request_ProxmoxFirewall_ApplyIptablesRules):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -134,11 +130,49 @@ def request_checks(req: Request_ProxmoxFirewall_ApplyIptablesRules) -> dict[Any,
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_vm_delete_iptables_alias"
 
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
-
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
+
+    if req.vm_id is not None:
+        extravars["vm_id"] = req.vm_id
+
+    ####
+
+    if req.vm_fw_action is not None:
+        extravars["vm_fw_action"] = req.vm_fw_action
+
+    if req.vm_fw_dport is not None:
+        extravars["vm_fw_dport"] = req.vm_fw_dport
+
+    if req.vm_fw_enable is not None:
+        extravars["vm_fw_enable"] = req.vm_fw_enable
+
+    if req.vm_fw_proto is not None:
+        extravars["vm_fw_proto"] = req.vm_fw_proto
+
+    if req.vm_fw_type is not None:
+        extravars["vm_fw_type"] = req.vm_fw_type
+
+    if req.vm_fw_log is not None:
+        extravars["vm_fw_log"] = req.vm_fw_log
+
+    if req.vm_fw_iface is not None:
+        extravars["vm_fw_iface"] = req.vm_fw_iface
+
+    if req.vm_fw_source is not None:
+        extravars["vm_fw_source"] = req.vm_fw_source
+
+    if req.vm_fw_dest is not None:
+        extravars["vm_fw_dest"] = req.vm_fw_dest
+
+    if req.vm_fw_sport is not None:
+        extravars["vm_fw_sport"] = req.vm_fw_sport
+
+    if req.vm_fw_comment is not None:
+        extravars["vm_fw_comment"] = req.vm_fw_comment
+
+    if req.vm_fw_pos is not None:
+        extravars["vm_fw_pos"] = req.vm_fw_pos
 
     # nothing :
     if not extravars:

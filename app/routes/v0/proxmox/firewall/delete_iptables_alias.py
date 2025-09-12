@@ -25,24 +25,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
-
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /api/proxmox/firewall/vm/alias/delete
 #
-
-@router.post(
-    path="/list_iso",
-    summary="Retrieve configuration of a VM",
-    description="Returns the configuration details of the specified virtual machine (VM).",
+@router.delete(
+    path="/vm/alias/delete",
+    summary="Delete a firewall alias",
+    description="Remove an existing alias from the proxmox firewall",
     tags=["proxmox - firewall"],
     response_model=Request_ProxmoxFirewall_DeleteIptablesAlias,
-    response_description="VM configuration details",
+    response_description="Details of the deleted firewall alias",
 )
-
-
-def proxmox_storage_with_storage_name_list_iso(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias):
+def proxmox_firewall_vm_alias_delete(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -134,11 +130,18 @@ def request_checks(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_vm_delete_iptables_alias"
 
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
-
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
+
+    if req.vm_id is not None:
+        extravars["vm_id"] = req.vm_id
+
+    ####
+
+    if req.vm_fw_alias_name is not None:
+        extravars["vm_fw_alias_name"] = req.vm_fw_alias_name
+
+
 
     # nothing :
     if not extravars:

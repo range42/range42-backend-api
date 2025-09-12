@@ -25,23 +25,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
-
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /api/proxmox/firewall/vm/rules/delete
 #
-@router.post(
-    path="/list_iso",
-    summary="Retrieve configuration of a VM",
-    description="Returns the configuration details of the specified virtual machine (VM).",
+@router.delete(
+    path="/vm/rules/delete",
+    summary="Delete a firewall rule",
+    description="Remove an existing rule from the proxmox firewall configuration",
     tags=["proxmox - firewall"],
-    response_model=Reply_ProxmoxFirewallWithStorageName_DeleteIptablesRule,
-    response_description="VM configuration details",
+    response_model=Request_ProxmoxFirewall_DeleteIptablesRule,
+    response_description="Details of the deleted firewall rule.",
 )
-
-
-def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxFirewall_DeleteIptablesRule):
+def proxmox_firewall_vm_rules_delete(req: Request_ProxmoxFirewall_DeleteIptablesRule):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -133,11 +130,17 @@ def request_checks(req: Request_ProxmoxFirewall_DeleteIptablesRule) -> dict[Any,
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_vm_delete_iptables_rule"
 
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
+
+    if req.vm_id is not None:
+        extravars["vm_id"] = req.vm_id
+
+    ####
+
+    if req.vm_fw_pos is not None:
+        extravars["vm_fw_pos"] = req.vm_fw_pos
 
     # nothing :
     if not extravars:
