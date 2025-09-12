@@ -75,6 +75,22 @@ from app.routes.v0.proxmox.firewall.enable_firewall_vm               import rout
 from app.routes.v0.proxmox.firewall.list_iptables_alias              import router as proxmox_firewall_list_iptables_alias_router
 from app.routes.v0.proxmox.firewall.list_iptables_rules              import router as proxmox_firewall_list_iptables_rules_router
 
+
+#
+# network                     - issue #11
+#
+from app.routes.v0.proxmox.network.vm.add_network                    import router as proxmox_network_vm_add_network_router
+from app.routes.v0.proxmox.network.vm.delete_network                 import router as proxmox_network_vm_delete_network_router
+from app.routes.v0.proxmox.network.vm.list_network                   import router as proxmox_network_vm_list_network_router
+
+from app.routes.v0.proxmox.network.node.add_network                  import router as proxmox_network_node_add_network_router
+from app.routes.v0.proxmox.network.node.delete_network               import router as proxmox_network_node_delete_network_router
+from app.routes.v0.proxmox.network.node.list_network                 import router as proxmox_network_node_list_network_router
+
+
+
+
+
 #
 # debug routes
 #
@@ -160,6 +176,17 @@ router.include_router(proxmox_firewall_disable_firewall_node_router,           p
 
 router.include_router(proxmox_firewall_enable_firewall_dc_router,              prefix="/v0/proxmox/firewall")
 router.include_router(proxmox_firewall_disable_firewall_dc_router,             prefix="/v0/proxmox/firewall")
+
+#
+# /v0/proxmox/firewall/  - issue #10, #11
+#
+router.include_router(proxmox_network_vm_add_network_router,                   prefix="/v0/proxmox/network")
+router.include_router(proxmox_network_vm_delete_network_router,                prefix="/v0/proxmox/network")
+router.include_router(proxmox_network_vm_list_network_router,                  prefix="/v0/proxmox/network")
+
+router.include_router(proxmox_network_node_add_network_router,                 prefix="/v0/proxmox/network")
+router.include_router(proxmox_network_node_delete_network_router,              prefix="/v0/proxmox/network")
+router.include_router(proxmox_network_node_list_network_router,                prefix="/v0/proxmox/network")
 
 #
 # /v0/run/catalog/       - issue #15
