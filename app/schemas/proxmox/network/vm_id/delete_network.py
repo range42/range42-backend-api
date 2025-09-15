@@ -45,7 +45,7 @@ class Request_ProxmoxNetwork_WithVmId_DeleteNetwork(BaseModel):
                 "as_json": True,
 #
                 "vm_id":"1000",
-                "vm_vmnet_id":1, # to_fix - inconsistence with add
+                "vm_vmnet_id":1,
 
             }
         }

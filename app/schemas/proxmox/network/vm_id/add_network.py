@@ -42,7 +42,7 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         pattern=r"^[A-Za-z0-9._-]+$"
     )
 
-    vm_vmnet_id: int | None = Field(  # to_fix - inconsistence with delete
+    vm_vmnet_id: int | None = Field(
         description="Network device index - 0, 1, 2, ..."
     )
 
@@ -59,7 +59,7 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
                 "as_json": True,
                 #
                 "vm_id": "1000",
-                "vm_vmnet_id": "1", # to_fix - inconsistence with delete
+                "vm_vmnet_id": "1",
                 "iface_model": "virtio",
                 "iface_bridge": "vmbr142",
 
