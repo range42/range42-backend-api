@@ -130,8 +130,8 @@ def request_checks(req: Request_ProxmoxFirewall_EnableFirewallDc) -> dict[Any, A
     extravars = {}
     extravars["proxmox_vm_action"] = "firewall_dc_enable"
 
-    if req.proxmox_node:
-        extravars["proxmox_node"] = req.proxmox_node
+    # if req.proxmox_node:
+    #     extravars["proxmox_node"] = req.proxmox_node
 
     ####
 

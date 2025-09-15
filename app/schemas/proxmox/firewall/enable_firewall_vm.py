@@ -24,7 +24,7 @@ class Request_ProxmoxFirewall_EnableFirewallVm(BaseModel):
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
-    vm_name: str = Field(
+    vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
         ...,
         # default= "px-testing",
         description = "Proxmox storage name",

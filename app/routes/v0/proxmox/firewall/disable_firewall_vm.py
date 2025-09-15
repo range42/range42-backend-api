@@ -141,9 +141,6 @@ def request_checks(req: Request_ProxmoxFirewall_DistableFirewallVm) -> dict[Any,
     if req.vm_name:
         extravars["vm_name"] = req.vm_name
 
-
-    if req.storage_name is not None:
-        extravars["storage_name"] = req.storage_name
     # nothing :
     if not extravars:
         extravars = None

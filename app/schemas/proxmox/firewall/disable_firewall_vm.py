@@ -11,11 +11,11 @@ from pydantic import BaseModel, Field
 #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
 
-    proxmox_api_host: str = Field(
+    proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox api - ip:port",
-        pattern=r"^[A-Za-z0-9\.:-]*$"
+        description = "Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$"
     )
 
     vm_id: str = Field(
@@ -24,12 +24,11 @@ class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
-    # vm_name: str = Field(
-    #     ...,
-    #     # default= "px-testing",
-    #     description = "Proxmox storage name",
-    #     pattern=r"^[A-Za-z0-9-]*$"
-    # )
+    vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
+        ...,
+        description = "Proxmox storage name",
+        pattern=r"^[A-Za-z0-9-]*$"
+    )
 
 
     as_json: bool = Field(
