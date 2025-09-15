@@ -35,10 +35,10 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
     summary="Delete a firewall alias",
     description="Remove an existing alias from the proxmox firewall",
     tags=["proxmox - firewall"],
-    response_model=Request_ProxmoxFirewall_DeleteIptablesAlias,
+    response_model=Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias,
     response_description="Details of the deleted firewall alias",
 )
-def proxmox_firewall_vm_alias_delete(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias):
+def proxmox_firewall_vm_alias_delete(req: Request_ProxmoxFirewall_DeleteIptablesAlias):
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
@@ -95,7 +95,7 @@ def reply_processing(events: list[dict] | list[Any],
                      extravars: dict[Any, Any],
                      log_plain: str,
                      rc,
-                     req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias) -> dict[str, list | Any]:
+                     req: Request_ProxmoxFirewall_DeleteIptablesAlias) -> dict[str, list | Any]:
 
     """ reply post-processing - json or ansible raw output """
 
@@ -124,7 +124,7 @@ def reply_processing(events: list[dict] | list[Any],
     return payload
 
 
-def request_checks(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias) -> dict[Any, Any]:
+def request_checks(req: Request_ProxmoxFirewall_DeleteIptablesAlias) -> dict[Any, Any]:
     """ request checks """
 
     extravars = {}
@@ -133,10 +133,10 @@ def request_checks(req: Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
+    ####
+
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-
-    ####
 
     if req.vm_fw_alias_name is not None:
         extravars["vm_fw_alias_name"] = req.vm_fw_alias_name

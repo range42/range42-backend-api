@@ -43,8 +43,8 @@ class Request_ProxmoxFirewall_DeleteIptablesAlias(BaseModel):
                 "proxmox_node": "px-testing",
                 "as_json": True,
                 #
-                "storage_name": "local",
-
+                "vm_id": "1000",
+                "vm_fw_alias_name": "test",
             }
         }
     }
@@ -53,10 +53,10 @@ class Request_ProxmoxFirewall_DeleteIptablesAlias(BaseModel):
 
 class Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAliasItem(BaseModel):
 
-    action: Literal["vm_DeleteIptablesAlias_usage"]
+    action: Literal["firewall_vm_delete_iptables_alias"]
     source: Literal["proxmox"]
     proxmox_node: str
-    ##
+    # ##
     # vm_id: int = Field(..., ge=1)
     vm_fw_alias_name: str
     vm_id: int
