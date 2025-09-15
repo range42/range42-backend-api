@@ -35,8 +35,9 @@ class Request_ProxmoxFirewall_ListIptablesRules(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
-                "storage_name": "local",
-                "as_json": True
+                "as_json": True,
+                #
+                "vm_id": "1000",
 
             }
         }

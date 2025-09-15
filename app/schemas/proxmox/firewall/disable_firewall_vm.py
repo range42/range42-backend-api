@@ -18,6 +18,20 @@ class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
         pattern=r"^[A-Za-z0-9\.:-]*$"
     )
 
+    vm_id: str = Field(
+        ...,
+        # default="4000",
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$"
+    )
+    # vm_name: str = Field(
+    #     ...,
+    #     # default= "px-testing",
+    #     description = "Proxmox storage name",
+    #     pattern=r"^[A-Za-z0-9-]*$"
+    # )
+
+
     as_json: bool = Field(
         default=True,
         description="If true : JSON output else : raw output"
@@ -27,11 +41,10 @@ class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
-                "storage_name": "local",
                 "as_json": True,
-
-                "proxmox_api_host": "127.0.0.1:18007",
-
+                #
+                "vm_id": "1000",
+                "vm_name": "test",
             }
         }
     }
@@ -62,7 +75,7 @@ class Reply_ProxmoxFirewallWithStorageName_DisableFirewallVm(BaseModel):
                         "source": "proxmox",
                         "proxmox_node": "px-testing",
                         ##
-                        "vm_id": "100",
+                        "vm_id": "1000",
                         "vm_firewall": "disable",
                         "vm_name": "test"
                     }

@@ -55,7 +55,7 @@ class Request_ProxmoxFirewall_AddIptablesAlias(BaseModel):
                 "proxmox_node": "px-testing",
                 "as_json": True,
                 #
-                "vm_id":1000,
+                "vm_id":"1000",
                 #
                 "vm_fw_alias_name":"test",
                 "vm_fw_alias_cidr":"192.168.123.0/24",

@@ -27,11 +27,9 @@ class Request_ProxmoxFirewall_EnableFirewallDc(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
-                "storage_name": "local",
                 "as_json": True,
-
+                #
                 "proxmox_api_host": "127.0.0.1:18007",
-
             }
         }
     }

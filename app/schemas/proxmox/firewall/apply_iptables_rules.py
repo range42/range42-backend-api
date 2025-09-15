@@ -105,7 +105,9 @@ class Request_ProxmoxFirewall_ApplyIptablesRules(BaseModel):
         json_schema_extra={
             "example": {
                 "proxmox_node": "px-node-01",
-                "vm_id": "100",
+                "as_json": True,
+                #
+                "vm_id": "1000",
                 "vm_fw_action": "ACCEPT",
                 "vm_fw_type": "in",
                 "vm_fw_proto": "tcp",
@@ -118,7 +120,6 @@ class Request_ProxmoxFirewall_ApplyIptablesRules(BaseModel):
                 "vm_fw_comment": "Test comment",
                 "vm_fw_pos": 5,
                 "vm_fw_log": "DEBUG",
-                "as_json": True,
             }
         }
     )

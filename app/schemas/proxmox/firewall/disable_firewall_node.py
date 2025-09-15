@@ -27,7 +27,6 @@ class Request_ProxmoxFirewall_DistableFirewallNode(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
-
                 "as_json": True
             }
         }

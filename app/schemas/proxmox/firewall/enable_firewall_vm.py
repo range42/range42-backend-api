@@ -47,9 +47,10 @@ class Request_ProxmoxFirewall_EnableFirewallVm(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
+                "as_json": True,
+                #
                 "vm_name": "test",
-                "vm_id": 100,
-                "as_json": True
+                "vm_id": "1000",
             }
         }
     }

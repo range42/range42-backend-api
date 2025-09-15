@@ -39,8 +39,8 @@ class Request_ProxmoxFirewall_DeleteIptablesRule(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
-                "storage_name": "local",
                 "as_json": True,
+                #
                 "vm_id":"1000",
                 "vm_fw_pos":1,
 
@@ -76,7 +76,7 @@ class Reply_ProxmoxFirewallWithStorageName_DeleteIptablesRule(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                         "vm_fw_pos": "0",
-                        "vm_id": "100"
+                        "vm_id": "1000"
                     }
                 ]
             }
