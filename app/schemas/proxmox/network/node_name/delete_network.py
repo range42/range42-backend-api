@@ -37,6 +37,7 @@ class Request_ProxmoxNetwork_WithNodeName_DeleteInterface(BaseModel):
                 "proxmox_node": "px-testing",
                 "storage_name": "local",
                 "as_json": True,
+                #
                 "iface_name":"vmbr42",
             }
         }
@@ -50,9 +51,10 @@ class Reply_ProxmoxNetwork_WithNodeName_DeleteInterfaceItem(BaseModel):
     source: Literal["proxmox"]
     proxmox_node: str
     ##
+    iface_name: str
     # vm_id: int = Field(..., ge=1)
-    vm_id: str
-    vm_fw_pos: int
+    # vm_id: str
+    # vm_fw_pos: int
 
 class Reply_ProxmoxNetwork_WithNodeName_DeleteInterface(BaseModel):
 
@@ -65,12 +67,11 @@ class Reply_ProxmoxNetwork_WithNodeName_DeleteInterface(BaseModel):
                 "rc": 0,
                 "result": [
                     {
-                        "action": "firewall_vm_delete_iptables_rule",
+                        "action": "network_delete_interfaces_node",
                         "source": "proxmox",
                         "proxmox_node": "px-testing",
                         ##
-                        "vm_fw_pos": "0",
-                        "vm_id": "100"
+                        "iface_name": "vmbr42",
                     }
                 ]
             }

@@ -18,45 +18,51 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
-
     #
 
     bridge_ports: str | None = Field(
+        default=None,
         description="Bridge ports",
         pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     iface_name: str | None = Field(
+        ...,
         description="Interface name",
         pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     iface_type: str | None = Field(
+        ...,
         description="Interface type - ethernet, ovs, bridge",
         pattern=r"^[a-zA-Z]+$"
     )
 
     iface_autostart: int | None = Field(
+        ...,
         description="Autostart flag - 0 = no, 1 = yes"
-
     )
 
     ip_address: str | None = Field(
+        default=None,
         description="ipv4 address",
         pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
     )
 
     ip_netmask: str | None = Field(
+        default=None,
         description="ipv4 netmask",
         pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^\/[0-9]{1,2}$"
     )
 
     ip_gateway: str | None = Field(
+        default=None,
         description="ipv4 gateway",
         pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
     )
 
     ovs_bridge: str | None = Field(
+        default=None,
         description="OVS bridge name",
         pattern=r"^[a-zA-Z0-9._-]+$"
     )
@@ -70,6 +76,7 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
         "json_schema_extra": {
             "example": {
                 "proxmox_node": "px-testing",
+                "as_json": "true",
                 #
                 "iface_name": "vmbr142",
                 "iface_type": "bridge",
@@ -88,10 +95,22 @@ class Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterfaceItem(BaseModel):
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
+    as_json: bool
     ##
     # vm_id: int = Field(..., ge=1)
-    vm_id: str
-    vm_fw_pos: int
+    # vm_id: str
+    # vm_fw_pos: int
+
+    bridge_ports: str
+    iface_name: str
+    iface_type: str
+    iface_autostart: int
+    ip_address: str
+    ip_netmask: str
+    ip_gateway: str
+    ovs_bridge: str
+
+
 
 class Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
 

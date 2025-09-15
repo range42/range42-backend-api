@@ -128,7 +128,7 @@ def request_checks(req: Request_ProxmoxNetwork_WithVmId_AddNetwork) -> dict[Any,
     """ request checks """
 
     extravars = {}
-    extravars["proxmox_vm_action"] = "network_delete_interfaces_vm"
+    extravars["proxmox_vm_action"] = "network_add_interfaces_vm"
 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -143,9 +143,12 @@ def request_checks(req: Request_ProxmoxNetwork_WithVmId_AddNetwork) -> dict[Any,
 
     if req.iface_bridge is not None:
         extravars["iface_bridge"] = req.iface_bridge
+    #
+    # if req.net_index is not None:
+    #     extravars["net_index"] = req.net_index
 
-    if req.net_index is not None:
-        extravars["net_index"] = req.net_index
+    if req.vm_vmnet_id is not None:
+        extravars["vm_vmnet_id"] = req.vm_vmnet_id
 
     # nothing :
     if not extravars:

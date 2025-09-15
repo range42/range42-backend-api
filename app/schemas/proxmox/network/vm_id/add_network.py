@@ -31,12 +31,18 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         pattern=r"^[A-Za-z0-9._-]+$"
     )
 
+
+    # net_index: int | None = Field(
+    #     description="Bridge name for interface - vmbr0, vmbr142",
+    #     # pattern=r"^[A-Za-z0-9._-]+$"
+    # )
+
     iface_bridge: str | None = Field(
         description="Bridge name for interface - vmbr0, vmbr142",
         pattern=r"^[A-Za-z0-9._-]+$"
     )
 
-    net_index: int | None = Field(
+    vm_vmnet_id: int | None = Field(  # to_fix - inconsistence with delete
         description="Network device index - 0, 1, 2, ..."
     )
 
@@ -53,9 +59,11 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
                 "as_json": True,
                 #
                 "vm_id": "1000",
-                "net_index": 7, # to_fix - inconsistence with delete
+                "vm_vmnet_id": "1", # to_fix - inconsistence with delete
                 "iface_model": "virtio",
                 "iface_bridge": "vmbr142",
+
+
             }
         }
     }
@@ -89,6 +97,8 @@ class Reply_ProxmoxNetwork_WithVmId_AddNetworkInterface(BaseModel):
                         ##
                         "vm_id": "1000",
                         "iface_model": "virtio",
+
+
                     }
                 ]
             }

@@ -133,8 +133,8 @@ def request_checks(req: Request_ProxmoxNetwork_WithNodeName_DeleteInterface) -> 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
-    if req.vm_id is not None:
-        extravars["vm_id"] = req.vm_id
+    # if req.vm_id is not None:
+    #     extravars["vm_id"] = req.vm_id
 
     ####
 

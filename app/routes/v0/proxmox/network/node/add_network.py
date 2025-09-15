@@ -133,19 +133,34 @@ def request_checks(req: Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface)
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
-    if req.vm_id is not None:
-        extravars["vm_id"] = req.vm_id
-
+    # if req.vm_id is not None:
+    #     extravars["vm_id"] = req.vm_id
+    #
     ####
 
-    if req.iface_model is not None:
-        extravars["iface_model"] = req.iface_model
+    if req.bridge_ports is not None:
+        extravars["bridge_ports"] = req.bridge_ports
 
-    if req.iface_bridge is not None:
-        extravars["iface_bridge"] = req.iface_bridge
+    if req.iface_name is not None:
+        extravars["iface_name"] = req.iface_name
 
-    if req.net_index is not None:
-        extravars["net_index"] = req.net_index
+    if req.iface_type is not None:
+        extravars["iface_type"] = req.iface_type
+
+    if req.iface_autostart is not None:
+        extravars["iface_autostart"] = req.iface_autostart
+
+    if req.ip_address is not None:
+        extravars["ip_address"] = req.ip_address
+
+    if req.ip_netmask is not None:
+        extravars["ip_netmask"] = req.ip_netmask
+
+    if req.ip_gateway is not None:
+        extravars["ip_gateway"] = req.ip_gateway
+
+    if req.ovs_bridge is not None:
+        extravars["ovs_bridge"] = req.ovs_bridge
 
     # nothing :
     if not extravars:

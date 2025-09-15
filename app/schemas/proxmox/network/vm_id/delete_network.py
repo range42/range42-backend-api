@@ -79,8 +79,9 @@ class Reply_ProxmoxNetwork_WithVmId_DeleteNetworkInterface(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                         "vm_id": "1000",
-                        "vm_vmnet_id": "1"
-                    }
+                        "iface_model": "virtio"
+
+                     }
                 ]
             }
         }

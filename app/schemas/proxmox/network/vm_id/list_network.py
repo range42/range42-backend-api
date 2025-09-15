@@ -36,7 +36,7 @@ class Request_ProxmoxNetwork_WithVmId_ListNetwork(BaseModel):
             "example": {
                 "proxmox_node": "px-testing",
                 "as_json": True,
-                "vm_id": 1000,
+                "vm_id": "1001",
             }
         }
     }
