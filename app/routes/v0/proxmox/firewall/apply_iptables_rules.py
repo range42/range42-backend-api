@@ -128,7 +128,7 @@ def request_checks(req: Request_ProxmoxFirewall_ApplyIptablesRules) -> dict[Any,
     """ request checks """
 
     extravars = {}
-    extravars["proxmox_vm_action"] = "firewall_vm_delete_iptables_alias"
+    extravars["proxmox_vm_action"] = "firewall_vm_apply_iptables_rule"
 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node

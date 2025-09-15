@@ -119,7 +119,7 @@ class Request_ProxmoxFirewall_ApplyIptablesRules(BaseModel):
                 "vm_fw_sport": "1024",
                 "vm_fw_comment": "Test comment",
                 "vm_fw_pos": 5,
-                "vm_fw_log": "DEBUG",
+                "vm_fw_log": "debug",
             }
         }
     )
