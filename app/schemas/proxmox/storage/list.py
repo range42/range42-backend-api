@@ -45,7 +45,7 @@ class Request_ProxmoxStorage_List(BaseModel):
 
 class Reply_ProxmoxStorage_ListItem(BaseModel):
 
-    action: Literal["vm_list_usage"]
+    action: Literal["storage_list"]
     source: Literal["proxmox"]
     proxmox_node: str
     #

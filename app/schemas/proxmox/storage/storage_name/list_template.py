@@ -46,7 +46,7 @@ class Request_ProxmoxStorage_ListTemplate(BaseModel):
 
 class Reply_ProxmoxStorageWithStorageName_ListTemplateItem(BaseModel):
 
-    action: Literal["vm_ListTemplate_usage"]
+    action: Literal["storage_list_template"]
     source: Literal["proxmox"]
     proxmox_node: str
 

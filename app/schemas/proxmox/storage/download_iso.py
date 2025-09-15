@@ -68,7 +68,7 @@ class Request_ProxmoxStorage_DownloadIso(BaseModel):
 
 class Reply_ProxmoxStorage_DownloadIsoItem(BaseModel):
 
-    action: Literal["vm_DownloadIso_usage"]
+    action: Literal["storage_download_iso"]
     source: Literal["proxmox"]
     proxmox_node: str
     vm_id: int = Field(..., ge=1)
