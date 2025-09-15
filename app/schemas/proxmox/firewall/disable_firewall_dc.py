@@ -18,15 +18,17 @@ class Request_ProxmoxFirewall_DisableFirewallDc(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     proxmox_api_host: str = Field(
         ...,
         # default= "px-testing",
         description = "Proxmox api - ip:port",
         pattern=r"^[A-Za-z0-9\.:-]*$"
-    )
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {
@@ -73,7 +75,6 @@ class Reply_ProxmoxFirewallWithStorageName_DisableFirewallDc(BaseModel):
                         "source": "proxmox",
                         "proxmox_node": "px-testing",
                         ##
-
                     }
                 ]
             }

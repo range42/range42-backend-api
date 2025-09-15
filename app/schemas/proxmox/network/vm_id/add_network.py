@@ -19,6 +19,12 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
@@ -30,7 +36,6 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         description="Interface model-  virtio, e1000, rtl8139",
         pattern=r"^[A-Za-z0-9._-]+$"
     )
-
 
     # net_index: int | None = Field(
     #     description="Bridge name for interface - vmbr0, vmbr142",
@@ -46,11 +51,6 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         description="Network device index - 0, 1, 2, ..."
     )
 
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
-    )
-
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -62,8 +62,6 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
                 "vm_vmnet_id": "1",
                 "iface_model": "virtio",
                 "iface_bridge": "vmbr142",
-
-
             }
         }
     }
@@ -97,8 +95,6 @@ class Reply_ProxmoxNetwork_WithVmId_AddNetworkInterface(BaseModel):
                         ##
                         "vm_id": "1000",
                         "iface_model": "virtio",
-
-
                     }
                 ]
             }

@@ -19,6 +19,12 @@ class Request_DebugPing(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool | None = Field(
+        default=False,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     hosts: str | None = Field(
         ...,
         # default="all",
@@ -26,10 +32,7 @@ class Request_DebugPing(BaseModel):
         pattern=r"^[A-Za-z0-9\._-]+$"
     )
 
-    as_json: bool | None = Field(
-        default=False,
-        description="If true : JSON output else : raw output"
-    )
+
 
     model_config = {
         "json_schema_extra": {

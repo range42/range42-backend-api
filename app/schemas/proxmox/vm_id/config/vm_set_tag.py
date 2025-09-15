@@ -15,6 +15,11 @@ class Request_ProxmoxVmsVMID_VmSetTag(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
 
     vm_id: str = Field(
         ...,
@@ -22,7 +27,7 @@ class Request_ProxmoxVmsVMID_VmSetTag(BaseModel):
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
-    #
+
     # vm_tag_name: list[str] = Field(
     #     ...,
     #     description="list of tags to assign to the virtual machine",
@@ -33,11 +38,6 @@ class Request_ProxmoxVmsVMID_VmSetTag(BaseModel):
         ...,
         description="Comma separated list of tags to assign to the virtual machine",
         pattern=r"^[A-Za-z0-9_, -]+$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

@@ -18,13 +18,18 @@ class Request_ProxmoxFirewall_ApplyIptablesRules(BaseModel):
         pattern=r"^[A-Za-z0-9-]+$",
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true: return JSON output, otherwise raw output.",
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
-
 
     vm_fw_action: str = Field(
         ...,
@@ -94,11 +99,6 @@ class Request_ProxmoxFirewall_ApplyIptablesRules(BaseModel):
     vm_fw_pos: int | None = Field(
         default=None,
         description="Optional position index rule in the chain.",
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true: return JSON output, otherwise raw output.",
     )
 
     model_config = ConfigDict(

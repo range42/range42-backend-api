@@ -18,7 +18,6 @@ class Request_ProxmoxNetwork_WithNodeName_DeleteInterface(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
-
     #
 
     iface_name: str | None = Field(

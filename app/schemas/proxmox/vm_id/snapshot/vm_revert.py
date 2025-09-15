@@ -16,6 +16,12 @@ class Request_ProxmoxVmsVMID_RevertSnapshot(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
@@ -27,11 +33,6 @@ class Request_ProxmoxVmsVMID_RevertSnapshot(BaseModel):
         default=None,
         description="Name of the snapshot to create",
         pattern=r"^[A-Za-z0-9_-]+$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

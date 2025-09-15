@@ -21,6 +21,12 @@ class Request_ProxmoxVmsVMID_Clone(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
@@ -48,11 +54,6 @@ class Request_ProxmoxVmsVMID_Clone(BaseModel):
         pattern = r"^[A-Za-z0-9-]*$"
     )
 
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
-    )
-
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -78,7 +79,6 @@ class Reply_ProxmoxVmsVMID_CloneItem(BaseModel):
     vm_name: str
     vm_description: str
     raw_info: str = Field(..., description="Raw string returned by proxmox")
-
 
 
 class Reply_ProxmoxVmsVMID_Clone(BaseModel):

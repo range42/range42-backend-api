@@ -18,6 +18,12 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
+
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+
     #
 
     bridge_ports: str | None = Field(
@@ -65,11 +71,6 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
         default=None,
         description="OVS bridge name",
         pattern=r"^[a-zA-Z0-9._-]+$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

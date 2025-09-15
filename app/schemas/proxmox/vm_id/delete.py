@@ -16,16 +16,17 @@ class Request_ProxmoxVmsVMID_Delete(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {
@@ -48,10 +49,8 @@ class Reply_ProxmoxVmsVMID_DeleteItem(BaseModel):
     proxmox_node: str
 
     vm_id: int = Field(..., ge=1)
-
     vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
-
 
 class Reply_ProxmoxVmsVMID_Delete(BaseModel):
 

@@ -19,16 +19,17 @@ class Request_ProxmoxNetwork_WithVmId_ListNetwork(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

@@ -33,6 +33,12 @@ class Request_ProxmoxVmsVMID_Create(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
@@ -85,11 +91,6 @@ class Request_ProxmoxVmsVMID_Create(BaseModel):
         default=None,
         description="ISO volume path like 'local:iso/xxx.iso' - optional",
         pattern=r"^[A-Za-z0-9._-]+:iso/.+\.iso$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

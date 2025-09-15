@@ -22,6 +22,7 @@ class Request_ProxmoxFirewall_DistableFirewallNode(BaseModel):
         default=True,
         description="If true : JSON output else : raw output"
     )
+    #
 
     model_config = {
         "json_schema_extra": {

@@ -18,11 +18,11 @@ class Request_ProxmoxFirewall_EnableFirewallNode(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
-
     as_json: bool = Field(
         default=True,
         description="If true : JSON output else : raw output"
     )
+    #
 
     model_config = {
         "json_schema_extra": {

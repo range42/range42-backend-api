@@ -19,6 +19,12 @@ class Request_ProxmoxStorage_DownloadIso(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     proxmox_storage: str = Field(
         ...,
         description="Target Proxmox storage name",
@@ -42,12 +48,6 @@ class Request_ProxmoxStorage_DownloadIso(BaseModel):
         ...,
         description="http|https URL where the ISO will be downloaded from.",
         pattern=r"^https?://[^\s]+$",
-    )
-
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

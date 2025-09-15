@@ -23,6 +23,7 @@ class Request_ProxmoxNetwork_WithNodeName_ListInterface(BaseModel):
         default=True,
         description="If true : JSON output else : raw output"
     )
+    #
 
     model_config = {
         "json_schema_extra": {

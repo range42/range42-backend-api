@@ -19,6 +19,12 @@ class Request_ProxmoxFirewall_DeleteIptablesRule(BaseModel):
         pattern=r"^[A-Za-z0-9-]*$"
     )
 
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
@@ -29,10 +35,6 @@ class Request_ProxmoxFirewall_DeleteIptablesRule(BaseModel):
     vm_fw_pos: int | None = Field(
         ...,
         description="Optional position index rule in the chain.",
-    )
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {

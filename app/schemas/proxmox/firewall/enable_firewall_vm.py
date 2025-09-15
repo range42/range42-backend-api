@@ -18,12 +18,20 @@ class Request_ProxmoxFirewall_EnableFirewallVm(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
+
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     vm_id: str = Field(
         ...,
         # default="4000",
         description="Virtual machine id",
         pattern=r"^[0-9]+$"
     )
+
     vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
         ...,
         # default= "px-testing",
@@ -37,11 +45,6 @@ class Request_ProxmoxFirewall_EnableFirewallVm(BaseModel):
     #     description = "Proxmox storage name",
     #     pattern=r"^[A-Za-z0-9-]*$"
     # )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
-    )
 
     model_config = {
         "json_schema_extra": {

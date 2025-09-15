@@ -18,16 +18,18 @@ class Request_ProxmoxStorage_ListIso(BaseModel):
         description = "Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$"
     )
+
+    as_json: bool = Field(
+        default=True,
+        description="If true : JSON output else : raw output"
+    )
+    #
+
     storage_name: str = Field(
         ...,
         # default= "px-testing",
         description = "Proxmox storage name",
         pattern=r"^[A-Za-z0-9-]*$"
-    )
-
-    as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
     )
 
     model_config = {
