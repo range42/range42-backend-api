@@ -75,7 +75,7 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {
+            "example":[ {
                 "proxmox_node": "px-testing",
                 "as_json": "true",
                 #
@@ -85,7 +85,22 @@ class Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):
                 "iface_autostart": 1,
                 "ip_address": "192.168.99.2",
                 "ip_netmask": "255.255.255.0"
-            }
+            },
+            # to test.
+            {"proxmox_node": "px-testing", "iface_name": "vmbr42", "iface_type": "bridge", "bridge_ports": "enp87s0"},
+            {"proxmox_node": "px-testing", "iface_name": "vmbr42", "iface_type": "bridge", "bridge_ports": "enp87s0", "iface_autostart": 1, "ip_address": "192.168.88.2", "ip_netmask": "255.255.255.0"},
+            {"proxmox_node": "px-testing", "iface_name": "vmbr42", "iface_type": "bridge", "bridge_ports": "enp87s0", "iface_autostart": 1, "ip_address": "192.168.88.2", "ip_netmask": "255.255.255.0", "ip_gateway": "192.168.88.1"},
+            {"proxmox_node": "px-testing", "iface_name": "vmbr42", "iface_type": "OVSBridge", "ovs_bridge": "enp87s0", "iface_autostart": 1, "ip_address": "192.168.88.2", "ip_netmask": "255.255.255.0"},
+            {"proxmox_node": "px-testing", "iface_name": "bridge42", "iface_type": "bridge", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "bond", "iface_type": "bond", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "alias", "iface_type": "alias","iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "vlan", "iface_type": "vlan", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "ovsbridge42", "iface_type": "OVSBridge", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "ovsbond42", "iface_type": "OVSBond", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "ovsport42", "iface_type": "OVSPort", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "ovintport42", "iface_type": "OVSIntPort", "iface_autostart": 1},
+            {"proxmox_node": "px-testing", "iface_name": "vmnet42", "iface_type": "vnet", "iface_autostart": 1},
+            ]
         }
     }
 
@@ -110,7 +125,6 @@ class Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterfaceItem(BaseModel):
     ip_netmask: str
     ip_gateway: str
     ovs_bridge: str
-
 
 
 class Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterface(BaseModel):

@@ -8,6 +8,7 @@ from app.schemas.proxmox.network.vm_id.add_network import Reply_ProxmoxNetwork_W
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results
+# from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
 from pathlib import Path
 import os
@@ -149,6 +150,32 @@ def request_checks(req: Request_ProxmoxNetwork_WithVmId_AddNetwork) -> dict[Any,
 
     if req.vm_vmnet_id is not None:
         extravars["vm_vmnet_id"] = req.vm_vmnet_id
+
+    #### fields to test later.
+
+    if req.iface_trunks is not None:
+        extravars["iface_trunks"] = req.iface_trunks
+
+    if req.iface_tag is not None:
+        extravars["iface_tag"] = req.iface_tag
+
+    if req.iface_rate is not None:
+        extravars["iface_rate"] = req.iface_rate
+
+    if req.iface_queues is not None:
+        extravars["iface_queues"] = req.iface_queues
+
+    if req.iface_mtu is not None:
+        extravars["iface_mtu"] = req.iface_mtu
+
+    if req.iface_macaddr is not None:
+        extravars["iface_macaddr"] = req.iface_macaddr
+
+    if req.iface_link_down is not None:
+        extravars["iface_link_down"] = req.iface_link_down
+
+    if req.iface_firewall is not None:
+        extravars["iface_firewall"] = req.iface_firewall
 
     # nothing :
     if not extravars:

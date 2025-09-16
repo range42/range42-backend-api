@@ -32,6 +32,8 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
         pattern=r"^[0-9]+$"
     )
 
+    # quick classic fields
+
     iface_model: str | None = Field(
         description="Interface model-  virtio, e1000, rtl8139",
         pattern=r"^[A-Za-z0-9._-]+$"
@@ -49,6 +51,41 @@ class Request_ProxmoxNetwork_WithVmId_AddNetwork(BaseModel):
 
     vm_vmnet_id: int | None = Field(
         description="Network device index - 0, 1, 2, ..."
+    )
+
+    #### below fields to test :
+
+    iface_trunks: bool | None = Field(
+        description="Enable trunk - allow multiple vlan on interface"
+    )
+
+    iface_tag: int | None = Field(
+        description="VLAN tag id"
+    )
+
+    iface_rate: float | None = Field(
+        description="Limit bandwith - Mbps - 0 to x"
+    )
+
+    iface_queues: int | None = Field(
+        description="Allocated amount allocated tx/rx on interface"
+    )
+
+    iface_mtu: int | None = Field(
+        description="MTU"
+    )
+
+    iface_macaddr: str | None = Field(
+        description="MAC address - hexa format",
+        pattern = r'^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+    )
+
+    iface_link_down: bool | None = Field(
+        description="Force to set down the interface"
+    )
+
+    iface_firewall: bool | None = Field(
+        description="Apply firewall rules on this interface"
     )
 
     model_config = {
