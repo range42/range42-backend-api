@@ -32,12 +32,12 @@ class Request_ProxmoxFirewall_EnableFirewallVm(BaseModel):
         pattern=r"^[0-9]+$"
     )
 
-    vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
-        ...,
-        # default= "px-testing",
-        description = "Proxmox storage name",
-        pattern=r"^[A-Za-z0-9-]*$"
-    )
+    # vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
+    #     ...,
+    #     # default= "px-testing",
+    #     description = "Proxmox storage name",
+    #     pattern=r"^[A-Za-z0-9-]*$"
+    # )
 
     # vm_firewall: str = Field(
     #     ...,

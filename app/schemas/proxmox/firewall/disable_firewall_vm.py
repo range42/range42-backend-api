@@ -31,11 +31,11 @@ class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
         pattern=r"^[0-9]+$"
     )
 
-    vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
-        ...,
-        description = "Proxmox storage name",
-        pattern=r"^[A-Za-z0-9-]*$"
-    )
+    # vm_name: str = Field( # todo - to_fix : add resolver vm_name - vm_id
+    #     ...,
+    #     description = "Proxmox storage name",
+    #     pattern=r"^[A-Za-z0-9-]*$"
+    # )
 
     model_config = {
         "json_schema_extra": {
@@ -44,7 +44,7 @@ class Request_ProxmoxFirewall_DistableFirewallVm(BaseModel):
                 "as_json": True,
                 #
                 "vm_id": "1000",
-                "vm_name": "test",
+                # "vm_name": "test",
             }
         }
     }

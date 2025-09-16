@@ -4,8 +4,9 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import  run_playbook_core # , extract_action_results
+from app.runner import  run_playbook_core # , extract_action_resu# lts
 from app.json_extract import extract_action_results
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
 from app.schemas.proxmox.vm_id.snapshot.vm_delete import Request_ProxmoxVmsVMID_DeleteSnapshot
 from app.schemas.proxmox.vm_id.snapshot.vm_delete import Reply_ProxmoxVmsVMID_DeleteSnapshot
@@ -144,10 +145,11 @@ def request_checks(req: Request_ProxmoxVmsVMID_DeleteSnapshot) -> dict[Any, Any]
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
-    extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
-
-    if req.vm_id:
+    if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
+
+    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
+    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     if req.vm_snapshot_name:
         extravars["vm_snapshot_name"] = req.vm_snapshot_name

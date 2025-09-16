@@ -9,6 +9,6 @@ curl -X 'POST' \
   -d '{
   "as_json": true,
   "proxmox_node": "px-testing",
-  "vm_id": "1000",
+  "vm_id": "1020",
   "vm_snapshot_name": "CCCC"
 }' | jq "." 

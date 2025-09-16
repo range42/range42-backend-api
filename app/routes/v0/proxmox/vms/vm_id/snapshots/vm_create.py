@@ -9,6 +9,8 @@ from app.schemas.proxmox.vm_id.snapshot.vm_create import Reply_ProxmoxVmsVMID_Cr
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
+
 from app import utils
 from pathlib import Path
 
@@ -138,8 +140,8 @@ def request_checks(req: Request_ProxmoxVmsVMID_CreateSnapshot) -> dict[Any, Any]
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
 
-    # if req.vm_name is not None:
-    extravars["vm_name"] = "admin-wazuh" # TODO - add vm_id <> vm_name resolver func !
+    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
+    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     if req.vm_snapshot_name is not None:
         extravars["vm_snapshot_name"] = req.vm_snapshot_name
