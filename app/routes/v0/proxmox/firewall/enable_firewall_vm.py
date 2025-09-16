@@ -8,6 +8,7 @@ from app.schemas.proxmox.firewall.enable_firewall_vm import Reply_ProxmoxFirewal
 
 from app.runner import  run_playbook_core # , extract_action_results
 from app.json_extract import extract_action_results
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
 from pathlib import Path
 import os
@@ -138,8 +139,11 @@ def request_checks(req: Request_ProxmoxFirewall_EnableFirewallVm) -> dict[Any, A
     if req.vm_id:
         extravars["vm_id"] = req.vm_id
 
-    if req.vm_name:
-        extravars["vm_name"] = req.vm_name
+    # if req.vm_name:
+    #     extravars["vm_name"] = req.vm_name
+
+    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
+    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     # nothing :
     if not extravars:
