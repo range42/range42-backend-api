@@ -20,13 +20,13 @@ router = APIRouter()
 # /v0/admin/debug/*
 router.include_router(admin_debug_routers)
 
-# /v0/admin/proxmox/*
-router.include_router(admin_proxmox_routers)
+# /v0/admin/run/actions/core/*
+router.include_router(admin_run_bundles_core_routers)
 
 # /v0/run/actions|scenarios/run*
 router.include_router(admin_run_routers)
 
-# /v0/admin/run/actions/core/*
-router.include_router(admin_run_bundles_core_routers)
+# /v0/admin/proxmox/*
+router.include_router(admin_proxmox_routers)
 
 ####
