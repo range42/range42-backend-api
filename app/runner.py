@@ -133,6 +133,7 @@ def run_playbook_core(
     limit: str | None = None,
     cmdline: str | None = None,
     extravars: dict | None = None,
+    quiet: bool = False,
 ):
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="runner-"))
@@ -161,6 +162,8 @@ def run_playbook_core(
             # note : following the ansible doc => no quote with @file
             cmdline = f'{(cmdline or "").strip()} -e "@{vars_file}"'.strip()
 
+
+        # print (" ---------------------------------------------")
         r = run(
             private_data_dir=str(tmp_dir),
             playbook=str(play_rel),
@@ -169,7 +172,9 @@ def run_playbook_core(
             limit=limit,
             cmdline=cmdline,
             extravars=extravars or {},
+            quiet=quiet,
         )
+        # print (" ---------------------------------------------")
 
         # events = list(r.events) if hasattr(r, "events") else []
 
