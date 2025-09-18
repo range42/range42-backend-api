@@ -36,7 +36,7 @@ INVENTORY_NAME = "hosts"
     response_model=Reply_BundlesCoreLinuxUbuntuInstall_BasicPackages,
     # response_description="AAAAAAAAAAAAAAAAAA",
 )
-def bundles_core_linux_ubuntu_install_dotfiles_router( req: Request_BundlesCoreLinuxUbuntuInstall_BasicPackages):
+def bundles_core_linux_ubuntu_install_basic_package_router( req: Request_BundlesCoreLinuxUbuntuInstall_BasicPackages):
 
     action_name = "core/linux/ubuntu/install/basic-packages"
     #
