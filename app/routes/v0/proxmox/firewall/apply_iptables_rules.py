@@ -28,7 +28,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/firewall/vm/rules/apply ---- should rename to rules/add ?
+# => /v0/admin/proxmox/firewall/vm/rules/apply ---- should rename to rules/add ?
 #
 @router.post(
     path="/vm/rules/apply",

@@ -35,7 +35,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # ):
 
 #
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /v0/admin/proxmox/vms/vmd_id/vm_get_config
 #
 # todo :
 ## should be move into api/proxmox/vms/vm_id/config/vm

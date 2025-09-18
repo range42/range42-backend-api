@@ -33,7 +33,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 # ):
 
 #
-# => /api/proxmox/vms/vmd_id/stop
+# => /v0/admin/proxmox/vms/vmd_id/stop
 #
 @router.post(
     path="/stop",

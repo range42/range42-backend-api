@@ -35,7 +35,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 # ):
 
 ####
-# => /api/proxmox/vms/vmd_id/snapshot/revert - POST
+# => /v0/admin/proxmox/vms/vmd_id/snapshot/revert - POST
 #
 @router.post(
     path="/revert",

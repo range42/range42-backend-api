@@ -34,7 +34,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 #     req: Request_ProxmoxVmsVMID_StartStopPauseResume,
 # ):
 
-# => /api/proxmox/vms/vmd_id/vm_get_config
+# => /v0/admin/proxmox/vms/vmd_id/vm_get_config
 #
 # todo :
 ## should be move into api/proxmox/vms/vm_id/config/vm
@@ -44,7 +44,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 #
 
 @router.post(
-    path="/vm_get_config_cpu",
+    path="/vm_get_config_ram",
     summary="Get ram configuration of a VM",
     description="Returns the ram configuration details of the specified virtual machine (VM).",
     tags=["proxmox - vm configuration"],

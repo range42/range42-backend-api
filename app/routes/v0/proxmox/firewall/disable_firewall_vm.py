@@ -29,7 +29,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/firewall/vm/disable
+# => /v0/admin/proxmox/firewall/vm/disable
 #
 @router.post(
     path="/vm/disable",

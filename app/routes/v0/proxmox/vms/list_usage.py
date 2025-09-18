@@ -35,7 +35,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 # ):
 
 ####
-# => /api/proxmox/vms/usage
+# => /v0/admin/proxmox/vms/usage
 @router.post(
     path="/list_usage",
     summary="Retrieve current resource usage of VMs and LXC containers",

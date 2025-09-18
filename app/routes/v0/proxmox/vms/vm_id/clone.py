@@ -28,7 +28,7 @@ INVENTORY_NAME = "hosts"
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 
 #
-# => /api/proxmox/vms/vmd_id/clone - POST
+# => /v0/admin/proxmox/vms/vmd_id/clone - POST
 #
 @router.post(
     path="/clone",

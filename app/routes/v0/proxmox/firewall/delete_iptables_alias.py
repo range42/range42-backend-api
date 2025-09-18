@@ -28,7 +28,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/proxmox/firewall/vm/alias/delete
+# => /v0/admin/proxmox/firewall/vm/alias/delete
 #
 @router.delete(
     path="/vm/alias/delete",

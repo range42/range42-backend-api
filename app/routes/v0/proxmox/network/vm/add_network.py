@@ -29,7 +29,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
 #
-# => /api/v0/proxmox/network/node/add
+# => /api/v0/admin/proxmox/network/node/add
 #
 @router.post(
     path="/vm/add",

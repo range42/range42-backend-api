@@ -33,7 +33,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 # ):
 
 ####
-# => /api/proxmox/vms/list
+# => /v0/admin/proxmox/vms/list
 @router.post(
     path="/list",
     summary="List VMs and LXC containers",

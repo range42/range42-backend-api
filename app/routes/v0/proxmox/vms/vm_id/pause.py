@@ -35,7 +35,7 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # ):
 
 #
-# => /api/proxmox/vms/vmd_id/pause
+# => /v0/admin/proxmox/vms/vmd_id/pause
 #
 @router.post(
     path="/pause",
