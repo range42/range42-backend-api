@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.runner import  run_playbook_core
+from app.runner import run_playbook_core
 from app.schemas.debug.ping import Request_DebugPing
 
 from app import utils
