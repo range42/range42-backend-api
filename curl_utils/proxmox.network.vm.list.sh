@@ -2,7 +2,7 @@
 
 
 curl -X 'POST' \
-  'http://127.0.0.1:8000/v0/proxmox/network/vm/list' \
+  'http://127.0.0.1:8000/v0/admin/proxmox/network/vm/list' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{

@@ -3,7 +3,7 @@
 
 
 curl -X 'POST' \
-  'http://127.0.0.1:8000/v0/proxmox/firewall/vm/rules/apply' \
+  'http://127.0.0.1:8000/v0/admin/proxmox/firewall/vm/rules/apply' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{

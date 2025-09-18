@@ -2,7 +2,7 @@
 
 
 curl -X 'DELETE' \
-  'http://127.0.0.1:8000/v0/proxmox/firewall/vm/alias/delete' \
+  'http://127.0.0.1:8000/v0/admin/proxmox/firewall/vm/alias/delete' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{

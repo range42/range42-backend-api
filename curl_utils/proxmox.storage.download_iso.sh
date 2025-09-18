@@ -2,7 +2,7 @@
 
 
 curl -X 'POST' \
-  'http://127.0.0.1:8000/v0/proxmox/storage/download_iso' \
+  'http://127.0.0.1:8000/v0/admin/proxmox/storage/download_iso' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
