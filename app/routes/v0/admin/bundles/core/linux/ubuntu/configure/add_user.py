@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
 
+#
+# => /v0/admin/run/actions/core/linux/ubuntu/configure/add-user
+#
 @router.post(
     path="/core/linux/ubuntu/configure/add-user",
     summary="Add system user",
