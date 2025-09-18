@@ -103,8 +103,9 @@ def request_checks(req: Request_BundlesCoreLinuxUbuntuInstall_BasicPackages) -> 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
 
-    if req.hosts is not  None :
-        extravars["hosts"] = req.hosts
+    # moved to --limit switch
+    # if req.hosts is not None:
+    #     extravars["hosts"] = req.hosts
 
     #
 
