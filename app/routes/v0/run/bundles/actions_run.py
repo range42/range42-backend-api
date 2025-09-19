@@ -28,21 +28,21 @@ INVENTORY_NAME = "hosts"
 debug = 1
 
 @router.post(
-    path="/{action_name}/run",
-    summary="Run action",
-    description="Run generic action with default (and static) extras_vars ",
+    path="/{bundles_name}/run",
+    summary="Run bundles",
+    description="Run generic bundles with default (and static) extras_vars ",
     tags=["runner"],
 )
 
-def debug_ping(action_name: str, req: Request_DebugPing):
+def debug_ping(bundles_name: str, req: Request_DebugPing):
 
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
+    checked_playbook_filepath  = utils.resolve_bundles_playbook(bundles_name, "public_github")
 
     #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
     if debug ==1:
-        print("::  ACTION_NAME", action_name)
+        print("::  bundles_NAME", bundles_name)
         print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")

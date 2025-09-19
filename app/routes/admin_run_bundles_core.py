@@ -25,11 +25,11 @@ router = APIRouter()
 #
 # /v0/admin/run/bundles/core/linux/ubuntu/install/
 #
-router.include_router(bundles_core_linux_ubuntu_install_dotfiles_router,         prefix="/v0/admin/run/actions")   #ISSUE-28
-router.include_router(bundles_core_linux_ubuntu_install_docker_router,           prefix="/v0/admin/run/actions")   #ISSUE-22
-router.include_router(bundles_core_linux_ubuntu_install_docker_compose_router,   prefix="/v0/admin/run/actions")   #ISSUE-21
-router.include_router(bundles_core_linux_ubuntu_install_basic_packages_router,   prefix="/v0/admin/run/actions")   #ISSUE-28
+router.include_router(bundles_core_linux_ubuntu_install_dotfiles_router,         prefix="/v0/admin/run/bundles")   #ISSUE-28
+router.include_router(bundles_core_linux_ubuntu_install_docker_router,           prefix="/v0/admin/run/bundles")   #ISSUE-22
+router.include_router(bundles_core_linux_ubuntu_install_docker_compose_router,   prefix="/v0/admin/run/bundles")   #ISSUE-21
+router.include_router(bundles_core_linux_ubuntu_install_basic_packages_router,   prefix="/v0/admin/run/bundles")   #ISSUE-28
 #
 # /v0/admin/run/bundles/core/linux/ubuntu/configure/
 #
-router.include_router(bundles_core_linux_ubuntu_configure_add_user_router,   prefix="/v0/admin/run/actions") #ISSUE-19
+router.include_router(bundles_core_linux_ubuntu_configure_add_user_router,   prefix="/v0/admin/run/bundles") #ISSUE-19
