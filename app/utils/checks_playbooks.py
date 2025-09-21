@@ -68,6 +68,19 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
 
     return main_filepath
 
+def resolve_bundles_playbook_init_file(action_name: str, playbooks_dir_type: str) -> Path:
+    """ resolve bundles file path """
+
+    playbooks_dir = _warmup_checks(playbooks_dir_type)
+    actions_dir = (playbooks_dir / "bundles").resolve()
+
+    # print (actions_dir)
+
+    actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
+    main_filepath = _resolve_file(actions_dir, actions_regex_pattern, action_name, is_init_yaml=True )
+
+    return main_filepath
+
 
 def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     """ resolve scenarios file path """
@@ -86,7 +99,9 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
 
 def _resolve_file(actions_dir: Path,
                  actions_regex_pattern: re.Pattern[str],
-                 action_name: str) -> Path:
+                 action_name: str,
+                 *,
+                 is_init_yaml: bool = False) -> Path:
     #
     # REGEX CHECKS
     #
@@ -98,10 +113,14 @@ def _resolve_file(actions_dir: Path,
         raise HTTPException(status_code=400, detail=err)
 
     #
-    #  main.yAml must exists.
+    #  init|main.yaml must exists.
     #
 
-    main_filepath = (actions_dir / action_name / "main.yml").resolve(strict=True)
+    # if not is_init_yaml:
+    if is_init_yaml is False:
+        main_filepath = (actions_dir / action_name / "main.yml").resolve(strict=True)
+    else:
+        main_filepath = (actions_dir / action_name / "init.yml").resolve(strict=True)
 
     #
     # checks - attempt to avoid file - path traversal injections + symlinks injections

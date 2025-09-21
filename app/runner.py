@@ -131,6 +131,7 @@ def build_logs(events) -> tuple[str, str]:
 def run_playbook_core(
     playbook: Path, inventory: Path,
     limit: str | None = None,
+    tags: str | None = None,
     cmdline: str | None = None,
     extravars: dict | None = None,
     quiet: bool = False,
@@ -152,6 +153,7 @@ def run_playbook_core(
                 vp = vault.get_vault_path()
                 vf = str(vp) if vp else None
 
+
             if vf:
                 cmdline = f'--vault-password-file "{vf}"'
 
@@ -162,6 +164,11 @@ def run_playbook_core(
             # note : following the ansible doc => no quote with @file
             cmdline = f'{(cmdline or "").strip()} -e "@{vars_file}"'.strip()
 
+        if tags:
+            cmdline = f'{cmdline} --tags {tags}'.strip()
+
+
+        # print (cmdline)
 
         # print (" ---------------------------------------------")
         r = run(
