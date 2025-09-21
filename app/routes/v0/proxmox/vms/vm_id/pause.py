@@ -61,7 +61,7 @@ def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
 
     if debug ==1:
         print("")
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
         print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
         print("")

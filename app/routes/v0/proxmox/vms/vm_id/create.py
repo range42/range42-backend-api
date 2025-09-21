@@ -161,11 +161,6 @@ def request_checks(req: Request_ProxmoxVmsVMID_Create) -> dict[Any, Any]:
     if req.vm_iso is not None:
         extravars["vm_iso"] = req.vm_iso
 
-
-    # if req.vm_description is not None:
-    #     extravars["vm_description"] = req.vm_description
-
-
     # nothing :
     if not extravars:
         extravars = None

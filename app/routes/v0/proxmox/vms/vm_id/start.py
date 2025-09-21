@@ -50,7 +50,7 @@ def proxmox_vms_vm_id_start(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     """ This endpoint start the target virtual machine (VM"""
 
     if debug ==1:
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
         print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")

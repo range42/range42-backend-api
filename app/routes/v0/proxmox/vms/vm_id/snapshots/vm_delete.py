@@ -50,7 +50,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 def proxmox_vms_vm_id_delete_snapshot(req: Request_ProxmoxVmsVMID_DeleteSnapshot):
 
     if debug ==1:
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
         print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")
@@ -148,7 +148,6 @@ def request_checks(req: Request_ProxmoxVmsVMID_DeleteSnapshot) -> dict[Any, Any]
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
 
-    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
     extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     if req.vm_snapshot_name:

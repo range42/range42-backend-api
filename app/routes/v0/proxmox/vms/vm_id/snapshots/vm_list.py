@@ -48,7 +48,7 @@ INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 def proxmox_vms_vm_id_list_snapshot(req: Request_ProxmoxVmsVMID_ListSnapshot):
 
     if debug ==1:
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
         print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")

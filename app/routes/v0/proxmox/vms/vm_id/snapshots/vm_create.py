@@ -140,7 +140,6 @@ def request_checks(req: Request_ProxmoxVmsVMID_CreateSnapshot) -> dict[Any, Any]
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
 
-    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
     extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     if req.vm_snapshot_name is not None:
@@ -148,23 +147,6 @@ def request_checks(req: Request_ProxmoxVmsVMID_CreateSnapshot) -> dict[Any, Any]
 
     if req.vm_snapshot_description is not None:
         extravars["vm_snapshot_description"] = req.vm_snapshot_description
-
-    # if req.vm_sockets is not None:
-    #     extravars["vm_sockets"] = req.vm_sockets
-    #
-    # if req.vm_memory is not None:
-    #     extravars["vm_memory"] = req.vm_memory
-    #
-    # if req.vm_disk_size is not None:
-    #     extravars["vm_disk_size"] = req.vm_disk_size
-    #
-    # if req.vm_iso is not None:
-    #     extravars["vm_iso"] = req.vm_iso
-
-
-    # if req.vm_description is not None:
-    #     extravars["vm_description"] = req.vm_description
-
 
     # nothing :
     if not extravars:

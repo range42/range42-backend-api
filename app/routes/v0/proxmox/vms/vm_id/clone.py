@@ -53,7 +53,7 @@ def proxmox_vms_vm_id_clone(req: Request_ProxmoxVmsVMID_Clone):
 
     if debug ==1:
         print("")
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
         print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
         print("")
@@ -141,7 +141,6 @@ def request_checks(req: Request_ProxmoxVmsVMID_Clone) -> dict[Any, Any]:
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
 
-    # extravars["vm_name"] = "admin-wazuh"  # TODO - add vm_id <> vm_name resolver func !
     extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"] )
 
     if req.vm_new_id is not None:

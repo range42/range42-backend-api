@@ -37,12 +37,6 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 #
 # => /v0/admin/proxmox/vms/vmd_id/vm_get_config
 #
-# todo :
-## should be move into api/proxmox/vms/vm_id/config/vm
-## should be move into api/proxmox/vms/vm_id/config/cdrom
-## should be move into api/proxmox/vms/vm_id/config/cpu
-## should be move into api/proxmox/vms/vm_id/config/ram
-#
 @router.post(
     path="/vm_set_tag",
     summary="Retrieve configuration of a VM",
@@ -65,7 +59,7 @@ def proxmox_vms_vm_id_vm_set_tags(req: Request_ProxmoxVmsVMID_VmSetTag):
 
     if debug ==1:
         print("")
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
         print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
         print("")

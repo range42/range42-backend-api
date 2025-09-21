@@ -48,7 +48,7 @@ def proxmox_vms_vm_id_stop_force(req: Request_ProxmoxVmsVMID_StartStopPauseResum
     """ This endpoint force stop the target virtual machine (VM) """
 
     if debug ==1:
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
         print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")
