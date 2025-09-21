@@ -37,48 +37,8 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
 
     action_name = "core/proxmox/configure/default/vms/stop-vms-vuln"
     #
-    checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    # checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
+    return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_stop" )
 
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if debug == 1:
-        print("::  ACTION_NAME", action_name)
-        print("::  REQUEST ::", req.model_dump())
-        print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-        print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
-        print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    extravars = request_checks(req)
-
-    ####
-
-    rc, events, log_plain, log_ansi = run_playbook_core(
-        checked_playbook_filepath,
-        checked_inventory_filepath,
-        limit=req.proxmox_node,
-        extravars=extravars,
-    )
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    payload = reply_processing(events, extravars, log_plain, rc, req)
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if rc == 0:
-        status = 200
-    else:
-        status = 500
-
-    return JSONResponse(payload, status_code=status)
 
 ########################################################################################################################
 
@@ -93,48 +53,7 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
 
     action_name = "core/proxmox/configure/default/vms/stop-vms-vuln"
     #
-    checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    # checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if debug == 1:
-        print("::  ACTION_NAME", action_name)
-        print("::  REQUEST ::", req.model_dump())
-        print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-        print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
-        print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    extravars = request_checks(req)
-
-    ####
-
-    rc, events, log_plain, log_ansi = run_playbook_core(
-        checked_playbook_filepath,
-        checked_inventory_filepath,
-        limit=req.proxmox_node,
-        extravars=extravars,
-    )
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    payload = reply_processing(events, extravars, log_plain, rc, req)
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if rc == 0:
-        status = 200
-    else:
-        status = 500
-
-    return JSONResponse(payload, status_code=status)
+    return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_stop_force")
 
 ########################################################################################################################
 
@@ -149,48 +68,8 @@ def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
 
     action_name = "core/proxmox/configure/default/vms/start-vms-vuln"
     #
-    checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    # checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if debug == 1:
-        print("::  ACTION_NAME", action_name)
-        print("::  REQUEST ::", req.model_dump())
-        print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-        print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
-        print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    extravars = request_checks(req)
-
-    ####
-
-    rc, events, log_plain, log_ansi = run_playbook_core(
-        checked_playbook_filepath,
-        checked_inventory_filepath,
-        limit=req.proxmox_node,
-        extravars=extravars,
-    )
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    payload = reply_processing(events, extravars, log_plain, rc, req)
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if rc == 0:
-        status = 200
-    else:
-        status = 500
-
-    return JSONResponse(payload, status_code=status)
+    #
+    return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_start")
 
 
 ########################################################################################################################
@@ -206,48 +85,9 @@ def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
 
     action_name = "core/proxmox/configure/default/vms/pause-vms-vuln"
     #
-    checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    # checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
 
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
+    return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_pause")
 
-    if debug == 1:
-        print("::  ACTION_NAME", action_name)
-        print("::  REQUEST ::", req.model_dump())
-        print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-        print(f":: checked_inventory_filepath :: {checked_inventory_filepath} ")
-        print(f":: checked_playbook_filepath  :: {checked_playbook_filepath} ")
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    extravars = request_checks(req)
-
-    ####
-
-    rc, events, log_plain, log_ansi = run_playbook_core(
-        checked_playbook_filepath,
-        checked_inventory_filepath,
-        limit=req.proxmox_node,
-        extravars=extravars,
-    )
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    payload = reply_processing(events, extravars, log_plain, rc, req)
-
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-    #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-    if rc == 0:
-        status = 200
-    else:
-        status = 500
-
-    return JSONResponse(payload, status_code=status)
 
 ########################################################################################################################
 
@@ -262,6 +102,21 @@ def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPau
 
     action_name = "core/proxmox/configure/default/vms/resume-vms-vuln"
     #
+    #
+    return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_resume")
+
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
+
+
+def proxmox_vms_vm_ids_mass_run(
+        req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+        action_name: str,
+        proxmox_vm_action: str) -> JSONResponse:
+
+
+
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
     # checked_playbook_filepath  = utils.resolve_actions_playbook(action_name, "public_github")
     checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
@@ -277,7 +132,7 @@ def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPau
 
     #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
-    extravars = request_checks(req)
+    extravars = request_checks(req, proxmox_vm_action)
 
     ####
 
@@ -305,9 +160,7 @@ def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPau
 
     return JSONResponse(payload, status_code=status)
 
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
+
 
 def reply_processing(events: list[dict] | list[Any],
                      extravars: dict[Any, Any],
@@ -342,12 +195,12 @@ def reply_processing(events: list[dict] | list[Any],
     return payload
 
 
-def request_checks(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume) -> dict[Any, Any]:
-    """ request checks """
+def request_checks(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+                   proxmox_vm_action: str) -> dict[Any, Any]:
 
     extravars = {}
 
-    extravars["proxmox_vm_action"] = "vm_stop_force"
+    extravars["proxmox_vm_action"] = proxmox_vm_action # "vm_stop_force"
 
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
