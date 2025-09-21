@@ -34,7 +34,7 @@ debug = 0
 def debug_ping(req: Request_DebugPing):
 
     if debug ==1:
-        print("::  REQUEST ::", req.dict())
+        print("::  REQUEST ::", req.model_dump())
         print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
         print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
         print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")

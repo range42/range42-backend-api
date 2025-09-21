@@ -9,7 +9,7 @@
       include_role:
         name: range42-ansible_roles-proxmox_controller
       vars:
-        proxmox_vm_action: "vm_list"
-        proxmox_node: "px-testing"
+#        proxmox_vm_action: "vm_list"
+#        proxmox_node: "px-testing"
 
 
