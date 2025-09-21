@@ -9,7 +9,8 @@ from app.routes.v0.proxmox.vms.list_usage                            import rout
 #
 # proxmox vm life cycle mgmt - issue #3
 #
-from app.routes.v0.proxmox.vms.vm_id.start                           import router as proxmox_vms_vm_id_start
+
+from app.routes.v0.proxmox.vms.vm_id.start                           import router as proxmox_vms_vm_id_start_router
 from app.routes.v0.proxmox.vms.vm_id.stop                            import router as proxmox_vms_vm_id_stop_router
 from app.routes.v0.proxmox.vms.vm_id.pause                           import router as proxmox_vms_vm_id_pause_router
 from app.routes.v0.proxmox.vms.vm_id.resume                          import router as proxmox_vms_vm_id_resume_router
@@ -81,6 +82,13 @@ from app.routes.v0.proxmox.network.node.delete_network               import rout
 from app.routes.v0.proxmox.network.node.list_network                 import router as proxmox_network_node_list_network_router
 
 
+# mass start,stop,pause,resmue
+
+
+from app.routes.v0.proxmox.vms.vm_ids.mass_start_stop_pause_resume import  router as proxmox_vms_vm_id_mass_start_stop_pause_resume_router
+
+
+
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
@@ -98,11 +106,18 @@ router.include_router(proxmox_vms_list_usage_router,                           p
 #
 # /v0/admin/proxmox/vms/vm_id/ - issue #3
 #
-router.include_router(proxmox_vms_vm_id_start,                                 prefix="/v0/admin/proxmox/vms/vm_id")
+router.include_router(proxmox_vms_vm_id_start_router,                          prefix="/v0/admin/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_stop_router,                           prefix="/v0/admin/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_stop_force_router,                     prefix="/v0/admin/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_pause_router,                          prefix="/v0/admin/proxmox/vms/vm_id")
 router.include_router(proxmox_vms_vm_id_resume_router,                         prefix="/v0/admin/proxmox/vms/vm_id")
+
+
+#
+# /v0/admin/proxmox/vms/vm_ids/ - issue #3 derived from #30
+#
+router.include_router(proxmox_vms_vm_id_mass_start_stop_pause_resume_router,   prefix="/v0/admin/proxmox/vms/vm_ids")
+
 
 #
 # /v0/admin/proxmox/firewall/  - issue #6
