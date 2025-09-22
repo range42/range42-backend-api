@@ -82,12 +82,12 @@ from app.routes.v0.proxmox.network.node.delete_network               import rout
 from app.routes.v0.proxmox.network.node.list_network                 import router as proxmox_network_node_list_network_router
 
 
-# mass start,stop,pause,resmue
+# mass start,stop,pause,resume
 
 
 from app.routes.v0.proxmox.vms.vm_ids.mass_start_stop_pause_resume import  router as proxmox_vms_vm_id_mass_start_stop_pause_resume_router
-
-
+from app.routes.v0.proxmox.vms.vm_ids.mass_delete                  import  router as proxmox_vms_vm_id_mass_delete_router
+#
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
@@ -117,6 +117,7 @@ router.include_router(proxmox_vms_vm_id_resume_router,                         p
 # /v0/admin/proxmox/vms/vm_ids/ - issue #3 derived from #30
 #
 router.include_router(proxmox_vms_vm_id_mass_start_stop_pause_resume_router,   prefix="/v0/admin/proxmox/vms/vm_ids")
+router.include_router(proxmox_vms_vm_id_mass_delete_router,                    prefix="/v0/admin/proxmox/vms/vm_ids")
 
 
 #
