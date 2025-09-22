@@ -175,7 +175,7 @@ def reply_processing(events: list[dict] | list[Any],
         ##### OUTPUT TYPE - as_json=True
         #####
 
-        action = extravars["proxmox_vm_action"]
+        action = extravars["PROXMOX_VM_ACTION"]
         result = extract_action_results(events, action)
 
         payload = {
@@ -200,13 +200,13 @@ def request_checks(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
 
     extravars = {}
 
-    extravars["proxmox_vm_action"] = proxmox_vm_action # "vm_stop_force"
+    extravars["PROXMOX_VM_ACTION"] = proxmox_vm_action # "vm_stop_force"
 
     if req.proxmox_node:
-        extravars["proxmox_node"] = req.proxmox_node
+        extravars["PROXMOX_NODE"] = req.proxmox_node
     #
     if req.vm_ids:
-        extravars["vm_ids"] = req.vm_ids
+        extravars["VM_IDS"] = req.vm_ids
 
     # nothing :
     if not extravars:
