@@ -35,7 +35,7 @@ INVENTORY_NAME = "hosts"
 )
 def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
 
-    action_name = "core/proxmox/configure/default/vms/stop-vms-vuln"
+    action_name = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
     #
     return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_stop" )
 
@@ -51,7 +51,7 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
 )
 def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
 
-    action_name = "core/proxmox/configure/default/vms/stop-vms-vuln"
+    action_name = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
     #
     return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_stop_force")
 
@@ -66,7 +66,7 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
 )
 def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
 
-    action_name = "core/proxmox/configure/default/vms/start-vms-vuln"
+    action_name = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
     #
     #
     return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_start")
@@ -83,7 +83,7 @@ def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
 )
 def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
 
-    action_name = "core/proxmox/configure/default/vms/pause-vms-vuln"
+    action_name = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
     #
 
     return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_pause")
@@ -100,7 +100,7 @@ def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
 )
 def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
 
-    action_name = "core/proxmox/configure/default/vms/resume-vms-vuln"
+    action_name = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
     #
     #
     return proxmox_vms_vm_ids_mass_run(req, action_name, "vm_resume")
