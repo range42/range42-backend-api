@@ -10,7 +10,7 @@ from app.schemas.proxmox.storage.storage_name.list_iso import Request_ProxmoxSto
 from app.schemas.proxmox.storage.storage_name.list_iso import Reply_ProxmoxStorageWithStorageName_ListIsoItem
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app import utils
 from pathlib import Path
 import os

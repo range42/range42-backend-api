@@ -7,7 +7,7 @@ from app.schemas.bundles.core.linux.ubuntu.install.basic_packages import Request
 from app.schemas.bundles.core.linux.ubuntu.install.basic_packages import Reply_BundlesCoreLinuxUbuntuInstall_BasicPackages
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app import utils
 from pathlib import Path
 import os

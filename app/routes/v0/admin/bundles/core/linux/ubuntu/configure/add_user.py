@@ -7,7 +7,7 @@ from app.schemas.bundles.core.linux.ubuntu.configure.add_user import Request_Bun
 from app.schemas.bundles.core.linux.ubuntu.configure.add_user import Reply_BundlesCoreLinuxUbuntuConfigure_AddUser
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app import utils
 from pathlib import Path
 import os

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 
 from app.schemas.proxmox.vm_id.snapshot.vm_list import Request_ProxmoxVmsVMID_ListSnapshot
 from app.schemas.proxmox.vm_id.snapshot.vm_list import Reply_ProxmoxVmsVMID_ListSnapshot

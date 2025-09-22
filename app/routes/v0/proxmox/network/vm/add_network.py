@@ -7,7 +7,7 @@ from app.schemas.proxmox.network.vm_id.add_network import Request_ProxmoxNetwork
 from app.schemas.proxmox.network.vm_id.add_network import Reply_ProxmoxNetwork_WithVmId_AddNetworkInterface
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 # from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
 from pathlib import Path

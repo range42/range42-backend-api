@@ -8,7 +8,7 @@ from app.schemas.proxmox.vm_id.snapshot.vm_create import Request_ProxmoxVmsVMID_
 from app.schemas.proxmox.vm_id.snapshot.vm_create import Reply_ProxmoxVmsVMID_CreateSnapshot
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
 from app import utils

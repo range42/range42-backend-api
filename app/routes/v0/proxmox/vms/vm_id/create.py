@@ -8,7 +8,7 @@ from app.schemas.proxmox.vm_id.create import Request_ProxmoxVmsVMID_Create
 from app.schemas.proxmox.vm_id.create import Reply_ProxmoxVmsVMID_Create
 
 from app.runner import  run_playbook_core # , extract_action_results
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app import utils
 from pathlib import Path
 

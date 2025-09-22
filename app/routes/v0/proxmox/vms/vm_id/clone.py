@@ -9,7 +9,7 @@ from app.schemas.proxmox.vm_id.clone import Reply_ProxmoxVmsVMID_Clone
 from app.runner import  run_playbook_core # , extract_action_results
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
-from app.json_extract import extract_action_results
+from app.extract_actions import extract_action_results
 from app import utils
 from pathlib import Path
 import os
