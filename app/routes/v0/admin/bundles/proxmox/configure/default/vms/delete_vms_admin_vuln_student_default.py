@@ -29,7 +29,7 @@ INVENTORY_NAME = "hosts"
 # => /v0/admin/run/bundles/core/proxmox/configure/default/delete-vms-student
 #
 @router.delete(
-    path="core/proxmox/configure/default/delete-vms-student",
+    path="/core/proxmox/configure/default/delete-vms-student",
     summary="Delete student vms ",
     description="Delete all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
@@ -42,7 +42,7 @@ def bundles_proxmox_configure_default_vms_stop_vms_student(req: Request_BundlesC
 # => /v0/admin/run/bundles/core/proxmox/configure/default/delete-vms-vuln
 #
 @router.delete(
-    path="core/proxmox/configure/default/delete-vms-vuln",
+    path="/core/proxmox/configure/default/delete-vms-vuln",
     summary="Delete student vms ",
     description="Delete all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - vuln"],
@@ -56,7 +56,7 @@ def bundles_proxmox_configure_default_vms_stop_vms_vuln(req: Request_BundlesCore
 # => /v0/admin/run/bundles/core/proxmox/configure/default/admin-vms-admin
 #
 @router.delete(
-    path="core/proxmox/configure/default/delete-vms-admin",
+    path="/core/proxmox/configure/default/delete-vms-admin",
     summary="Delete admin vms ",
     description="Delete all admin virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - admin"],

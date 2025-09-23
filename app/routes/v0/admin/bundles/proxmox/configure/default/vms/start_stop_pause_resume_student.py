@@ -29,7 +29,7 @@ INVENTORY_NAME = "hosts"
 # => /v0/admin/run/bundles/core/proxmox/configure/default/start-vms-vuln
 #
 @router.post(
-    path="core/proxmox/configure/default/start-vms-student",
+    path="/core/proxmox/configure/default/start-vms-student",
     summary="Start student vms ",
     description="Start all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
@@ -48,7 +48,7 @@ def bundles_proxmox_configure_default_vms_stop_vms_vuln(req: Request_BundlesCore
 # => /v0/admin/run/bundles/core/proxmox/configure/default/stop-vms-student
 #
 @router.post(
-    path="core/proxmox/configure/default/stop-vms-student",
+    path="/core/proxmox/configure/default/stop-vms-student",
     summary="Stop student vms ",
     description="Stop all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
@@ -67,7 +67,7 @@ def bundles_proxmox_configure_default_vms_stop_vms_vuln(req: Request_BundlesCore
 # => /v0/admin/run/bundles/core/proxmox/configure/default/pause-vms-student
 #
 @router.post(
-    path="core/proxmox/configure/default/pause-vms-student",
+    path="/core/proxmox/configure/default/pause-vms-student",
     summary="Pause student vms ",
     description="Pause all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
@@ -86,7 +86,7 @@ def bundles_proxmox_configure_default_vms_stop_vms_vuln(req: Request_BundlesCore
 # => /v0/admin/run/bundles/core/proxmox/configure/default/resume-vms-student
 #
 @router.post(
-    path="core/proxmox/configure/default/resume-vms-student",
+    path="/core/proxmox/configure/default/resume-vms-student",
     summary="Resume student vms ",
     description="Resume all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
