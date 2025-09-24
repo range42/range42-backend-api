@@ -1,17 +1,20 @@
 #!/usr/bin/python
-import inspect
-import json
+
 import os, shutil, stat, tempfile
-import sys
-from pathlib import Path
 import logging
+import json
+from pathlib import Path
 
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from app.routes import router as api_router
-
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from app.routes import router as api_router
+from contextlib import asynccontextmanager
+
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+# #
 
 from . import vault
 
@@ -91,10 +94,37 @@ async def lifespan(app: FastAPI):
 
 logger = logging.getLogger(__name__)
 
+### swagger meta
+
 tags_metadata = [
     {"name": "proxmox", "description": "proxmox lifecycle actions"},
     {"name": "docker" , "description": "docker lifecycle actions"},
 ]
+
+
+### CORS
+
+origins = [
+    "http://127.0.0.1",
+    "https://127.0.0.1",
+    "http://localhost",
+    "https://localhost"
+]
+
+middleware = [
+    Middleware(
+        CORSMiddleware, # type: ignore[arg-type]
+        # allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET","POST","DELETE","OPTIONS"],
+        allow_headers=["Content-Type","Accept","Authorization"],
+        max_age=600,
+
+    )
+]
+
+#
 
 app = FastAPI(
     title           = "CR42 - API",
@@ -107,6 +137,8 @@ app = FastAPI(
     #
     license_info    = { "name": "GPLv3" },
     contact         = { "email": "info@digisquad.com" },
+    #
+    middleware      = middleware,
 
     #
     # docs_url=None,   # to disable - swagger ui   - default location /docs
