@@ -30,7 +30,7 @@ INVENTORY_NAME = "hosts"
 # => /v0/admin/run/bundles/core/proxmox/configure/default/snapshot-vms-student
 #
 @router.post(
-    path="core/proxmox/configure/default/snapshot/create-vms-student",
+    path="/core/proxmox/configure/default/snapshot/create-vms-student",
     summary="Snapshot student vms ",
     description="Snapshot all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - student"],
@@ -43,7 +43,7 @@ def bundles_proxmox_configure_default_vms_create_snapshot_vms_student(req: Reque
 # => /v0/admin/run/bundles/core/proxmox/configure/default/snapshot-vms-vuln
 #
 @router.post(
-    path="core/proxmox/configure/default/snapshot/create-vms-vuln",
+    path="/core/proxmox/configure/default/snapshot/create-vms-vuln",
     summary="Snapshot student vms ",
     description="Snapshot all vulnerable virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - vuln"],
@@ -57,7 +57,7 @@ def bundles_proxmox_configure_default_vms_create_snapshot_vms_vuln(req: Request_
 # => /v0/admin/run/bundles/core/proxmox/configure/default/admin-vms-admin
 #
 @router.post(
-    path="core/proxmox/configure/default/snapshot/create-vms-admin",
+    path="/core/proxmox/configure/default/snapshot/create-vms-admin",
     summary="Snapshot admin vms ",
     description="Snapshot all admin virtual machines",
     tags=["bundles - core - proxmox - vms - default-configuration - admin"],
