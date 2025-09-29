@@ -104,18 +104,18 @@ tags_metadata = [
 
 ### CORS
 
-origins = [
-    "http://127.0.0.1",
-    "https://127.0.0.1",
-    "http://localhost",
-    "https://localhost"
-]
+# origins = [
+#     "http://127.0.0.1",
+#     "https://127.0.0.1",
+#     "http://localhost",
+#     "https://localhost"
+# ]
 
 middleware = [
     Middleware(
         CORSMiddleware, # type: ignore[arg-type]
-        # allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
-        allow_origins=origins,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
+        # allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET","POST","DELETE","OPTIONS"],
         allow_headers=["Content-Type","Accept","Authorization"],
