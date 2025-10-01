@@ -44,7 +44,7 @@ This repository contains the backend API built with FastAPI which orchestrates d
 ## Contributing
 
 This is a collaborative initiative, developed for applied security training, community integration, and internal capability building.
-We use centralized community health files in Range42 community health.
+We use centralized community health files in Range42 community health. 
 
 ## License
 
