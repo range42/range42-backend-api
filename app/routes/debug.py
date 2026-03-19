@@ -1,6 +1,9 @@
 """Consolidated debug routes.
 
-Replaces: app/routes/v0/debug/ping.py, app/routes/v0/debug/_test_func.py
+Endpoints
+---------
+- ``POST /v0/admin/debug/ping`` -- Ansible ping connectivity check.
+- ``POST /v0/admin/debug/func_test`` -- Temporary test function.
 """
 
 import logging
@@ -31,6 +34,11 @@ router = APIRouter()
     tags=["runner"],
 )
 def debug_ping(req: Request_DebugPing):
+    """Run Ansible ping to check connectivity with target hosts.
+
+    :param req: Request body with ``hosts`` and optional ``proxmox_node``.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     if not PLAYBOOK_SRC.exists():
         raise HTTPException(status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}")
     if not INVENTORY_SRC.exists():
@@ -57,6 +65,10 @@ def debug_ping(req: Request_DebugPing):
     tags=["__tmp_testing"],
 )
 def debug_func_test():
+    """Temporary test function for development.
+
+    :returns: None (debug only).
+    """
     if not PLAYBOOK_SRC.exists():
         raise HTTPException(status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}")
     if not INVENTORY_SRC.exists():

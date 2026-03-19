@@ -1,6 +1,11 @@
 """Consolidated snapshot routes.
 
-Replaces: app/routes/v0/proxmox/vms/vm_id/snapshots/*.py
+Endpoints
+---------
+- ``POST /v0/admin/proxmox/vms/vm_id/snapshot/list`` -- List snapshots.
+- ``POST /v0/admin/proxmox/vms/vm_id/snapshot/create`` -- Create a snapshot.
+- ``DELETE /v0/admin/proxmox/vms/vm_id/snapshot/delete`` -- Delete a snapshot.
+- ``POST /v0/admin/proxmox/vms/vm_id/snapshot/revert`` -- Revert to a snapshot.
 """
 
 import logging
@@ -62,6 +67,11 @@ def _run_snapshot_action(req, action: str, extravars: dict) -> JSONResponse:
     response_description="Snapshot list result",
 )
 def proxmox_vms_vm_id_list_snapshot(req: Request_ProxmoxVmsVMID_ListSnapshot):
+    """List all snapshots for a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -79,6 +89,11 @@ def proxmox_vms_vm_id_list_snapshot(req: Request_ProxmoxVmsVMID_ListSnapshot):
     response_description="Snapshot creation result",
 )
 def proxmox_vms_vm_id_create_snapshot(req: Request_ProxmoxVmsVMID_CreateSnapshot):
+    """Create a named snapshot of a VM.
+
+    :param req: Request body with node, VM ID, snapshot name, and description.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -99,6 +114,11 @@ def proxmox_vms_vm_id_create_snapshot(req: Request_ProxmoxVmsVMID_CreateSnapshot
     response_description="Snapshot delete result",
 )
 def proxmox_vms_vm_id_delete_snapshot(req: Request_ProxmoxVmsVMID_DeleteSnapshot):
+    """Delete a named snapshot from a VM.
+
+    :param req: Request body with node, VM ID, and snapshot name.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -119,6 +139,11 @@ def proxmox_vms_vm_id_delete_snapshot(req: Request_ProxmoxVmsVMID_DeleteSnapshot
     response_description="Snapshot revert result",
 )
 def proxmox_vms_vm_id_revert_snapshot(req: Request_ProxmoxVmsVMID_RevertSnapshot):
+    """Revert a VM to a named snapshot.
+
+    :param req: Request body with node, VM ID, and snapshot name.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node

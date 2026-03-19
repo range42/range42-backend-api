@@ -1,4 +1,10 @@
-"""Clean playbook runner. Fixes temp-dir leak, removes print debugging, uses VaultManager."""
+"""Ansible playbook runner.
+
+Provides :func:`run_playbook_core`, the single entry point for executing
+Ansible playbooks via ``ansible-runner``.  Each invocation creates an
+isolated temp directory that is cleaned up in a ``finally`` block to
+prevent disk leaks.
+"""
 
 import os
 import shutil
@@ -14,7 +20,16 @@ vault_manager = VaultManager()
 
 
 def build_logs(events) -> tuple[str, str]:
-    """Build ansible log strings with and without ANSI escape codes."""
+    """Build Ansible log strings with and without ANSI escape codes.
+
+    Iterates over runner events, collects ``stdout`` lines, and produces
+    two variants of the combined output.
+
+    :param events: Iterable of Ansible runner event dicts.
+    :type events: Iterable[dict]
+    :returns: A tuple of ``(text_with_ansi, text_without_ansi)``.
+    :rtype: tuple[str, str]
+    """
     lines = []
     for ev in events:
         stdout = ev.get("stdout")
@@ -26,7 +41,16 @@ def build_logs(events) -> tuple[str, str]:
 
 
 def _build_envvars(vm: VaultManager) -> dict:
-    """Build the Ansible environment variables dict."""
+    """Build the Ansible environment variables dict.
+
+    Configures host-key checking, deprecation warnings, collection paths,
+    and vault password file for the runner environment.
+
+    :param vm: Vault manager instance for vault password file resolution.
+    :type vm: VaultManager
+    :returns: Dictionary of environment variable key-value pairs.
+    :rtype: dict
+    """
     home_collections = os.path.expanduser("~/.ansible/collections")
     sys_collections = "/usr/share/ansible/collections"
     coll_paths = f"{home_collections}:{sys_collections}"
@@ -58,9 +82,19 @@ def _build_envvars(vm: VaultManager) -> dict:
 def _setup_temp_dir(
     inventory: Path, playbook: Path, vm: VaultManager,
 ) -> tuple[Path, Path, Path]:
-    """Create temp dir, copy playbook tree and inventory, write envvars.
+    """Create an isolated temp directory for a single playbook run.
 
-    Returns (tmp_dir, inventory_path_in_tmp, playbook_relative_path).
+    Copies the playbook tree and inventory into the temp directory and
+    writes an ``env/envvars`` file for ``ansible-runner``.
+
+    :param inventory: Absolute path to the inventory file.
+    :type inventory: Path
+    :param playbook: Absolute path to the playbook file.
+    :type playbook: Path
+    :param vm: Vault manager instance for environment variable generation.
+    :type vm: VaultManager
+    :returns: A tuple of ``(tmp_dir, inventory_path_in_tmp, playbook_relative_path)``.
+    :rtype: tuple[Path, Path, Path]
     """
     tmp_dir = Path(tempfile.mkdtemp(prefix="runner-"))
 
@@ -95,7 +129,19 @@ def _build_cmdline(
     cmdline: str | None,
     tags: str | None,
 ) -> str | None:
-    """Build the ansible-runner cmdline string."""
+    """Build the ``ansible-runner`` command-line string.
+
+    Appends vault password file, extra vars file, and tag arguments as needed.
+
+    :param vm: Vault manager instance for vault password file resolution.
+    :type vm: VaultManager
+    :param cmdline: Pre-existing command-line string, or ``None``.
+    :type cmdline: str or None
+    :param tags: Comma-separated Ansible tags to apply, or ``None``.
+    :type tags: str or None
+    :returns: The assembled command-line string, or ``None`` if empty.
+    :rtype: str or None
+    """
     if not cmdline:
         vf = os.getenv("VAULT_PASSWORD_FILE")
         if not vf:
@@ -123,10 +169,28 @@ def run_playbook_core(
     extravars: dict | None = None,
     quiet: bool = False,
 ) -> tuple[int, list, str, str]:
-    """Run an Ansible playbook and return (rc, events, log_plain, log_ansi).
+    """Run an Ansible playbook and return execution results.
 
-    Uses the module-level vault_manager instance.
-    Cleans up the temp directory in a finally block.
+    Creates an isolated temp directory, executes the playbook via
+    ``ansible_runner.run()``, collects events and logs, then cleans
+    up the temp directory in a ``finally`` block.
+
+    :param playbook: Absolute path to the playbook YAML file.
+    :type playbook: Path
+    :param inventory: Absolute path to the inventory file.
+    :type inventory: Path
+    :param limit: Ansible ``--limit`` host pattern, or ``None`` for all hosts.
+    :type limit: str or None
+    :param tags: Comma-separated Ansible tags, or ``None``.
+    :type tags: str or None
+    :param cmdline: Additional command-line arguments for ansible-runner.
+    :type cmdline: str or None
+    :param extravars: Extra variables dict passed to the playbook.
+    :type extravars: dict or None
+    :param quiet: If ``True``, suppress ansible-runner console output.
+    :type quiet: bool
+    :returns: A tuple of ``(return_code, events_list, log_plain, log_ansi)``.
+    :rtype: tuple[int, list, str, str]
     """
     tmp_dir, inv_dest, play_rel = _setup_temp_dir(inventory, playbook, vault_manager)
     try:

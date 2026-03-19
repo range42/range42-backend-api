@@ -1,6 +1,19 @@
 """Consolidated firewall routes.
 
-Replaces: app/routes/v0/proxmox/firewall/*.py
+Endpoints
+---------
+- ``POST /v0/admin/proxmox/firewall/vm/alias/list`` -- List VM aliases.
+- ``POST /v0/admin/proxmox/firewall/vm/alias/add`` -- Add a VM alias.
+- ``DELETE /v0/admin/proxmox/firewall/vm/alias/delete`` -- Delete a VM alias.
+- ``POST /v0/admin/proxmox/firewall/vm/rules/list`` -- List VM rules.
+- ``POST /v0/admin/proxmox/firewall/vm/rules/apply`` -- Apply VM rules.
+- ``DELETE /v0/admin/proxmox/firewall/vm/rules/delete`` -- Delete a VM rule.
+- ``POST /v0/admin/proxmox/firewall/vm/enable`` -- Enable VM firewall.
+- ``POST /v0/admin/proxmox/firewall/vm/disable`` -- Disable VM firewall.
+- ``POST /v0/admin/proxmox/firewall/node/enable`` -- Enable node firewall.
+- ``POST /v0/admin/proxmox/firewall/node/disable`` -- Disable node firewall.
+- ``POST /v0/admin/proxmox/firewall/datacenter/enable`` -- Enable DC firewall.
+- ``POST /v0/admin/proxmox/firewall/datacenter/disable`` -- Disable DC firewall.
 """
 
 import logging
@@ -57,6 +70,11 @@ def _run_fw(req, action: str, extravars: dict) -> JSONResponse:
 
 @router.post(path="/vm/alias/list", summary="List VM firewall aliases", description="List firewall aliases for a specific virtual machine", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_ListIptablesAlias, response_description="Details of the VM firewall aliases")
 def proxmox_vm_alias_list(req: Request_ProxmoxFirewall_ListIptablesAlias):
+    """List firewall aliases for a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id:
         extravars["vm_id"] = req.vm_id
@@ -65,6 +83,11 @@ def proxmox_vm_alias_list(req: Request_ProxmoxFirewall_ListIptablesAlias):
 
 @router.post(path="/vm/alias/add", summary="Add a firewall alias", description="Add a new alias to the Proxmox firewall - IPs, subnets/networks, hostnames", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_AddIptablesAlias, response_description="Information about the created firewall alias")
 def proxmox_firewall_vm_alias_add(req: Request_ProxmoxFirewall_AddIptablesAlias):
+    """Add a firewall alias (IP, subnet, or hostname) for a VM.
+
+    :param req: Request body with node, VM ID, alias name, CIDR, and comment.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -79,6 +102,11 @@ def proxmox_firewall_vm_alias_add(req: Request_ProxmoxFirewall_AddIptablesAlias)
 
 @router.delete(path="/vm/alias/delete", summary="Delete a firewall alias", description="Remove an existing alias from the proxmox firewall", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias, response_description="Details of the deleted firewall alias")
 def proxmox_firewall_vm_alias_delete(req: Request_ProxmoxFirewall_DeleteIptablesAlias):
+    """Delete a firewall alias from a VM.
+
+    :param req: Request body with node, VM ID, and alias name.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -91,6 +119,11 @@ def proxmox_firewall_vm_alias_delete(req: Request_ProxmoxFirewall_DeleteIptables
 
 @router.post(path="/vm/rules/list", summary="List VM firewall rules", description="List firewall rules for a specific virtual machine", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_ListIptablesRules, response_description="Details of the VM firewall rules")
 def proxmox_vm_rules_list(req: Request_ProxmoxFirewall_ListIptablesRules):
+    """List firewall rules for a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id:
         extravars["vm_id"] = req.vm_id
@@ -99,6 +132,11 @@ def proxmox_vm_rules_list(req: Request_ProxmoxFirewall_ListIptablesRules):
 
 @router.post(path="/vm/rules/apply", summary="Apply firewall rules", description="Apply the received firewall rules to the proxmox firewall", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_ApplyIptablesRules, response_description="Details of the applied firewall rules")
 def proxmox_firewall_vm_rules_add(req: Request_ProxmoxFirewall_ApplyIptablesRules):
+    """Apply firewall rules to a VM.
+
+    :param req: Request body with node, VM ID, and rule parameters.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -111,6 +149,11 @@ def proxmox_firewall_vm_rules_add(req: Request_ProxmoxFirewall_ApplyIptablesRule
 
 @router.delete(path="/vm/rules/delete", summary="Delete a firewall rule", description="Remove an existing rule from the proxmox firewall configuration", tags=["proxmox - firewall"], response_model=Request_ProxmoxFirewall_DeleteIptablesRule, response_description="Details of the deleted firewall rule.")
 def proxmox_firewall_vm_rules_delete(req: Request_ProxmoxFirewall_DeleteIptablesRule):
+    """Delete a firewall rule from a VM by position.
+
+    :param req: Request body with node, VM ID, and rule position.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -123,6 +166,11 @@ def proxmox_firewall_vm_rules_delete(req: Request_ProxmoxFirewall_DeleteIptables
 
 @router.post(path="/vm/enable", summary="Enable VM firewall", description="Enable the proxmox firewall for a specific virtual machine", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_EnableFirewallVm, response_description="Details of the enabled VM firewall")
 def proxmox_firewall_vm_enable(req: Request_ProxmoxFirewall_EnableFirewallVm):
+    """Enable the firewall on a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id:
         extravars["vm_id"] = req.vm_id
@@ -132,6 +180,11 @@ def proxmox_firewall_vm_enable(req: Request_ProxmoxFirewall_EnableFirewallVm):
 
 @router.post(path="/vm/disable", summary="Disable VM firewall", description="Disable the proxmox firewall for a specific virtual machine", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_DisableFirewallVm, response_description="Details of the disabled VM firewall")
 def proxmox_firewall_vm_disable(req: Request_ProxmoxFirewall_DistableFirewallVm):
+    """Disable the firewall on a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id:
         extravars["vm_id"] = req.vm_id
@@ -143,12 +196,22 @@ def proxmox_firewall_vm_disable(req: Request_ProxmoxFirewall_DistableFirewallVm)
 
 @router.post(path="/node/enable", summary="Enable node firewall", description="Enable the proxmox firewall on a specific node", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_EnableFirewallNode, response_description="Details of the enabled node firewall")
 def proxmox_firewall_node_enable(req: Request_ProxmoxFirewall_EnableFirewallNode):
+    """Enable the firewall on a Proxmox node.
+
+    :param req: Request body with ``proxmox_node``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     return _run_fw(req, "firewall_node_enable", extravars)
 
 
 @router.post(path="/node/disable", summary="Disable node firewall", description="Disable the proxmox firewall on a specific node", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_DisableFirewallNode, response_description="Details of the disabled node firewall")
 def proxmox_firewall_node_disable(req: Request_ProxmoxFirewall_DistableFirewallNode):
+    """Disable the firewall on a Proxmox node.
+
+    :param req: Request body with ``proxmox_node``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     return _run_fw(req, "firewall_node_disable", extravars)
 
@@ -157,6 +220,11 @@ def proxmox_firewall_node_disable(req: Request_ProxmoxFirewall_DistableFirewallN
 
 @router.post(path="/datacenter/enable", summary="Enable datacenter firewall", description="Enable the proxmox firewall at the datacenter level", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_EnableFirewallDc, response_description="Details of the enabled datacenter firewall")
 def proxmox_firewall_dc_enable(req: Request_ProxmoxFirewall_EnableFirewallDc):
+    """Enable the firewall at the datacenter level.
+
+    :param req: Request body with ``proxmox_api_host``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_api_host:
         extravars["proxmox_api_host"] = req.proxmox_api_host
@@ -165,6 +233,11 @@ def proxmox_firewall_dc_enable(req: Request_ProxmoxFirewall_EnableFirewallDc):
 
 @router.post(path="/datacenter/disable", summary="Disable datacenter firewall", description="Disable the proxmox firewall at the datacenter level", tags=["proxmox - firewall"], response_model=Reply_ProxmoxFirewallWithStorageName_DisableFirewallDc, response_description="Details of the disabled datacenter firewall")
 def proxmox_firewall_dc_disable(req: Request_ProxmoxFirewall_DisableFirewallDc):
+    """Disable the firewall at the datacenter level.
+
+    :param req: Request body with ``proxmox_api_host``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_api_host:
         extravars["proxmox_api_host"] = req.proxmox_api_host

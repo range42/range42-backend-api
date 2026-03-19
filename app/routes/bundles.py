@@ -1,7 +1,26 @@
 """Consolidated bundle routes.
 
-Replaces: app/routes/v0/admin/bundles/core/linux/ubuntu/**/*.py
-          app/routes/v0/admin/bundles/proxmox/configure/default/vms/*.py
+Endpoints
+---------
+Ubuntu install bundles:
+
+- ``POST .../core/linux/ubuntu/install/docker`` -- Install Docker.
+- ``POST .../core/linux/ubuntu/install/docker-compose`` -- Install Docker Compose.
+- ``POST .../core/linux/ubuntu/install/basic-packages`` -- Install basic packages.
+- ``POST .../core/linux/ubuntu/install/dot-files`` -- Install dotfiles.
+- ``POST .../core/linux/ubuntu/configure/add-user`` -- Add a system user.
+
+Proxmox VM bundles (create/start/stop/pause/resume/delete/snapshot):
+
+- ``POST .../core/proxmox/configure/default/create-vms-admin``
+- ``POST .../core/proxmox/configure/default/create-vms-vuln``
+- ``POST .../core/proxmox/configure/default/create-vms-student``
+- ``POST .../core/proxmox/configure/default/{action}-vms-{role}``
+- ``DELETE .../core/proxmox/configure/default/delete-vms-{role}``
+- ``POST .../core/proxmox/configure/default/snapshot/create-vms-{role}``
+- ``POST .../core/proxmox/configure/default/snapshot/revert-vms-{role}``
+
+All prefixed under ``/v0/admin/run/bundles``.
 """
 
 import logging
@@ -170,6 +189,11 @@ def _run_snapshot_bundle(req, action_name: str, action_key: str) -> JSONResponse
 
 @router.post(path="/core/linux/ubuntu/install/docker", summary="Install docker packages", description="Install and configure docker engine on the target ubuntu system", tags=["bundles - core - ubuntu "], response_model=Reply_BundlesCoreLinuxUbuntuInstall_Docker)
 def bundles_core_linux_ubuntu_install_docker(req: Request_BundlesCoreLinuxUbuntuInstall_Docker):
+    """Install and configure Docker on the target Ubuntu system.
+
+    :param req: Request body with host, node, and package installation flags.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -184,6 +208,11 @@ def bundles_core_linux_ubuntu_install_docker(req: Request_BundlesCoreLinuxUbuntu
 
 @router.post(path="/core/linux/ubuntu/install/docker-compose", summary="Install docker compose packages", description="Install and configure docker compose on the target ubuntu system", tags=["bundles - core - ubuntu "], response_model=Reply_BundlesCoreLinuxUbuntuInstall_DockerCompose)
 def bundles_core_linux_ubuntu_install_docker_compose(req: Request_BundlesCoreLinuxUbuntuInstall_DockerCompose):
+    """Install and configure Docker Compose on the target Ubuntu system.
+
+    :param req: Request body with host, node, and package installation flags.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -200,6 +229,11 @@ def bundles_core_linux_ubuntu_install_docker_compose(req: Request_BundlesCoreLin
 
 @router.post(path="/core/linux/ubuntu/install/basic-packages", summary="Install basics packages", description="Install and configure a base set of packages on the target Ubuntu system", tags=["bundles - core - ubuntu "], response_model=Reply_BundlesCoreLinuxUbuntuInstall_BasicPackages)
 def bundles_core_linux_ubuntu_install_basic_packages(req: Request_BundlesCoreLinuxUbuntuInstall_BasicPackages):
+    """Install a base set of packages on the target Ubuntu system.
+
+    :param req: Request body with host, node, and package category flags.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -212,6 +246,11 @@ def bundles_core_linux_ubuntu_install_basic_packages(req: Request_BundlesCoreLin
 
 @router.post(path="/core/linux/ubuntu/install/dot-files", summary="Install user dotfiles", description="Install and configure generic dotfiles - vimrc, zshrc, etc.", tags=["bundles - core - ubuntu "], response_model=Reply_BundlesCoreLinuxUbuntuInstall_DotFilesItem)
 def bundles_core_linux_ubuntu_install_dotfiles(req: Request_BundlesCoreLinuxUbuntuInstall_DotFiles):
+    """Install generic dotfiles (vimrc, zshrc, etc.) for a user.
+
+    :param req: Request body with host, user, and dotfile selection flags.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -234,6 +273,11 @@ def bundles_core_linux_ubuntu_install_dotfiles(req: Request_BundlesCoreLinuxUbun
 
 @router.post(path="/core/linux/ubuntu/configure/add-user", summary="Add system user", description="Create a new user with shell, home and password", tags=["bundles - core - ubuntu "], response_model=Reply_BundlesCoreLinuxUbuntuConfigure_AddUser)
 def bundles_core_linux_ubuntu_configure_add_user(req: Request_BundlesCoreLinuxUbuntuConfigure_AddUser):
+    """Create a new system user with shell, home directory, and password.
+
+    :param req: Request body with host, user details, and password policy.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -311,16 +355,31 @@ def _check_student_vms(req):
 
 @router.post(path="/core/proxmox/configure/default/create-vms-admin", summary="Create default admin VMs", description="Create the default set of admin virtual machines for initial configuration in Proxmox", tags=["bundles - core - proxmox - vms - default-configuration - admin"], response_model=Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms)
 def bundles_proxmox_create_vms_admin(req: Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms):
+    """Create the default set of admin VMs on Proxmox.
+
+    :param req: Request body with ``proxmox_node`` and ``vms`` dict.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     return _run_create_vms_bundle(req, "core/proxmox/configure/default/vms/create-vms-admin", _check_admin_vms)
 
 
 @router.post(path="/core/proxmox/configure/default/create-vms-vuln", summary="Create default vulnerable VMs", description="Create the default set of vulnerable virtual machines for initial configuration in Proxmox", tags=["bundles - core - proxmox - vms - default-configuration - vuln"], response_model=Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms)
 def bundles_proxmox_create_vms_vuln(req: Request_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms):
+    """Create the default set of vulnerable VMs on Proxmox.
+
+    :param req: Request body with ``proxmox_node`` and ``vms`` dict.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     return _run_create_vms_bundle(req, "core/proxmox/configure/default/vms/create-vms-vuln", _check_vuln_vms)
 
 
 @router.post(path="/core/proxmox/configure/default/create-vms-student", summary="Create default student VMs", description="Create the default set of student virtual machines for initial configuration in Proxmox", tags=["bundles - core - proxmox - vms - default-configuration - student"], response_model=Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms)
 def bundles_proxmox_create_vms_student(req: Request_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms):
+    """Create the default set of student VMs on Proxmox.
+
+    :param req: Request body with ``proxmox_node`` and ``vms`` dict.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     return _run_create_vms_bundle(req, "core/proxmox/configure/default/vms/create-vms-student", _check_student_vms)
 
 

@@ -1,6 +1,12 @@
 """Consolidated VM configuration routes.
 
-Replaces: app/routes/v0/proxmox/vms/vm_id/config/*.py
+Endpoints
+---------
+- ``POST /v0/admin/proxmox/vms/vm_id/config/vm_get_config`` -- Full VM config.
+- ``POST /v0/admin/proxmox/vms/vm_id/config/vm_get_config_cdrom`` -- CD-ROM config.
+- ``POST /v0/admin/proxmox/vms/vm_id/config/vm_get_config_cpu`` -- CPU config.
+- ``POST /v0/admin/proxmox/vms/vm_id/config/vm_get_config_ram`` -- RAM config.
+- ``POST /v0/admin/proxmox/vms/vm_id/config/vm_set_tag`` -- Set VM tags.
 """
 
 import logging
@@ -63,6 +69,11 @@ def _run_config_action(req, action: str, extravars: dict) -> JSONResponse:
     response_description="VM configuration details",
 )
 def proxmox_vms_vm_id_vm_get_config(req: Request_ProxmoxVmsVMID_VmGetConfig):
+    """Retrieve the full configuration of a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -78,6 +89,11 @@ def proxmox_vms_vm_id_vm_get_config(req: Request_ProxmoxVmsVMID_VmGetConfig):
     response_description="cdrom configuration details",
 )
 def proxmox_vms_vm_id_vm_get_config_cdrom(req: Request_ProxmoxVmsVMID_VmGetConfigCdrom):
+    """Retrieve the CD-ROM configuration of a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -93,6 +109,11 @@ def proxmox_vms_vm_id_vm_get_config_cdrom(req: Request_ProxmoxVmsVMID_VmGetConfi
     response_description="cpu configuration details",
 )
 def proxmox_vms_vm_id_vm_get_config_cpu(req: Request_ProxmoxVmsVMID_VmGetConfigCpu):
+    """Retrieve the CPU configuration of a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -108,6 +129,11 @@ def proxmox_vms_vm_id_vm_get_config_cpu(req: Request_ProxmoxVmsVMID_VmGetConfigC
     response_description="ram configuration details",
 )
 def proxmox_vms_vm_id_vm_get_config_ram(req: Request_ProxmoxVmsVMID_VmGetConfigRam):
+    """Retrieve the RAM configuration of a VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -123,6 +149,11 @@ def proxmox_vms_vm_id_vm_get_config_ram(req: Request_ProxmoxVmsVMID_VmGetConfigR
     response_description="VM configuration details",
 )
 def proxmox_vms_vm_id_vm_set_tags(req: Request_ProxmoxVmsVMID_VmSetTag):
+    """Set tags on a VM.
+
+    :param req: Request body with ``proxmox_node``, ``vm_id``, and ``vm_tag_name``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id

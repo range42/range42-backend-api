@@ -1,4 +1,9 @@
-"""FastAPI application factory for the Range42 Backend API."""
+"""FastAPI application factory for the Range42 Backend API.
+
+Creates and configures the FastAPI app with CORS middleware, vault
+lifecycle management, custom exception handlers, and route registration.
+The module-level ``app`` object is the ASGI entry point used by uvicorn.
+"""
 
 import logging
 import os

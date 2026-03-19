@@ -1,15 +1,15 @@
-"""
-WebSocket endpoint for real-time VM status updates.
+"""WebSocket endpoint for real-time VM status updates.
 
-Polls Proxmox API directly via httpx (not Ansible — too slow for real-time)
-and pushes status changes to connected clients.
+Polls the Proxmox API directly via httpx (not Ansible -- too slow for
+real-time) and pushes status changes to connected WebSocket clients.
 
 Proxmox credentials are read from the backend's own inventory file
 so the frontend never needs to handle API tokens.
 
-Usage:
-    ws://host:8000/ws/vm-status
-    ws://host:8000/ws/vm-status?node=pve01
+Endpoints
+---------
+- ``ws://host:8000/ws/vm-status`` -- Full VM status stream.
+- ``ws://host:8000/ws/vm-status?node=pve01`` -- Filtered by node.
 """
 
 import asyncio
@@ -31,7 +31,12 @@ POLL_INTERVAL = 5  # seconds
 
 
 def load_proxmox_credentials() -> dict:
-    """Read Proxmox API credentials from the backend's inventory file."""
+    """Read Proxmox API credentials from the backend's inventory file.
+
+    :returns: Dict with ``api_host``, ``node``, ``token_id``, and
+        ``token_secret`` keys, or an empty dict on failure.
+    :rtype: dict
+    """
     inv_dir = os.getenv("API_BACKEND_INVENTORY_DIR", "")
     inv_path = Path(inv_dir) / "hosts.yml" if inv_dir else Path("inventory/hosts.yml")
 
@@ -62,7 +67,22 @@ async def fetch_vm_status(
     token_id: str,
     token_secret: str,
 ) -> list[dict]:
-    """Fetch VM list directly from Proxmox API (bypasses Ansible for speed)."""
+    """Fetch VM list directly from the Proxmox API (bypasses Ansible for speed).
+
+    :param client: Reusable async HTTP client.
+    :type client: httpx.AsyncClient
+    :param api_host: Proxmox API hostname or IP.
+    :type api_host: str
+    :param node: Proxmox node name.
+    :type node: str
+    :param token_id: PVE API token identifier.
+    :type token_id: str
+    :param token_secret: PVE API token secret.
+    :type token_secret: str
+    :returns: List of VM status dicts with keys ``vmid``, ``name``,
+        ``status``, ``cpu``, ``mem``, ``maxmem``, ``uptime``, ``template``, ``tags``.
+    :rtype: list[dict]
+    """
     url = f"https://{api_host}/api2/json/nodes/{node}/qemu"
     headers = {"Authorization": f"PVEAPIToken={token_id}={token_secret}"}
 
@@ -92,7 +112,16 @@ async def fetch_vm_status(
 def compute_diff(
     prev: Dict[int, dict], current: Dict[int, dict]
 ) -> Optional[dict]:
-    """Compare previous and current VM states, return changes."""
+    """Compare previous and current VM states, return changes.
+
+    :param prev: Previous poll's VM state keyed by ``vmid``.
+    :type prev: Dict[int, dict]
+    :param current: Current poll's VM state keyed by ``vmid``.
+    :type current: Dict[int, dict]
+    :returns: Dict of changes keyed by ``vmid`` with ``type`` field
+        (``"added"``, ``"changed"``, ``"removed"``), or ``None`` if no changes.
+    :rtype: dict or None
+    """
     changes = {}
 
     for vmid, vm in current.items():
@@ -111,6 +140,14 @@ def compute_diff(
 
 @router.websocket("/ws/vm-status")
 async def vm_status_websocket(ws: WebSocket):
+    """WebSocket handler for real-time VM status streaming.
+
+    Sends a full state on first connection, then sends only diffs
+    on subsequent polls (every ``POLL_INTERVAL`` seconds).
+
+    :param ws: The WebSocket connection.
+    :type ws: WebSocket
+    """
     await ws.accept()
 
     # Read Proxmox credentials from backend inventory (not from client)

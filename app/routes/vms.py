@@ -1,8 +1,23 @@
 """Consolidated VM lifecycle routes.
 
-Replaces: app/routes/v0/proxmox/vms/list.py, list_usage.py,
-          vm_id/{start,stop,stop_force,pause,resume,create,delete,clone}.py,
-          vm_ids/{mass_start_stop_pause_resume,mass_delete}.py
+Endpoints
+---------
+- ``POST /v0/admin/proxmox/vms/list`` -- List VMs and LXC containers.
+- ``POST /v0/admin/proxmox/vms/list_usage`` -- Resource usage of VMs.
+- ``POST /v0/admin/proxmox/vms/vm_id/start`` -- Start a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/stop`` -- Stop a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/stop_force`` -- Force stop a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/pause`` -- Pause a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/resume`` -- Resume a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/create`` -- Create a VM.
+- ``DELETE /v0/admin/proxmox/vms/vm_id/delete`` -- Delete a VM.
+- ``POST /v0/admin/proxmox/vms/vm_id/clone`` -- Clone a VM.
+- ``POST /v0/admin/proxmox/vms/vm_ids/start`` -- Mass start VMs.
+- ``POST /v0/admin/proxmox/vms/vm_ids/stop`` -- Mass stop VMs.
+- ``POST /v0/admin/proxmox/vms/vm_ids/stop_force`` -- Mass force stop VMs.
+- ``POST /v0/admin/proxmox/vms/vm_ids/pause`` -- Mass pause VMs.
+- ``POST /v0/admin/proxmox/vms/vm_ids/resume`` -- Mass resume VMs.
+- ``DELETE /v0/admin/proxmox/vms/vm_ids/delete`` -- Mass delete VMs.
 """
 
 import logging
@@ -80,6 +95,11 @@ vms_router = APIRouter()
     response_description="List VM result",
 )
 def proxmox_vms_list(req: Request_ProxmoxVms_VmList):
+    """List all VMs and LXC containers on the Proxmox node.
+
+    :param req: Request body with optional ``proxmox_node`` filter.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -95,6 +115,11 @@ def proxmox_vms_list(req: Request_ProxmoxVms_VmList):
     response_description="Resource usage details",
 )
 def proxmox_vms_list_usage(req: Request_ProxmoxVms_VmListUsage):
+    """Retrieve current resource usage (RAM, CPU, disk) for all VMs.
+
+    :param req: Request body with optional ``proxmox_node`` filter.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {}
     if req.proxmox_node:
         extravars["proxmox_node"] = req.proxmox_node
@@ -116,6 +141,11 @@ vm_id_router = APIRouter()
     response_description="Start result",
 )
 def proxmox_vms_vm_id_start(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
+    """Start a specific VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -131,6 +161,11 @@ def proxmox_vms_vm_id_start(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     response_description="Start result",
 )
 def proxmox_vms_vm_id_stop(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
+    """Stop a specific VM gracefully.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -146,6 +181,11 @@ def proxmox_vms_vm_id_stop(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     response_description="Start result",
 )
 def proxmox_vms_vm_id_stop_force(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
+    """Force stop a specific VM (equivalent to power off).
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -161,6 +201,11 @@ def proxmox_vms_vm_id_stop_force(req: Request_ProxmoxVmsVMID_StartStopPauseResum
     response_description="Start result",
 )
 def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
+    """Pause a specific VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -176,6 +221,11 @@ def proxmox_vms_vm_id_pause(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     response_description="Start result",
 )
 def proxmox_vms_vm_id_resume(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
+    """Resume a paused VM.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -191,6 +241,11 @@ def proxmox_vms_vm_id_resume(req: Request_ProxmoxVmsVMID_StartStopPauseResume):
     response_description="Delete result",
 )
 def proxmox_vms_vm_id_create(req: Request_ProxmoxVmsVMID_Create):
+    """Create a new VM with the specified configuration.
+
+    :param req: Request body with node, VM ID, name, CPU, memory, disk, and ISO options.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -220,6 +275,11 @@ def proxmox_vms_vm_id_create(req: Request_ProxmoxVmsVMID_Create):
     response_description="Delete result",
 )
 def proxmox_vms_vm_id_delete(req: Request_ProxmoxVmsVMID_Delete):
+    """Delete a specific VM. Resolves the VM name before deletion.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_id``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -236,6 +296,11 @@ def proxmox_vms_vm_id_delete(req: Request_ProxmoxVmsVMID_Delete):
     response_description="Delete result",
 )
 def proxmox_vms_vm_id_clone(req: Request_ProxmoxVmsVMID_Clone):
+    """Clone a VM to create a new VM with a different ID and name.
+
+    :param req: Request body with source VM ID, new VM ID, name, and description.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
@@ -294,6 +359,11 @@ _MASS_ACTION_NAME = "core/proxmox/configure/default/vms/start-stop-pause-resume-
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
 def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+    """Stop multiple VMs by ID list.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     return _run_mass_action(req, _MASS_ACTION_NAME, "vm_stop")
 
 
@@ -305,6 +375,11 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
 def proxmox_vms_vm_ids_mass_stop_force(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+    """Force stop multiple VMs by ID list.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     return _run_mass_action(req, _MASS_ACTION_NAME, "vm_stop_force")
 
 
@@ -316,6 +391,11 @@ def proxmox_vms_vm_ids_mass_stop_force(req: Request_ProxmoxVmsVmIds_MassStartSto
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
 def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+    """Start multiple VMs by ID list.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     return _run_mass_action(req, _MASS_ACTION_NAME, "vm_start")
 
 
@@ -327,6 +407,11 @@ def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
 def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+    """Pause multiple VMs by ID list.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     return _run_mass_action(req, _MASS_ACTION_NAME, "vm_pause")
 
 
@@ -338,6 +423,11 @@ def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
 def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+    """Resume multiple paused VMs by ID list.
+
+    :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     return _run_mass_action(req, _MASS_ACTION_NAME, "vm_resume")
 
 
@@ -349,6 +439,11 @@ def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPau
     response_model=Reply_ProxmoxVmsVmIds_MassDelete,
 )
 def proxmox_vms_vm_ids_mass_delete(req: Request_ProxmoxVmsVmIds_MassDelete):
+    """Delete multiple VMs by name/ID pairs.
+
+    :param req: Request body with ``proxmox_node`` and ``vms`` list.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     action_name = "core/proxmox/configure/default/vms/delete-vms-vuln"
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
     checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")

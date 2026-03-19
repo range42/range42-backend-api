@@ -1,7 +1,9 @@
 """Consolidated dynamic runner routes.
 
-Replaces: app/routes/v0/run/bundles/actions_run.py
-          app/routes/v0/run/scenarios/scenarios_run.py
+Endpoints
+---------
+- ``POST /v0/admin/run/bundles/{bundles_name}/run`` -- Run a named bundle.
+- ``POST /v0/admin/run/scenarios/{scenario_name}/run`` -- Run a named scenario.
 """
 
 import logging
@@ -49,6 +51,12 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
     tags=["runner"],
 )
 def run_bundle(bundles_name: str, req: Request_DebugPing):
+    """Run a named bundle playbook from the external playbooks repository.
+
+    :param bundles_name: Bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param req: Request body with ``hosts`` and optional ``proxmox_node``.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     return _run_generic(req, bundles_name, utils.resolve_bundles_playbook)
 
 
@@ -59,4 +67,10 @@ def run_bundle(bundles_name: str, req: Request_DebugPing):
     tags=["runner"],
 )
 def run_scenario(scenario_name: str, req: Request_DebugPing):
+    """Run a named scenario playbook from the external playbooks repository.
+
+    :param scenario_name: Scenario path (e.g. ``"demo_lab"``).
+    :param req: Request body with ``hosts`` and optional ``proxmox_node``.
+    :returns: JSON with ``rc`` and ``log_multiline``.
+    """
     return _run_generic(req, scenario_name, utils.resolve_scenarios_playbook)

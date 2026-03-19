@@ -1,3 +1,10 @@
+"""VM ID to name resolution.
+
+Provides :func:`resolv_id_to_vm_name`, which queries the Proxmox VM list
+via Ansible and returns the ``vm_id`` / ``vm_name`` pair for a given VM ID.
+Used by routes that need the VM name for operations like delete, clone,
+and snapshot management.
+"""
 
 from  pathlib import Path
 import os, json, logging
@@ -10,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 def hack_same_vm_id(a, b) -> bool:
+    """Compare two VM IDs that may be int or str.
+
+    Attempts integer comparison first, falls back to string comparison.
+
+    :param a: First VM ID value.
+    :param b: Second VM ID value.
+    :returns: ``True`` if the IDs are equal after type coercion.
+    :rtype: bool
+    """
 
     try:
         return int(a) == int(b)
@@ -18,6 +34,20 @@ def hack_same_vm_id(a, b) -> bool:
         return str(a) == str(b)
 
 def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
+    """Resolve a VM ID to its name by querying the Proxmox VM list.
+
+    Runs the ``vm_list`` action via Ansible, iterates over the results,
+    and returns the matching ``vm_id`` / ``vm_name`` pair.
+
+    :param proxmox_node: The Proxmox node name to query.
+    :type proxmox_node: str
+    :param target_vm_id: The VM ID to look up.
+    :type target_vm_id: str
+    :returns: Dict with ``"vm_id"`` and ``"vm_name"`` keys.
+    :rtype: dict
+    :raises HTTPException: 500 if the VM ID is not found in the results
+        or the result data cannot be parsed.
+    """
 
     PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
     PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
@@ -91,7 +121,3 @@ def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
     err = f":: err - vm_id NOT FOUND"
     logger.error("vm_id not found: %s", target_vm_id)
     raise HTTPException(status_code=500, detail=err)
-
-
-
-

@@ -1,6 +1,11 @@
 """Consolidated storage routes.
 
-Replaces: app/routes/v0/proxmox/storage/*.py
+Endpoints
+---------
+- ``POST /v0/admin/proxmox/storage/list`` -- List storage pools.
+- ``POST /v0/admin/proxmox/storage/download_iso`` -- Download an ISO file.
+- ``POST /v0/admin/proxmox/storage/storage_name/list_iso`` -- List ISOs in storage.
+- ``POST /v0/admin/proxmox/storage/storage_name/list_template`` -- List templates.
 """
 
 import logging
@@ -50,6 +55,11 @@ def _run_storage(req, action: str, extravars: dict) -> JSONResponse:
 
 @storage_router.post(path="/list", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorage_ListItem, response_description="VM configuration details")
 def proxmox_storage_list(req: Request_ProxmoxStorage_List):
+    """List storage pools on the Proxmox node.
+
+    :param req: Request body with ``proxmox_node`` and optional ``storage_name``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.storage_name is not None:
         extravars["storage_name"] = req.storage_name
@@ -58,6 +68,11 @@ def proxmox_storage_list(req: Request_ProxmoxStorage_List):
 
 @storage_router.post(path="/download_iso", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorage_DownloadIsoItem, response_description="VM configuration details")
 def proxmox_storage_download_iso(req: Request_ProxmoxStorage_DownloadIso):
+    """Download an ISO file to a Proxmox storage pool.
+
+    :param req: Request body with node, storage name, ISO URL, and metadata.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.proxmox_storage is not None:
         extravars["proxmox_storage"] = req.proxmox_storage
@@ -74,6 +89,11 @@ def proxmox_storage_download_iso(req: Request_ProxmoxStorage_DownloadIso):
 
 @storage_name_router.post(path="/list_iso", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorageWithStorageName_ListIsoItem, response_description="VM configuration details")
 def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxStorage_ListIso):
+    """List ISO files in a named storage pool.
+
+    :param req: Request body with ``proxmox_node`` and ``storage_name``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.storage_name is not None:
         extravars["storage_name"] = req.storage_name
@@ -82,6 +102,11 @@ def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxStorage_ListI
 
 @storage_name_router.post(path="/list_template", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorageWithStorageName_ListTemplate, response_description="VM configuration details")
 def proxmox_storage_with_storage_name_list_template(req: Request_ProxmoxStorage_ListTemplate):
+    """List VM templates in a named storage pool.
+
+    :param req: Request body with ``proxmox_node`` and ``storage_name``.
+    :returns: JSON with ``rc`` and either ``result`` or ``log_multiline``.
+    """
     extravars = {"proxmox_node": req.proxmox_node}
     if req.storage_name is not None:
         extravars["storage_name"] = req.storage_name
