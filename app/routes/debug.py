@@ -63,5 +63,4 @@ def debug_func_test():
         raise HTTPException(status_code=400, detail=f":: MISSING INVENTORY : {INVENTORY_SRC}")
 
     out = resolv_id_to_vm_name("px-testing", 1000)
-    print("GOT :::")
-    print(out["vm_name"])
+    logger.debug("GOT: %s", out["vm_name"])
