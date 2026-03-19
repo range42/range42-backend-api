@@ -111,16 +111,23 @@ tags_metadata = [
 #     "https://localhost"
 # ]
 
+## CORS Configuration
+## Set CORS_ORIGIN_REGEX env var to allow additional origins.
+## Default: localhost only. Example for lab network:
+##   CORS_ORIGIN_REGEX=^https?://(localhost|127\.0\.0\.1|\[::1\]|192\.168\.42\.\d+)(:\d+)?$
+cors_origin_regex = os.getenv(
+    "CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
+)
+
 middleware = [
     Middleware(
         CORSMiddleware, # type: ignore[arg-type]
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
-        # allow_origins=origins,
+        allow_origin_regex=cors_origin_regex,
         allow_credentials=True,
         allow_methods=["GET","POST","DELETE","OPTIONS"],
         allow_headers=["Content-Type","Accept","Authorization"],
         max_age=600,
-
     )
 ]
 
