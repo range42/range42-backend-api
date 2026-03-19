@@ -1,0 +1,242 @@
+{
+  "/v0/admin/debug/func_test": [
+    "POST"
+  ],
+  "/v0/admin/debug/ping": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/datacenter/disable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/datacenter/enable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/node/disable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/node/enable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/alias/add": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/alias/delete": [
+    "DELETE"
+  ],
+  "/v0/admin/proxmox/firewall/vm/alias/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/disable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/enable": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/rules/apply": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/firewall/vm/rules/delete": [
+    "DELETE"
+  ],
+  "/v0/admin/proxmox/firewall/vm/rules/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network//node/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network/node/add": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network/node/delete": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network/vm/add": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network/vm/delete": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/network/vm/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/storage/download_iso": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/storage/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/storage/storage_name/list_iso": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/storage/storage_name/list_template": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/list_usage": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/clone": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/config/vm_get_config": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/config/vm_get_config_cdrom": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/config/vm_get_config_cpu": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/config/vm_get_config_ram": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/config/vm_set_tag": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/create": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/delete": [
+    "DELETE"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/pause": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/resume": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/snapshot/create": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/snapshot/delete": [
+    "DELETE"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/snapshot/list": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/snapshot/revert": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/start": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/stop": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_id/stop_force": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/delete": [
+    "DELETE"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/pause": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/resume": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/start": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/stop": [
+    "POST"
+  ],
+  "/v0/admin/proxmox/vms/vm_ids/stop_force": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/linux/ubuntu/configure/add-user": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/linux/ubuntu/install/basic-packages": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/linux/ubuntu/install/docker": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/linux/ubuntu/install/docker-compose": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/linux/ubuntu/install/dot-files": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/create-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/create-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/create-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/delete-vms-admin": [
+    "DELETE"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/delete-vms-student": [
+    "DELETE"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/delete-vms-vuln": [
+    "DELETE"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/pause-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/pause-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/pause-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/resume-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/resume-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/resume-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/create-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/create-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/create-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/revert-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/revert-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/snapshot/revert-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/start-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/start-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/start-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/stop-vms-admin": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/stop-vms-student": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/core/proxmox/configure/default/stop-vms-vuln": [
+    "POST"
+  ],
+  "/v0/admin/run/bundles/{bundles_name}/run": [
+    "POST"
+  ],
+  "/v0/admin/run/scenarios/{scenario_name}/run": [
+    "POST"
+  ]
+}
