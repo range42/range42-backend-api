@@ -230,6 +230,10 @@ if debug:
 
 app.include_router(api_router)
 
+# WebSocket routes
+from app.routes.ws_status import router as ws_router
+app.include_router(ws_router)
+
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
 
 ###
