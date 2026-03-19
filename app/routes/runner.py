@@ -12,8 +12,8 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.schemas.debug.ping import Request_DebugPing
+from app.core.runner import run_playbook_core
+from app.schemas.debug import Request_DebugPing
 from app import utils
 
 logger = logging.getLogger(__name__)

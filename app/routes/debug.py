@@ -11,8 +11,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.schemas.debug.ping import Request_DebugPing
+from app.core.runner import run_playbook_core
+from app.schemas.debug import Request_DebugPing
 from app.utils.vm_id_name_resolver import *
 
 logger = logging.getLogger(__name__)

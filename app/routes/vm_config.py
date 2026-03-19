@@ -10,15 +10,17 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app import utils
 
-from app.schemas.proxmox.vm_id.config.vm_get_config import Request_ProxmoxVmsVMID_VmGetConfig, Reply_ProxmoxVmsVMID_VmGetConfig
-from app.schemas.proxmox.vm_id.config.vm_get_config_cdrom import Request_ProxmoxVmsVMID_VmGetConfigCdrom, Reply_ProxmoxVmsVMID_VmGetConfigCdrom
-from app.schemas.proxmox.vm_id.config.vm_get_config_cpu import Request_ProxmoxVmsVMID_VmGetConfigCpu, Reply_ProxmoxVmsVMID_VmGetConfigCpu
-from app.schemas.proxmox.vm_id.config.vm_get_config_ram import Request_ProxmoxVmsVMID_VmGetConfigRam, Reply_ProxmoxVmsVMID_VmGetConfigRam
-from app.schemas.proxmox.vm_id.config.vm_set_tag import Request_ProxmoxVmsVMID_VmSetTag, Reply_ProxmoxVmsVMID_VmSetTag
+from app.schemas.vm_config import (
+    Request_ProxmoxVmsVMID_VmGetConfig, Reply_ProxmoxVmsVMID_VmGetConfig,
+    Request_ProxmoxVmsVMID_VmGetConfigCdrom, Reply_ProxmoxVmsVMID_VmGetConfigCdrom,
+    Request_ProxmoxVmsVMID_VmGetConfigCpu, Reply_ProxmoxVmsVMID_VmGetConfigCpu,
+    Request_ProxmoxVmsVMID_VmGetConfigRam, Reply_ProxmoxVmsVMID_VmGetConfigRam,
+    Request_ProxmoxVmsVMID_VmSetTag, Reply_ProxmoxVmsVMID_VmSetTag,
+)
 
 logger = logging.getLogger(__name__)
 

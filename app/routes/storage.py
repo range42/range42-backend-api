@@ -10,14 +10,16 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app import utils
 
-from app.schemas.proxmox.storage.list import Request_ProxmoxStorage_List, Reply_ProxmoxStorage_ListItem
-from app.schemas.proxmox.storage.download_iso import Request_ProxmoxStorage_DownloadIso, Reply_ProxmoxStorage_DownloadIsoItem
-from app.schemas.proxmox.storage.storage_name.list_iso import Request_ProxmoxStorage_ListIso, Reply_ProxmoxStorageWithStorageName_ListIsoItem
-from app.schemas.proxmox.storage.storage_name.list_template import Request_ProxmoxStorage_ListTemplate, Reply_ProxmoxStorageWithStorageName_ListTemplate
+from app.schemas.storage import (
+    Request_ProxmoxStorage_List, Reply_ProxmoxStorage_ListItem,
+    Request_ProxmoxStorage_DownloadIso, Reply_ProxmoxStorage_DownloadIsoItem,
+    Request_ProxmoxStorage_ListIso, Reply_ProxmoxStorageWithStorageName_ListIsoItem,
+    Request_ProxmoxStorage_ListTemplate, Reply_ProxmoxStorageWithStorageName_ListTemplate,
+)
 
 logger = logging.getLogger(__name__)
 

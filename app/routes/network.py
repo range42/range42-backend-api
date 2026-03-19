@@ -10,16 +10,18 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app import utils
 
-from app.schemas.proxmox.network.vm_id.add_network import Request_ProxmoxNetwork_WithVmId_AddNetwork, Reply_ProxmoxNetwork_WithVmId_AddNetworkInterface
-from app.schemas.proxmox.network.vm_id.delete_network import Request_ProxmoxNetwork_WithVmId_DeleteNetwork, Reply_ProxmoxNetwork_WithVmId_DeleteNetworkInterface
-from app.schemas.proxmox.network.vm_id.list_network import Request_ProxmoxNetwork_WithVmId_ListNetwork, Reply_ProxmoxNetwork_WithVmId_ListNetworkInterface
-from app.schemas.proxmox.network.node_name.add_network import Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface, Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterface
-from app.schemas.proxmox.network.node_name.delete_network import Request_ProxmoxNetwork_WithNodeName_DeleteInterface, Reply_ProxmoxNetwork_WithNodeName_DeleteInterface
-from app.schemas.proxmox.network.node_name.list_network import Request_ProxmoxNetwork_WithNodeName_ListInterface, Reply_ProxmoxNetwork_WithNodeName_ListInterface
+from app.schemas.network import (
+    Request_ProxmoxNetwork_WithVmId_AddNetwork, Reply_ProxmoxNetwork_WithVmId_AddNetworkInterface,
+    Request_ProxmoxNetwork_WithVmId_DeleteNetwork, Reply_ProxmoxNetwork_WithVmId_DeleteNetworkInterface,
+    Request_ProxmoxNetwork_WithVmId_ListNetwork, Reply_ProxmoxNetwork_WithVmId_ListNetworkInterface,
+    Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface, Reply_ProxmoxNetwork_WithNodeName_AddNetworkInterface,
+    Request_ProxmoxNetwork_WithNodeName_DeleteInterface, Reply_ProxmoxNetwork_WithNodeName_DeleteInterface,
+    Request_ProxmoxNetwork_WithNodeName_ListInterface, Reply_ProxmoxNetwork_WithNodeName_ListInterface,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -10,15 +10,17 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
 
-from app.schemas.proxmox.vm_id.snapshot.vm_list import Request_ProxmoxVmsVMID_ListSnapshot, Reply_ProxmoxVmsVMID_ListSnapshot
-from app.schemas.proxmox.vm_id.snapshot.vm_create import Request_ProxmoxVmsVMID_CreateSnapshot, Reply_ProxmoxVmsVMID_CreateSnapshot
-from app.schemas.proxmox.vm_id.snapshot.vm_delete import Request_ProxmoxVmsVMID_DeleteSnapshot, Reply_ProxmoxVmsVMID_DeleteSnapshot
-from app.schemas.proxmox.vm_id.snapshot.vm_revert import Request_ProxmoxVmsVMID_RevertSnapshot, Reply_ProxmoxVmsVMID_RevertSnapshot
+from app.schemas.snapshots import (
+    Request_ProxmoxVmsVMID_ListSnapshot, Reply_ProxmoxVmsVMID_ListSnapshot,
+    Request_ProxmoxVmsVMID_CreateSnapshot, Reply_ProxmoxVmsVMID_CreateSnapshot,
+    Request_ProxmoxVmsVMID_DeleteSnapshot, Reply_ProxmoxVmsVMID_DeleteSnapshot,
+    Request_ProxmoxVmsVMID_RevertSnapshot, Reply_ProxmoxVmsVMID_RevertSnapshot,
+)
 
 logger = logging.getLogger(__name__)
 

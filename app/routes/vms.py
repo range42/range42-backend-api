@@ -13,22 +13,21 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
 
-from app.schemas.proxmox.vm_list import Request_ProxmoxVms_VmList, Reply_ProxmoxVmList
-from app.schemas.proxmox.vm_list_usage import Request_ProxmoxVms_VmListUsage, Reply_ProxmoxVms_VmListUsage
-from app.schemas.proxmox.vm_id.start_stop_resume_pause import (
-    Request_ProxmoxVmsVMID_StartStopPauseResume,
-    Reply_ProxmoxVmsVMID_StartStopPauseResume,
+from app.schemas.vms import (
+    Request_ProxmoxVms_VmList, Reply_ProxmoxVmList,
+    Request_ProxmoxVms_VmListUsage, Reply_ProxmoxVms_VmListUsage,
+    Request_ProxmoxVmsVMID_StartStopPauseResume, Reply_ProxmoxVmsVMID_StartStopPauseResume,
+    Request_ProxmoxVmsVMID_Create, Reply_ProxmoxVmsVMID_Create,
+    Request_ProxmoxVmsVMID_Delete, Reply_ProxmoxVmsVMID_Delete,
+    Request_ProxmoxVmsVMID_Clone, Reply_ProxmoxVmsVMID_Clone,
+    Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+    Request_ProxmoxVmsVmIds_MassDelete, Reply_ProxmoxVmsVmIds_MassDelete,
 )
-from app.schemas.proxmox.vm_id.create import Request_ProxmoxVmsVMID_Create, Reply_ProxmoxVmsVMID_Create
-from app.schemas.proxmox.vm_id.delete import Request_ProxmoxVmsVMID_Delete, Reply_ProxmoxVmsVMID_Delete
-from app.schemas.proxmox.vm_id.clone import Request_ProxmoxVmsVMID_Clone, Reply_ProxmoxVmsVMID_Clone
-from app.schemas.proxmox.vm_ids.mass_start_stop_resume_pause import Request_ProxmoxVmsVmIds_MassStartStopPauseResume
-from app.schemas.proxmox.vm_ids.mass_delete import Request_ProxmoxVmsVmIds_MassDelete, Reply_ProxmoxVmsVmIds_MassDelete
 
 logger = logging.getLogger(__name__)
 

@@ -12,26 +12,26 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.runner import run_playbook_core
-from app.extract_actions import extract_action_results
+from app.core.runner import run_playbook_core
+from app.core.extractor import extract_action_results
 from app import utils
 
 # --- Linux/Ubuntu bundle schemas ---
-from app.schemas.bundles.core.linux.ubuntu.install.docker import Request_BundlesCoreLinuxUbuntuInstall_Docker, Reply_BundlesCoreLinuxUbuntuInstall_Docker
-from app.schemas.bundles.core.linux.ubuntu.install.docker_compose import Request_BundlesCoreLinuxUbuntuInstall_DockerCompose, Reply_BundlesCoreLinuxUbuntuInstall_DockerCompose
-from app.schemas.bundles.core.linux.ubuntu.install.basic_packages import Request_BundlesCoreLinuxUbuntuInstall_BasicPackages, Reply_BundlesCoreLinuxUbuntuInstall_BasicPackages
-from app.schemas.bundles.core.linux.ubuntu.install.dot_files import Request_BundlesCoreLinuxUbuntuInstall_DotFiles, Reply_BundlesCoreLinuxUbuntuInstall_DotFilesItem
-from app.schemas.bundles.core.linux.ubuntu.configure.add_user import Request_BundlesCoreLinuxUbuntuConfigure_AddUser, Reply_BundlesCoreLinuxUbuntuConfigure_AddUser
-
-# --- Proxmox bundle schemas ---
-from app.schemas.bundles.core.proxmox.configure.default.vms.create_vms_admin_default import Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms
-from app.schemas.bundles.core.proxmox.configure.default.vms.create_vms_vuln_default import Request_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms
-from app.schemas.bundles.core.proxmox.configure.default.vms.create_vms_student_default import Request_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms
-from app.schemas.bundles.core.proxmox.configure.default.vms.start_stop_resume_pause_default import Request_BundlesCoreProxmoxConfigureDefaultVms_StartStopPauseResumeAdminVulnStudentVms
-from app.schemas.bundles.core.proxmox.configure.default.vms.revert_snapshot_default import Request_BundlesCoreProxmoxConfigureDefaultVms_RevertSnapshotAdminVulnStudentVms
-from app.schemas.proxmox.vm_id.start_stop_resume_pause import Reply_ProxmoxVmsVMID_StartStopPauseResume
-from app.schemas.proxmox.vm_id.snapshot.vm_create import Reply_ProxmoxVmsVMID_CreateSnapshot
-from app.schemas.proxmox.vm_id.snapshot.vm_revert import Reply_ProxmoxVmsVMID_RevertSnapshot
+from app.schemas.bundles import (
+    Request_BundlesCoreLinuxUbuntuInstall_Docker, Reply_BundlesCoreLinuxUbuntuInstall_Docker,
+    Request_BundlesCoreLinuxUbuntuInstall_DockerCompose, Reply_BundlesCoreLinuxUbuntuInstall_DockerCompose,
+    Request_BundlesCoreLinuxUbuntuInstall_BasicPackages, Reply_BundlesCoreLinuxUbuntuInstall_BasicPackages,
+    Request_BundlesCoreLinuxUbuntuInstall_DotFiles, Reply_BundlesCoreLinuxUbuntuInstall_DotFilesItem,
+    Request_BundlesCoreLinuxUbuntuConfigure_AddUser, Reply_BundlesCoreLinuxUbuntuConfigure_AddUser,
+    # --- Proxmox bundle schemas ---
+    Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
+    Request_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateVulnVms,
+    Request_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms, Reply_BundlesCoreProxmoxConfigureDefaultVms_CreateStudentVms,
+    Request_BundlesCoreProxmoxConfigureDefaultVms_StartStopPauseResumeAdminVulnStudentVms,
+    Request_BundlesCoreProxmoxConfigureDefaultVms_RevertSnapshotAdminVulnStudentVms,
+)
+from app.schemas.vms import Reply_ProxmoxVmsVMID_StartStopPauseResume
+from app.schemas.snapshots import Reply_ProxmoxVmsVMID_CreateSnapshot, Reply_ProxmoxVmsVMID_RevertSnapshot
 
 logger = logging.getLogger(__name__)
 
