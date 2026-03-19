@@ -1,32 +1,66 @@
-
 from fastapi import APIRouter
 
-# /v0/admin/proxmox/*
-from app.routes.admin_proxmox          import router as admin_proxmox_routers
-
-# /v0/admin/debug/*
-from app.routes.admin_debug            import router as admin_debug_routers
-
-# /v0/admin/run/*
-from app.routes.admin_run              import router as admin_run_routers
-
-# /v0/admin/run/actions/core/*
-from app.routes.admin_run_bundles_core import router as admin_run_bundles_core_routers
-
-#######################################################################################################################
+from app.routes.vms import vms_router, vm_id_router, vm_ids_router
+from app.routes.vm_config import router as vm_config_router
+from app.routes.snapshots import router as snapshots_router
+from app.routes.firewall import router as firewall_router
+from app.routes.network import router as network_router
+from app.routes.storage import storage_router, storage_name_router
+from app.routes.bundles import router as bundles_router
+from app.routes.runner import run_bundle, run_scenario
+from app.routes.debug import router as debug_router
 
 router = APIRouter()
 
 # /v0/admin/debug/*
-router.include_router(admin_debug_routers)
+router.include_router(debug_router, prefix="/v0/admin/debug")
 
-# /v0/admin/run/actions/core/*
-router.include_router(admin_run_bundles_core_routers)
+# /v0/admin/run/bundles/core/*  (bundle-specific routes: ubuntu install, proxmox create, etc.)
+router.include_router(bundles_router, prefix="/v0/admin/run/bundles")
 
-# /v0/run/actions|scenarios/run*
-router.include_router(admin_run_routers)
+# /v0/admin/run/bundles/{name}/run
+_bundles_runner = APIRouter()
+_bundles_runner.add_api_route(
+    "/{bundles_name}/run", run_bundle, methods=["POST"],
+    summary="Run bundles",
+    description="Run generic bundles with default (and static) extras_vars ",
+    tags=["runner"],
+)
+router.include_router(_bundles_runner, prefix="/v0/admin/run/bundles")
 
-# /v0/admin/proxmox/*
-router.include_router(admin_proxmox_routers)
+# /v0/admin/run/scenarios/{name}/run
+_scenarios_runner = APIRouter()
+_scenarios_runner.add_api_route(
+    "/{scenario_name}/run", run_scenario, methods=["POST"],
+    summary="Run scenario",
+    description="Run generic scenario with default (and static) extras_vars ",
+    tags=["runner"],
+)
+router.include_router(_scenarios_runner, prefix="/v0/admin/run/scenarios")
 
-####
+# /v0/admin/proxmox/vms
+router.include_router(vms_router, prefix="/v0/admin/proxmox/vms")
+
+# /v0/admin/proxmox/vms/vm_id
+router.include_router(vm_id_router, prefix="/v0/admin/proxmox/vms/vm_id")
+
+# /v0/admin/proxmox/vms/vm_ids
+router.include_router(vm_ids_router, prefix="/v0/admin/proxmox/vms/vm_ids")
+
+# /v0/admin/proxmox/vms/vm_id/config
+router.include_router(vm_config_router, prefix="/v0/admin/proxmox/vms/vm_id/config")
+
+# /v0/admin/proxmox/vms/vm_id/snapshot
+router.include_router(snapshots_router, prefix="/v0/admin/proxmox/vms/vm_id/snapshot")
+
+# /v0/admin/proxmox/storage/storage_name
+router.include_router(storage_name_router, prefix="/v0/admin/proxmox/storage/storage_name")
+
+# /v0/admin/proxmox/storage
+router.include_router(storage_router, prefix="/v0/admin/proxmox/storage")
+
+# /v0/admin/proxmox/firewall
+router.include_router(firewall_router, prefix="/v0/admin/proxmox/firewall")
+
+# /v0/admin/proxmox/network
+router.include_router(network_router, prefix="/v0/admin/proxmox/network")
