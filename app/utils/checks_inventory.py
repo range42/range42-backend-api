@@ -2,7 +2,8 @@
 import os
 from pathlib import Path
 import re
-from venv import logger
+import logging
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 

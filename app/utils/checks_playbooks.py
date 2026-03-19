@@ -1,5 +1,6 @@
 import re
-from venv import logger
+import logging
+logger = logging.getLogger(__name__)
 import os
 
 from fastapi import HTTPException
