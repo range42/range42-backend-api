@@ -1,0 +1,20 @@
+services:
+  api:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - ./app:/app/app:ro
+      - ./playbooks:/app/playbooks:ro
+      - ./inventory:/app/inventory:ro
+    environment:
+      - PROJECT_ROOT_DIR=/app
+      - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
+      - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-/app/}
+      - API_BACKEND_INVENTORY_DIR=/app/inventory/
+      - API_BACKEND_VAULT_FILE=${API_BACKEND_VAULT_FILE:-}
+      - VAULT_PASSWORD_FILE=${VAULT_PASSWORD_FILE:-}
+      - VAULT_PASSWORD=${VAULT_PASSWORD:-}
+      - CORS_ORIGIN_REGEX=${CORS_ORIGIN_REGEX:-}
+      - DEBUG=${DEBUG:-false}
+    restart: unless-stopped
