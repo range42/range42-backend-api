@@ -4,16 +4,23 @@ WebSocket endpoint for real-time VM status updates.
 Polls Proxmox API directly via httpx (not Ansible — too slow for real-time)
 and pushes status changes to connected clients.
 
+Proxmox credentials are read from the backend's own inventory file
+so the frontend never needs to handle API tokens.
+
 Usage:
-    ws://host:8000/ws/vm-status?node=pve01&api_host=100.64.0.14:8006&token_id=root@pam!range42-deploy&token_secret=xxx
+    ws://host:8000/ws/vm-status
+    ws://host:8000/ws/vm-status?node=pve01
 """
 
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Dict, Optional
 
 import httpx
+import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
@@ -21,6 +28,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 POLL_INTERVAL = 5  # seconds
+
+
+def load_proxmox_credentials() -> dict:
+    """Read Proxmox API credentials from the backend's inventory file."""
+    inv_dir = os.getenv("API_BACKEND_INVENTORY_DIR", "")
+    inv_path = Path(inv_dir) / "hosts.yml" if inv_dir else Path("inventory/hosts.yml")
+
+    try:
+        with open(inv_path) as f:
+            inv = yaml.safe_load(f)
+
+        # Navigate to proxmox host vars
+        px = inv.get("all", {}).get("children", {}).get("range42_infrastructure", {}).get("children", {}).get("proxmox", {}).get("hosts", {})
+        for host_name, host_vars in px.items():
+            if host_vars and host_vars.get("proxmox_api_host"):
+                return {
+                    "api_host": host_vars["proxmox_api_host"],
+                    "node": host_vars.get("proxmox_node", "pve01"),
+                    "token_id": f"{host_vars.get('proxmox_api_user', 'root@pam')}!{host_vars.get('proxmox_api_token_id', '')}",
+                    "token_secret": host_vars.get("proxmox_api_token_secret", ""),
+                }
+    except Exception as e:
+        logger.error(f"[ws] Failed to load inventory: {e}")
+
+    return {}
 
 
 async def fetch_vm_status(
@@ -81,17 +113,18 @@ def compute_diff(
 async def vm_status_websocket(ws: WebSocket):
     await ws.accept()
 
-    # Read connection params from query string
-    params = ws.query_params
-    node = params.get("node", "pve01")
-    api_host = params.get("api_host", "")
-    token_id = params.get("token_id", "")
-    token_secret = params.get("token_secret", "")
-
-    if not api_host or not token_id or not token_secret:
-        await ws.send_json({"error": "Missing api_host, token_id, or token_secret query params"})
+    # Read Proxmox credentials from backend inventory (not from client)
+    creds = load_proxmox_credentials()
+    if not creds:
+        await ws.send_json({"error": "Proxmox credentials not found in backend inventory"})
         await ws.close()
         return
+
+    # Allow node override from query string
+    node = ws.query_params.get("node", creds["node"])
+    api_host = creds["api_host"]
+    token_id = creds["token_id"]
+    token_secret = creds["token_secret"]
 
     logger.info(f"[ws] Client connected for node={node} via {api_host}")
 
