@@ -58,7 +58,7 @@ class Settings:
     cors_origin_regex: str = field(
         default_factory=lambda: os.getenv(
             "CORS_ORIGIN_REGEX",
-            r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
+            r"^https?://(localhost|127\.0\.0\.1|\[::1\]|192\.168\.42\.\d{1,3})(:\d+)?$",
         )
     )
 
