@@ -609,10 +609,8 @@ class MassActionRequest(BaseModel):
 
     vm_ids: List[str] = Field(
         ...,
-        # default="1000",
         description="Virtual machine id",
-        min_items=1,
-        # pattern=r"^[0-9]+$"
+        min_length=1,
     )
 
     model_config = {

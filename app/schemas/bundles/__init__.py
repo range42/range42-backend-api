@@ -1,13 +1,12 @@
 """Consolidated bundle schemas: Ubuntu packages/configure + Proxmox default VM ops.
-
 This __init__.py serves double duty:
 1. Makes bundles/ a proper Python package so old imports (app.schemas.bundles.core...) keep working.
 2. Exposes consolidated schema classes for new code to import from app.schemas.bundles.
 """
 
-from typing import Dict
+from typing import Annotated, Dict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 # ===========================================================================
 # Ubuntu Bundles
@@ -25,29 +24,23 @@ class BundleAddUserRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     hosts: str = Field(
         ..., description="Hosts or groups", pattern=r"^[a-zA-Z0-9._:-]+$"
     )
-
     ####
-
     user: str = Field(
         ...,
         description="New user",
         pattern=r"^[a-z_][a-z0-9_-]*$",
     )
-
     password: str = Field(
         ...,
         description="New password",
         pattern=r"^[A-Za-z0-9@._-]*$",  # dangerous chars removed.
     )
-
     change_pwd_at_logon: bool = Field(
         ..., description="Force user to change password on first login"
     )
-
     shell_path: str = Field(
         ..., description="Default user shell ", pattern=r"^/[a-z/]*$"
     )
@@ -68,11 +61,7 @@ class BundleAddUserRequest(BaseModel):
 
 
 class BundleAddUserItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -95,54 +84,19 @@ class BundleBasicPackagesRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     hosts: str = Field(
         ..., description="Hosts or groups", pattern=r"^[a-zA-Z0-9._:-]+$"
     )
-
     ####
-
-    install_package_basics: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_firewalls: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_docker: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_docker_compose: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_utils_json: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_utils_network: bool = Field(
-        ...,
-        description="",
-    )
-
+    install_package_basics: bool = Field(..., description="")
+    install_package_firewalls: bool = Field(..., description="")
+    install_package_docker: bool = Field(..., description="")
+    install_package_docker_compose: bool = Field(..., description="")
+    install_package_utils_json: bool = Field(..., description="")
+    install_package_utils_network: bool = Field(..., description="")
     ####
-
-    install_ntpclient_and_update_time: bool = Field(
-        ...,
-        description="",
-    )
-
-    packages_cleaning: bool = Field(
-        ...,
-        description="",
-    )
+    install_ntpclient_and_update_time: bool = Field(..., description="")
+    packages_cleaning: bool = Field(..., description="")
 
     model_config = {
         "json_schema_extra": {
@@ -164,11 +118,7 @@ class BundleBasicPackagesRequest(BaseModel):
 
 
 class BundleBasicPackagesItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -191,29 +141,14 @@ class BundleDockerRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     hosts: str = Field(
         ..., description="Hosts or groups", pattern=r"^[a-zA-Z0-9._:-]+$"
     )
-
     ####
-
-    install_package_docker: bool = Field(
-        ...,
-        description="",
-    )
-
+    install_package_docker: bool = Field(..., description="")
     ####
-
-    install_ntpclient_and_update_time: bool = Field(
-        ...,
-        description="",
-    )
-
-    packages_cleaning: bool = Field(
-        ...,
-        description="",
-    )
+    install_ntpclient_and_update_time: bool = Field(..., description="")
+    packages_cleaning: bool = Field(..., description="")
 
     model_config = {
         "json_schema_extra": {
@@ -230,11 +165,7 @@ class BundleDockerRequest(BaseModel):
 
 
 class BundleDockerItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -257,34 +188,15 @@ class BundleDockerComposeRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     hosts: str = Field(
         ..., description="Hosts or groups", pattern=r"^[a-zA-Z0-9._:-]+$"
     )
-
     ####
-
-    install_package_docker: bool = Field(
-        ...,
-        description="",
-    )
-
-    install_package_docker_compose: bool = Field(
-        ...,
-        description="",
-    )
-
+    install_package_docker: bool = Field(..., description="")
+    install_package_docker_compose: bool = Field(..., description="")
     ####
-
-    install_ntpclient_and_update_time: bool = Field(
-        ...,
-        description="",
-    )
-
-    packages_cleaning: bool = Field(
-        ...,
-        description="",
-    )
+    install_ntpclient_and_update_time: bool = Field(..., description="")
+    packages_cleaning: bool = Field(..., description="")
 
     model_config = {
         "json_schema_extra": {
@@ -302,11 +214,7 @@ class BundleDockerComposeRequest(BaseModel):
 
 
 class BundleDockerComposeItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -329,26 +237,17 @@ class BundleDotFilesRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     hosts: str = Field(
         ..., description="Hosts or groups", pattern=r"^[a-zA-Z0-9._:-]+$"
     )
-
     ####
-
-    user: str = Field(
-        ...,
-        description="targeted username",
-    )
-
+    user: str = Field(..., description="targeted username")
     install_vim_dot_files: bool = Field(
         ..., description="Install vim dot file in user directory"
     )
-
     install_zsh_dot_files: bool = Field(
         ..., description="Install zsh dot file in user directory"
     )
-
     apply_for_root: bool = Field(..., description="Install dot files in /root")
 
     model_config = {
@@ -367,17 +266,10 @@ class BundleDotFilesRequest(BaseModel):
 
 
 class BundleDotFilesItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
-# NOTE: The original file had a bug where the Reply class was also named
-# Reply_BundlesCoreLinuxUbuntuInstall_DotFilesItem (same as Item reply).
-# We preserve both the Item and the Reply under their correct new names.
 class BundleDotFilesReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[BundleDotFilesItemReply]
@@ -389,29 +281,24 @@ class BundleDotFilesReply(BaseModel):
 # Proxmox Bundles -- Default VM Operations
 # ===========================================================================
 
+# Shared Annotated type: strips whitespace and enforces max_length.
+# FIX: replaces the deprecated `strip_whitespace=True` extra kwarg on Field()
+#      with the Pydantic v2 canonical form using StringConstraints.
+_VmDescription = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=200)
+]
+
 # ---------------------------------------------------------------------------
 # Create Admin VMs (Default)
 # ---------------------------------------------------------------------------
 
 
 class BundleCreateAdminVmsItemRequest(BaseModel):
-    vm_id: int = Field(
-        ...,
-        ge=1,
-        description="Virtual machine id",
-    )
-
+    vm_id: int = Field(..., ge=1, description="Virtual machine id")
     vm_ip: str = Field(
         ..., description="vm ipv4", pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
     )
-
-    vm_description: str = Field(
-        ...,
-        strip_whitespace=True,
-        max_length=200,
-        # pattern=VM_DESCRIPTION_RE,
-        description="Description",
-    )
+    vm_description: _VmDescription = Field(..., description="Description")
 
 
 class BundleCreateAdminVmsRequest(BaseModel):
@@ -421,7 +308,6 @@ class BundleCreateAdminVmsRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     vms: Dict[str, BundleCreateAdminVmsItemRequest] = Field(
         ...,
         description="Map <ssh_hostname> - vm override vm_id vm_ip vm_description, ... ",
@@ -449,11 +335,7 @@ class BundleCreateAdminVmsRequest(BaseModel):
 
 
 class BundleCreateAdminVmsItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -470,23 +352,11 @@ class BundleCreateAdminVmsReply(BaseModel):
 
 
 class BundleCreateStudentVmsItemRequest(BaseModel):
-    vm_id: int = Field(
-        ...,
-        ge=1,
-        description="Virtual machine id",
-    )
-
+    vm_id: int = Field(..., ge=1, description="Virtual machine id")
     vm_ip: str = Field(
         ..., description="vm ipv4", pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
     )
-
-    vm_description: str = Field(
-        ...,
-        strip_whitespace=True,
-        max_length=200,
-        # pattern=VM_DESCRIPTION_RE,
-        description="Description",
-    )
+    vm_description: _VmDescription = Field(..., description="Description")
 
 
 class BundleCreateStudentVmsRequest(BaseModel):
@@ -496,7 +366,6 @@ class BundleCreateStudentVmsRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     vms: Dict[str, BundleCreateStudentVmsItemRequest] = Field(
         ...,
         description="Map <ssh_hostname> - vm override vm_id vm_ip vm_description, ... ",
@@ -519,11 +388,7 @@ class BundleCreateStudentVmsRequest(BaseModel):
 
 
 class BundleCreateStudentVmsItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -540,23 +405,11 @@ class BundleCreateStudentVmsReply(BaseModel):
 
 
 class BundleCreateVulnVmsItemRequest(BaseModel):
-    vm_id: int = Field(
-        ...,
-        ge=1,
-        description="Virtual machine id",
-    )
-
+    vm_id: int = Field(..., ge=1, description="Virtual machine id")
     vm_ip: str = Field(
         ..., description="vm ipv4", pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
     )
-
-    vm_description: str = Field(
-        ...,
-        strip_whitespace=True,
-        max_length=200,
-        # pattern=VM_DESCRIPTION_RE,
-        description="Description",
-    )
+    vm_description: _VmDescription = Field(..., description="Description")
 
 
 class BundleCreateVulnVmsRequest(BaseModel):
@@ -566,7 +419,6 @@ class BundleCreateVulnVmsRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     vms: Dict[str, BundleCreateVulnVmsItemRequest] = Field(
         ...,
         description="Map <ssh_hostname> - vm override vm_id vm_ip vm_description, ... ",
@@ -589,11 +441,7 @@ class BundleCreateVulnVmsRequest(BaseModel):
 
 
 class BundleCreateVulnVmsItemReply(BaseModel):
-    # action: Literal["vm_get_config"]
-    # source: Literal["proxmox"]
     proxmox_node: str
-    # vm_id: int = Field(..., ge=1)
-    # vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
@@ -616,17 +464,14 @@ class BundleRevertSnapshotDefaultRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     as_json: bool = Field(
         default=True, description="If true : JSON output else : raw output"
     )
-
     vm_snapshot_name: str | None = Field(
         default=None,
         description="Name of the snapshot to create",
         pattern=r"^[A-Za-z0-9_-]+$",
     )
-    #
 
     model_config = {
         "json_schema_extra": {
@@ -651,11 +496,9 @@ class BundleStartStopDefaultRequest(BaseModel):
         description="Proxmox node name",
         pattern=r"^[A-Za-z0-9-]*$",
     )
-
     as_json: bool = Field(
         default=True, description="If true : JSON output else : raw output"
     )
-    #
 
     model_config = {
         "json_schema_extra": {
