@@ -13,7 +13,6 @@ Endpoints
 """
 
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
@@ -198,5 +197,5 @@ async def vm_status_websocket(ws: WebSocket):
             logger.error(f"[ws] Error: {e}")
             try:
                 await ws.send_json({"error": str(e)})
-            except Exception:
-                pass
+            except Exception as notify_err:
+                logger.debug("[ws] Failed to send error to client: %s", notify_err)

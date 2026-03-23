@@ -1,6 +1,6 @@
 """Consolidated network schemas: node and VM network interface operations."""
 
-from typing import List, Literal
+from typing import Literal
 from pydantic import BaseModel, Field
 
 

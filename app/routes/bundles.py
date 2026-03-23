@@ -26,8 +26,6 @@ All prefixed under ``/v0/admin/run/bundles``.
 import logging
 import os
 from pathlib import Path
-from typing import Any
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
