@@ -9,14 +9,13 @@ Endpoints
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app import utils
 from app.core.runner import run_playbook_core
 from app.schemas.debug import Request_DebugPing
-from app import utils
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,10 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
         extravars = None
 
     rc, events, log_plain, _ = run_playbook_core(
-        checked_playbook, checked_inventory, limit=req.hosts, extravars=extravars,
+        checked_playbook,
+        checked_inventory,
+        limit=req.hosts,
+        extravars=extravars,
     )
 
     payload = {"rc": rc, "log_multiline": log_plain.splitlines()}

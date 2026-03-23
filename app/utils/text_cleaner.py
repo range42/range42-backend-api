@@ -6,7 +6,7 @@ cursor movement, etc.) from strings returned by Ansible runner output.
 
 import re
 
-ANSI_RE = re.compile(r'(?:\x1B[@-_][0-?]*[ -/]*[@-~])')
+ANSI_RE = re.compile(r"(?:\x1B[@-_][0-?]*[ -/]*[@-~])")
 
 
 def strip_ansi(s: str) -> str:

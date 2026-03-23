@@ -6,15 +6,15 @@ file path, and checks for path traversal before returning the absolute
 path to the playbook YAML file.
 """
 
-import re
 import logging
-logger = logging.getLogger(__name__)
 import os
-
-from fastapi import HTTPException
+import re
 from pathlib import Path
 
-####
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
 
 def _warmup_checks(playbooks_dir_type: str) -> Path:
     """Validate and resolve the playbooks base directory.
@@ -89,6 +89,7 @@ def resolve_actions_playbook(action_name: str, playbooks_dir_type: str) -> Path:
 
     return main_filepath
 
+
 def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     """Resolve a bundle playbook file path.
 
@@ -115,7 +116,10 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
 
     return main_filepath
 
-def resolve_bundles_playbook_init_file(action_name: str, playbooks_dir_type: str) -> Path:
+
+def resolve_bundles_playbook_init_file(
+    action_name: str, playbooks_dir_type: str
+) -> Path:
     """Resolve a bundle's init playbook file path.
 
     Looks for ``<playbooks_dir>/bundles/<action_name>/init.yml`` instead
@@ -138,7 +142,9 @@ def resolve_bundles_playbook_init_file(action_name: str, playbooks_dir_type: str
     # print (actions_dir)
 
     actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
-    main_filepath = _resolve_file(actions_dir, actions_regex_pattern, action_name, is_init_yaml=True )
+    main_filepath = _resolve_file(
+        actions_dir, actions_regex_pattern, action_name, is_init_yaml=True
+    )
 
     return main_filepath
 
@@ -171,11 +177,13 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
 ####
 
 
-def _resolve_file(actions_dir: Path,
-                 actions_regex_pattern: re.Pattern[str],
-                 action_name: str,
-                 *,
-                 is_init_yaml: bool = False) -> Path:
+def _resolve_file(
+    actions_dir: Path,
+    actions_regex_pattern: re.Pattern[str],
+    action_name: str,
+    *,
+    is_init_yaml: bool = False,
+) -> Path:
     """Validate an action name and resolve the corresponding playbook file.
 
     Performs regex validation, path resolution, traversal detection, and
@@ -199,7 +207,6 @@ def _resolve_file(actions_dir: Path,
     #
 
     if not actions_regex_pattern.fullmatch(action_name):
-
         err = f":: err - INVALID ACTION NAME FORMAT {action_name!r}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -219,7 +226,6 @@ def _resolve_file(actions_dir: Path,
     #
 
     if not main_filepath.is_relative_to(actions_dir):
-
         err = f":: err - POTENTIAL PATH TRAVERSAL DETECTED : {main_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -231,7 +237,6 @@ def _resolve_file(actions_dir: Path,
     #     raise HTTPException(status_code=400, detail=err)
 
     if not main_filepath.exists():
-
         err = f":: err - PLAYBOOK NOT FOUND : {main_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)

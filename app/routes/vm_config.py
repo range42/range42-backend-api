@@ -16,16 +16,20 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.runner import run_playbook_core
-from app.core.extractor import extract_action_results
 from app import utils
-
+from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 from app.schemas.vm_config import (
-    Request_ProxmoxVmsVMID_VmGetConfig, Reply_ProxmoxVmsVMID_VmGetConfig,
-    Request_ProxmoxVmsVMID_VmGetConfigCdrom, Reply_ProxmoxVmsVMID_VmGetConfigCdrom,
-    Request_ProxmoxVmsVMID_VmGetConfigCpu, Reply_ProxmoxVmsVMID_VmGetConfigCpu,
-    Request_ProxmoxVmsVMID_VmGetConfigRam, Reply_ProxmoxVmsVMID_VmGetConfigRam,
-    Request_ProxmoxVmsVMID_VmSetTag, Reply_ProxmoxVmsVMID_VmSetTag,
+    Reply_ProxmoxVmsVMID_VmGetConfig,
+    Reply_ProxmoxVmsVMID_VmGetConfigCdrom,
+    Reply_ProxmoxVmsVMID_VmGetConfigCpu,
+    Reply_ProxmoxVmsVMID_VmGetConfigRam,
+    Reply_ProxmoxVmsVMID_VmSetTag,
+    Request_ProxmoxVmsVMID_VmGetConfig,
+    Request_ProxmoxVmsVMID_VmGetConfigCdrom,
+    Request_ProxmoxVmsVMID_VmGetConfigCpu,
+    Request_ProxmoxVmsVMID_VmGetConfigRam,
+    Request_ProxmoxVmsVMID_VmSetTag,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,12 +47,17 @@ def _run_config_action(req, action: str, extravars: dict) -> JSONResponse:
     extravars["hosts"] = "proxmox"
 
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
 
     inventory = utils.resolve_inventory(INVENTORY_NAME)
 
     rc, events, log_plain, log_ansi = run_playbook_core(
-        PLAYBOOK_SRC, inventory, limit=extravars["hosts"], extravars=extravars,
+        PLAYBOOK_SRC,
+        inventory,
+        limit=extravars["hosts"],
+        extravars=extravars,
     )
 
     if req.as_json:
