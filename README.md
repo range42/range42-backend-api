@@ -59,21 +59,21 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 All settings are read from environment variables in `app/core/config.py`. Nothing is hard-coded.
 
-| Variable | Required | Description | Default |
-|---|---|---|---|
-| `PROJECT_ROOT_DIR` | Yes | Absolute path to the project root | `.` (cwd) |
-| `VAULT_PASSWORD_FILE` | Yes* | Path to the Ansible Vault password file | -- |
-| `VAULT_PASSWORD` | Yes* | Ansible Vault password as a string | -- |
-| `API_BACKEND_WWWAPP_PLAYBOOKS_DIR` | No | Local playbooks directory | `PROJECT_ROOT_DIR/` |
-| `API_BACKEND_PUBLIC_PLAYBOOKS_DIR` | No | External playbooks repository path | -- |
-| `API_BACKEND_INVENTORY_DIR` | No | Ansible inventory directory | `PROJECT_ROOT_DIR/inventory/` |
-| `API_BACKEND_VAULT_FILE` | No | Path to vault-encrypted variables file | -- |
-| `CORS_ORIGIN_REGEX` | No | Regex for allowed CORS origins | `localhost` / `127.0.0.1` / `[::1]` only |
-| `HOST` | No | Server bind address | `0.0.0.0` |
-| `PORT` | No | Server listen port | `8000` |
-| `DEBUG` | No | Enable debug mode (`true`, `1`, or `yes`) | `false` |
+| Variable                           | Required | Description                               | Default                                  |
+| ---------------------------------- | -------- | ----------------------------------------- | ---------------------------------------- |
+| `PROJECT_ROOT_DIR`                 | Yes      | Absolute path to the project root         | `.` (cwd)                                |
+| `VAULT_PASSWORD_FILE`              | Yes\*    | Path to the Ansible Vault password file   | --                                       |
+| `VAULT_PASSWORD`                   | Yes\*    | Ansible Vault password as a string        | --                                       |
+| `API_BACKEND_WWWAPP_PLAYBOOKS_DIR` | No       | Local playbooks directory                 | `PROJECT_ROOT_DIR/`                      |
+| `API_BACKEND_PUBLIC_PLAYBOOKS_DIR` | No       | External playbooks repository path        | --                                       |
+| `API_BACKEND_INVENTORY_DIR`        | No       | Ansible inventory directory               | `PROJECT_ROOT_DIR/inventory/`            |
+| `API_BACKEND_VAULT_FILE`           | No       | Path to vault-encrypted variables file    | --                                       |
+| `CORS_ORIGIN_REGEX`                | No       | Regex for allowed CORS origins            | `localhost` / `127.0.0.1` / `[::1]` only |
+| `HOST`                             | No       | Server bind address                       | `0.0.0.0`                                |
+| `PORT`                             | No       | Server listen port                        | `8000`                                   |
+| `DEBUG`                            | No       | Enable debug mode (`true`, `1`, or `yes`) | `false`                                  |
 
-> *One of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` must be set for vault-encrypted operations.
+> \*One of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` must be set for vault-encrypted operations.
 
 ---
 
@@ -81,10 +81,10 @@ All settings are read from environment variables in `app/core/config.py`. Nothin
 
 Once the server is running, interactive docs are available at:
 
-| Format | URL |
-|---|---|
-| Swagger UI | `/docs/swagger` |
-| ReDoc | `/docs/redoc` |
+| Format       | URL                  |
+| ------------ | -------------------- |
+| Swagger UI   | `/docs/swagger`      |
+| ReDoc        | `/docs/redoc`        |
 | OpenAPI JSON | `/docs/openapi.json` |
 
 ---
@@ -169,20 +169,20 @@ HTTP Request
 
 ### Route Prefixes
 
-| Prefix | Module | Purpose |
-|---|---|---|
-| `/v0/admin/proxmox/vms/` | `vms.py` | VM list and lifecycle |
-| `/v0/admin/proxmox/vms/vm_id/` | `vms.py` | Single VM operations |
-| `/v0/admin/proxmox/vms/vm_ids/` | `vms.py` | Mass VM operations |
-| `/v0/admin/proxmox/vms/vm_id/config/` | `vm_config.py` | VM configuration |
-| `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py` | VM snapshots |
-| `/v0/admin/proxmox/firewall/` | `firewall.py` | Firewall management |
-| `/v0/admin/proxmox/network/` | `network.py` | Network interfaces |
-| `/v0/admin/proxmox/storage/` | `storage.py` | Storage and ISOs |
-| `/v0/admin/run/bundles/` | `bundles.py`, `runner.py` | Bundle execution |
-| `/v0/admin/run/scenarios/` | `runner.py` | Scenario execution |
-| `/v0/admin/debug/` | `debug.py` | Debug/test endpoints |
-| `/ws/vm-status` | `ws_status.py` | WebSocket VM status |
+| Prefix                                  | Module                    | Purpose               |
+| --------------------------------------- | ------------------------- | --------------------- |
+| `/v0/admin/proxmox/vms/`                | `vms.py`                  | VM list and lifecycle |
+| `/v0/admin/proxmox/vms/vm_id/`          | `vms.py`                  | Single VM operations  |
+| `/v0/admin/proxmox/vms/vm_ids/`         | `vms.py`                  | Mass VM operations    |
+| `/v0/admin/proxmox/vms/vm_id/config/`   | `vm_config.py`            | VM configuration      |
+| `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py`            | VM snapshots          |
+| `/v0/admin/proxmox/firewall/`           | `firewall.py`             | Firewall management   |
+| `/v0/admin/proxmox/network/`            | `network.py`              | Network interfaces    |
+| `/v0/admin/proxmox/storage/`            | `storage.py`              | Storage and ISOs      |
+| `/v0/admin/run/bundles/`                | `bundles.py`, `runner.py` | Bundle execution      |
+| `/v0/admin/run/scenarios/`              | `runner.py`               | Scenario execution    |
+| `/v0/admin/debug/`                      | `debug.py`                | Debug/test endpoints  |
+| `/ws/vm-status`                         | `ws_status.py`            | WebSocket VM status   |
 
 ---
 

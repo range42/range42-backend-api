@@ -1,25 +1,24 @@
 """Consolidated VM config schemas: get config, get cdrom, get cpu, get ram, set tag."""
 
 from typing import Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # VM Get Config
 # ---------------------------------------------------------------------------
 
-class VmGetConfigRequest(BaseModel):
 
+class VmGetConfigRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -27,7 +26,7 @@ class VmGetConfigRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -42,7 +41,6 @@ class VmGetConfigRequest(BaseModel):
 
 
 class VmGetConfigItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -52,7 +50,6 @@ class VmGetConfigItemReply(BaseModel):
 
 
 class VmGetConfigReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmGetConfigItemReply]
 
@@ -88,13 +85,13 @@ class VmGetConfigReply(BaseModel):
                                 "sshkeys": "ssh-ed25519%20AAAAC....redacted",
                                 "tags": "admin",
                                 "vga": "serial0",
-                                "vmgenid": "c7426562-ad4b-4719-81a1-72328f7ec018"
+                                "vmgenid": "c7426562-ad4b-4719-81a1-72328f7ec018",
                             }
                         },
                         "source": "proxmox",
-                        "vm_id": "1000"
+                        "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -104,18 +101,17 @@ class VmGetConfigReply(BaseModel):
 # VM Get Config CDROM
 # ---------------------------------------------------------------------------
 
-class VmGetConfigCdromRequest(BaseModel):
 
+class VmGetConfigCdromRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -123,7 +119,7 @@ class VmGetConfigCdromRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -138,22 +134,20 @@ class VmGetConfigCdromRequest(BaseModel):
 
 
 class VmGetConfigCdromItemReply(BaseModel):
-
     action: Literal["vm_get_config_cdrom"]
     source: Literal["proxmox"]
-    proxmox_node   : str
-    vm_id          : str # int = Field(..., ge=1)
+    proxmox_node: str
+    vm_id: str  # int = Field(..., ge=1)
     vm_cdrom_device: str
-    vm_cdrom_iso   : str
-    vm_cdrom_media : str
-    vm_cdrom_size  : str
+    vm_cdrom_iso: str
+    vm_cdrom_media: str
+    vm_cdrom_size: str
 
     # vm_name: str
     # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class VmGetConfigCdromReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmGetConfigCdromItemReply]
 
@@ -170,9 +164,9 @@ class VmGetConfigCdromReply(BaseModel):
                         "vm_cdrom_iso": "local:1000/vm-1000-cloudinit.qcow2",
                         "vm_cdrom_media": "cdrom",
                         "vm_cdrom_size": "4M",
-                        "vm_id": "1000"
+                        "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -182,18 +176,17 @@ class VmGetConfigCdromReply(BaseModel):
 # VM Get Config CPU
 # ---------------------------------------------------------------------------
 
-class VmGetConfigCpuRequest(BaseModel):
 
+class VmGetConfigCpuRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -201,7 +194,7 @@ class VmGetConfigCpuRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -216,20 +209,18 @@ class VmGetConfigCpuRequest(BaseModel):
 
 
 class VmGetConfigCpuItemReply(BaseModel):
-
     action: Literal["vm_get_config_cpu"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id       : str # int = Field(..., ge=1)
-    vm_arch     : str #to fix ?
-    vm_cores    : str #to fix ?
-    vm_sockets  : str #to fix ?
+    vm_id: str  # int = Field(..., ge=1)
+    vm_arch: str  # to fix ?
+    vm_cores: str  # to fix ?
+    vm_sockets: str  # to fix ?
     # vm_name: str
     # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class VmGetConfigCpuReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmGetConfigCpuItemReply]
 
@@ -239,15 +230,15 @@ class VmGetConfigCpuReply(BaseModel):
                 "rc": 0,
                 "result": [
                     {
-                        "action":"vm_get_config_cpu",
-                        "proxmox_node":"px-testing",
-                        "source":"proxmox",
-                        "vm_arch":"host",
-                        "vm_cores":"2",
-                        "vm_id":"1000",
-                        "vm_sockets":"1"
+                        "action": "vm_get_config_cpu",
+                        "proxmox_node": "px-testing",
+                        "source": "proxmox",
+                        "vm_arch": "host",
+                        "vm_cores": "2",
+                        "vm_id": "1000",
+                        "vm_sockets": "1",
                     }
-                ]
+                ],
             }
         }
     }
@@ -257,18 +248,17 @@ class VmGetConfigCpuReply(BaseModel):
 # VM Get Config RAM
 # ---------------------------------------------------------------------------
 
-class VmGetConfigRamRequest(BaseModel):
 
+class VmGetConfigRamRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -276,7 +266,7 @@ class VmGetConfigRamRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -291,19 +281,17 @@ class VmGetConfigRamRequest(BaseModel):
 
 
 class VmGetConfigRamItemReply(BaseModel):
-
     action: Literal["vm_get_config_ram"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id           : str # int = Field(..., ge=1)
-    vm_ram_allocated: str # wtf... - fix todo
+    vm_id: str  # int = Field(..., ge=1)
+    vm_ram_allocated: str  # wtf... - fix todo
 
     # vm_name: str
     # raw_data: str = Field(..., description="Raw string returned by proxmox")
 
 
 class VmGetConfigRamReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmGetConfigRamItemReply]
 
@@ -317,9 +305,9 @@ class VmGetConfigRamReply(BaseModel):
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
                         "vm_id": "1000",
-                        "vm_ram_allocated": "8192"
+                        "vm_ram_allocated": "8192",
                     }
-                ]
+                ],
             }
         }
     }
@@ -329,17 +317,16 @@ class VmGetConfigRamReply(BaseModel):
 # VM Set Tag
 # ---------------------------------------------------------------------------
 
-class VmSetTagRequest(BaseModel):
 
+class VmSetTagRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -347,13 +334,13 @@ class VmSetTagRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_tag_name: str = Field(
         ...,
         description="Comma separated list of tags to assign to the virtual machine",
-        pattern=r"^[A-Za-z0-9_, -]+$"
+        pattern=r"^[A-Za-z0-9_, -]+$",
     )
 
     model_config = {
@@ -361,7 +348,7 @@ class VmSetTagRequest(BaseModel):
             "example": {
                 "proxmox_node": "px-testing",
                 "vm_id": "1111",
-                "vm_tag_name":"group_01,group_02",
+                "vm_tag_name": "group_01,group_02",
                 "as_json": True,
             }
         }
@@ -369,7 +356,6 @@ class VmSetTagRequest(BaseModel):
 
 
 class VmSetTagItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     source: Literal["proxmox"]
     # proxmox_node: str
@@ -379,7 +365,6 @@ class VmSetTagItemReply(BaseModel):
 
 
 class VmSetTagReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmSetTagItemReply]
 
@@ -393,7 +378,7 @@ class VmSetTagReply(BaseModel):
                         "source": "proxmox",
                         "tags": "group_01,group_02",
                     }
-                ]
+                ],
             }
         }
     }

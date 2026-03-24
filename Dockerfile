@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS base
+FROM python:slim AS base
 
 # Install system deps for ansible and ssh
 RUN apt-get update && apt-get install -y --no-install-recommends \

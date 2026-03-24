@@ -23,24 +23,31 @@ Endpoints
 import logging
 import os
 from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.runner import run_playbook_core
-from app.core.extractor import extract_action_results
-from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
-
+from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 from app.schemas.vms import (
-    Request_ProxmoxVms_VmList, Reply_ProxmoxVmList,
-    Request_ProxmoxVms_VmListUsage, Reply_ProxmoxVms_VmListUsage,
-    Request_ProxmoxVmsVMID_StartStopPauseResume, Reply_ProxmoxVmsVMID_StartStopPauseResume,
-    Request_ProxmoxVmsVMID_Create, Reply_ProxmoxVmsVMID_Create,
-    Request_ProxmoxVmsVMID_Delete, Reply_ProxmoxVmsVMID_Delete,
-    Request_ProxmoxVmsVMID_Clone, Reply_ProxmoxVmsVMID_Clone,
+    Reply_ProxmoxVmList,
+    Reply_ProxmoxVms_VmListUsage,
+    Reply_ProxmoxVmsVMID_Clone,
+    Reply_ProxmoxVmsVMID_Create,
+    Reply_ProxmoxVmsVMID_Delete,
+    Reply_ProxmoxVmsVMID_StartStopPauseResume,
+    Reply_ProxmoxVmsVmIds_MassDelete,
+    Request_ProxmoxVms_VmList,
+    Request_ProxmoxVms_VmListUsage,
+    Request_ProxmoxVmsVMID_Clone,
+    Request_ProxmoxVmsVMID_Create,
+    Request_ProxmoxVmsVMID_Delete,
+    Request_ProxmoxVmsVMID_StartStopPauseResume,
+    Request_ProxmoxVmsVmIds_MassDelete,
     Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
-    Request_ProxmoxVmsVmIds_MassDelete, Reply_ProxmoxVmsVmIds_MassDelete,
 )
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +59,16 @@ PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_proxmox_action(req, action: str, extravars: dict) -> JSONResponse:
     """Common pattern for all standard Proxmox action routes."""
     extravars["proxmox_vm_action"] = action
     extravars["hosts"] = "proxmox"
 
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
 
     inventory = utils.resolve_inventory(INVENTORY_NAME)
 
@@ -281,7 +291,9 @@ def proxmox_vms_vm_id_delete(req: Request_ProxmoxVmsVMID_Delete):
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"])
+    extravars["vm_name"] = resolv_id_to_vm_name(
+        extravars["proxmox_node"], extravars["vm_id"]
+    )
     return _run_proxmox_action(req, "vm_delete", extravars)
 
 
@@ -302,7 +314,9 @@ def proxmox_vms_vm_id_clone(req: Request_ProxmoxVmsVMID_Clone):
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"])
+    extravars["vm_name"] = resolv_id_to_vm_name(
+        extravars["proxmox_node"], extravars["vm_id"]
+    )
     if req.vm_new_id is not None:
         extravars["vm_new_id"] = req.vm_new_id
     if req.vm_name is not None:
@@ -321,7 +335,9 @@ vm_ids_router = APIRouter()
 def _run_mass_action(req, action_name: str, proxmox_vm_action: str) -> JSONResponse:
     """Helper for mass start/stop/pause/resume."""
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
+    checked_playbook_filepath = utils.resolve_bundles_playbook(
+        action_name, "public_github"
+    )
 
     extravars = {}
     extravars["PROXMOX_VM_ACTION"] = proxmox_vm_action
@@ -346,7 +362,9 @@ def _run_mass_action(req, action_name: str, proxmox_vm_action: str) -> JSONRespo
     return JSONResponse(payload, status_code=200 if rc == 0 else 500)
 
 
-_MASS_ACTION_NAME = "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
+_MASS_ACTION_NAME = (
+    "core/proxmox/configure/default/vms/start-stop-pause-resume-vms-vuln"
+)
 
 
 @vm_ids_router.post(
@@ -372,7 +390,9 @@ def proxmox_vms_vm_ids_mass_stop(req: Request_ProxmoxVmsVmIds_MassStartStopPause
     tags=["proxmox - vm lifecycle"],
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
-def proxmox_vms_vm_ids_mass_stop_force(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+def proxmox_vms_vm_ids_mass_stop_force(
+    req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+):
     """Force stop multiple VMs by ID list.
 
     :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
@@ -388,7 +408,9 @@ def proxmox_vms_vm_ids_mass_stop_force(req: Request_ProxmoxVmsVmIds_MassStartSto
     tags=["proxmox - vm lifecycle"],
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
-def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+def proxmox_vms_vm_ids_mass_start(
+    req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+):
     """Start multiple VMs by ID list.
 
     :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
@@ -404,7 +426,9 @@ def proxmox_vms_vm_ids_mass_start(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
     tags=["proxmox - vm lifecycle"],
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
-def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+def proxmox_vms_vm_ids_mass_pause(
+    req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+):
     """Pause multiple VMs by ID list.
 
     :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
@@ -420,7 +444,9 @@ def proxmox_vms_vm_ids_mass_pause(req: Request_ProxmoxVmsVmIds_MassStartStopPaus
     tags=["proxmox - vm lifecycle"],
     response_model=Reply_ProxmoxVmsVMID_StartStopPauseResume,
 )
-def proxmox_vms_vm_ids_mass_resume(req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume):
+def proxmox_vms_vm_ids_mass_resume(
+    req: Request_ProxmoxVmsVmIds_MassStartStopPauseResume,
+):
     """Resume multiple paused VMs by ID list.
 
     :param req: Request body with ``proxmox_node`` and ``vm_ids`` list.
@@ -444,7 +470,9 @@ def proxmox_vms_vm_ids_mass_delete(req: Request_ProxmoxVmsVmIds_MassDelete):
     """
     action_name = "core/proxmox/configure/default/vms/delete-vms-vuln"
     checked_inventory_filepath = utils.resolve_inventory(INVENTORY_NAME)
-    checked_playbook_filepath = utils.resolve_bundles_playbook(action_name, "public_github")
+    checked_playbook_filepath = utils.resolve_bundles_playbook(
+        action_name, "public_github"
+    )
 
     extravars = {}
     if req.proxmox_node:

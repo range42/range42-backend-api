@@ -1,96 +1,88 @@
 """Consolidated network schemas: node and VM network interface operations."""
 
 from typing import Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Node — Add Network Interface
 # ---------------------------------------------------------------------------
 
-class NodeNetworkAddRequest(BaseModel):
 
+class NodeNetworkAddRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
 
     #
 
     bridge_ports: str | None = Field(
-        default=None,
-        description="Bridge ports",
-        pattern=r"^[a-zA-Z0-9._-]+$"
+        default=None, description="Bridge ports", pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     iface_name: str | None = Field(
-        ...,
-        description="Interface name",
-        pattern=r"^[a-zA-Z0-9._-]+$"
+        ..., description="Interface name", pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     iface_type: str | None = Field(
         ...,
         description="Interface type - ethernet, ovs, bridge",
-        pattern=r"^[a-zA-Z]+$"
+        pattern=r"^[a-zA-Z]+$",
     )
 
     iface_autostart: int | None = Field(
-        ...,
-        description="Autostart flag - 0 = no, 1 = yes"
+        ..., description="Autostart flag - 0 = no, 1 = yes"
     )
 
     ip_address: str | None = Field(
         default=None,
         description="ipv4 address",
-        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
+        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$",
     )
 
     ip_netmask: str | None = Field(
         default=None,
         description="ipv4 netmask",
-        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^\/[0-9]{1,2}$"
+        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^\/[0-9]{1,2}$",
     )
 
     ip_gateway: str | None = Field(
         default=None,
         description="ipv4 gateway",
-        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
+        pattern=r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$",
     )
 
     ovs_bridge: str | None = Field(
-        default=None,
-        description="OVS bridge name",
-        pattern=r"^[a-zA-Z0-9._-]+$"
+        default=None, description="OVS bridge name", pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     model_config = {
         "json_schema_extra": {
-            "example":[ {
-                "proxmox_node": "px-testing",
-                "as_json": "true",
-                #
-                "iface_name": "vmbr142",
-                "iface_type": "bridge",
-                "bridge_ports": "enp87s0",
-                "iface_autostart": 1,
-                "ip_address": "192.168.99.2",
-                "ip_netmask": "255.255.255.0"
-            },
+            "example": [
+                {
+                    "proxmox_node": "px-testing",
+                    "as_json": "true",
+                    #
+                    "iface_name": "vmbr142",
+                    "iface_type": "bridge",
+                    "bridge_ports": "enp87s0",
+                    "iface_autostart": 1,
+                    "ip_address": "192.168.99.2",
+                    "ip_netmask": "255.255.255.0",
+                },
             ]
         }
     }
 
 
 class NodeNetworkAddItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -107,7 +99,6 @@ class NodeNetworkAddItemReply(BaseModel):
 
 
 class NodeNetworkAddReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[NodeNetworkAddItemReply]
 
@@ -117,7 +108,6 @@ class NodeNetworkAddReply(BaseModel):
                 "rc": 0,
                 "result": [
                     {
-
                         "action": "network_add_interfaces_node",
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
@@ -128,7 +118,7 @@ class NodeNetworkAddReply(BaseModel):
                         "ip_address": "192.168.99.2",
                         "ip_netmask": "255.255.255.0",
                     }
-                ]
+                ],
             }
         }
     }
@@ -138,24 +128,22 @@ class NodeNetworkAddReply(BaseModel):
 # Node — Delete Network Interface
 # ---------------------------------------------------------------------------
 
-class NodeNetworkDeleteRequest(BaseModel):
 
+class NodeNetworkDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
     #
 
     iface_name: str | None = Field(
-        description="Interface name",
-        pattern=r"^[a-zA-Z0-9._-]+$"
+        description="Interface name", pattern=r"^[a-zA-Z0-9._-]+$"
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
 
     model_config = {
@@ -165,22 +153,21 @@ class NodeNetworkDeleteRequest(BaseModel):
                 "storage_name": "local",
                 "as_json": True,
                 #
-                "iface_name":"vmbr42",
+                "iface_name": "vmbr42",
             }
         }
     }
 
 
 class NodeNetworkDeleteItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
     ##
     iface_name: str
 
-class NodeNetworkDeleteReply(BaseModel):
 
+class NodeNetworkDeleteReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[NodeNetworkDeleteItemReply]
 
@@ -196,7 +183,7 @@ class NodeNetworkDeleteReply(BaseModel):
                         ##
                         "iface_name": "vmbr42",
                     }
-                ]
+                ],
             }
         }
     }
@@ -206,18 +193,17 @@ class NodeNetworkDeleteReply(BaseModel):
 # Node — List Network Interfaces
 # ---------------------------------------------------------------------------
 
-class NodeNetworkListRequest(BaseModel):
 
+class NodeNetworkListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -232,7 +218,6 @@ class NodeNetworkListRequest(BaseModel):
 
 
 class NodeNetworkListItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -241,8 +226,8 @@ class NodeNetworkListItemReply(BaseModel):
     vm_id: str
     vm_fw_pos: int
 
-class NodeNetworkListReply(BaseModel):
 
+class NodeNetworkListReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[NodeNetworkListItemReply]
 
@@ -258,9 +243,9 @@ class NodeNetworkListReply(BaseModel):
                         "ip_settings_method": "manual",
                         "ip_settings_method6": "manual",
                         "proxmox_node": "px-testing",
-                        "source": "proxmox"
+                        "source": "proxmox",
                     },
-                ]
+                ],
             }
         }
     }
@@ -270,18 +255,17 @@ class NodeNetworkListReply(BaseModel):
 # VM — Add Network Interface
 # ---------------------------------------------------------------------------
 
-class VmNetworkAddRequest(BaseModel):
 
+class VmNetworkAddRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -289,24 +273,22 @@ class VmNetworkAddRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     # quick classic fields
 
     iface_model: str | None = Field(
         description="Interface model-  virtio, e1000, rtl8139",
-        pattern=r"^[A-Za-z0-9._-]+$"
+        pattern=r"^[A-Za-z0-9._-]+$",
     )
 
     iface_bridge: str | None = Field(
         description="Bridge name for interface - vmbr0, vmbr142",
-        pattern=r"^[A-Za-z0-9._-]+$"
+        pattern=r"^[A-Za-z0-9._-]+$",
     )
 
-    vm_vmnet_id: int | None = Field(
-        description="Network device index - 0, 1, 2, ..."
-    )
+    vm_vmnet_id: int | None = Field(description="Network device index - 0, 1, 2, ...")
 
     #### below fields to test :
 
@@ -314,30 +296,22 @@ class VmNetworkAddRequest(BaseModel):
         description="Enable trunk - allow multiple vlan on interface"
     )
 
-    iface_tag: int | None = Field(
-        description="VLAN tag id"
-    )
+    iface_tag: int | None = Field(description="VLAN tag id")
 
-    iface_rate: float | None = Field(
-        description="Limit bandwith - Mbps - 0 to x"
-    )
+    iface_rate: float | None = Field(description="Limit bandwith - Mbps - 0 to x")
 
     iface_queues: int | None = Field(
         description="Allocated amount allocated tx/rx on interface"
     )
 
-    iface_mtu: int | None = Field(
-        description="MTU"
-    )
+    iface_mtu: int | None = Field(description="MTU")
 
     iface_macaddr: str | None = Field(
         description="MAC address - hexa format",
-        pattern = r'^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+        pattern=r"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
     )
 
-    iface_link_down: bool | None = Field(
-        description="Force to set down the interface"
-    )
+    iface_link_down: bool | None = Field(description="Force to set down the interface")
 
     iface_firewall: bool | None = Field(
         description="Apply firewall rules on this interface"
@@ -360,7 +334,6 @@ class VmNetworkAddRequest(BaseModel):
 
 
 class VmNetworkAddItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -369,8 +342,8 @@ class VmNetworkAddItemReply(BaseModel):
     vm_id: str
     vm_fw_pos: int
 
-class VmNetworkAddReply(BaseModel):
 
+class VmNetworkAddReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmNetworkAddItemReply]
 
@@ -387,7 +360,7 @@ class VmNetworkAddReply(BaseModel):
                         "vm_id": "1000",
                         "iface_model": "virtio",
                     }
-                ]
+                ],
             }
         }
     }
@@ -397,18 +370,17 @@ class VmNetworkAddReply(BaseModel):
 # VM — Delete Network Interface
 # ---------------------------------------------------------------------------
 
-class VmNetworkDeleteRequest(BaseModel):
 
+class VmNetworkDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -416,12 +388,10 @@ class VmNetworkDeleteRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
-    vm_vmnet_id: int | None = Field(
-        description="Network device index - 0, 1, 2, ..."
-    )
+    vm_vmnet_id: int | None = Field(description="Network device index - 0, 1, 2, ...")
 
     model_config = {
         "json_schema_extra": {
@@ -429,17 +399,15 @@ class VmNetworkDeleteRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "storage_name": "local",
                 "as_json": True,
-#
-                "vm_id":"1000",
-                "vm_vmnet_id":1,
-
+                #
+                "vm_id": "1000",
+                "vm_vmnet_id": 1,
             }
         }
     }
 
 
 class VmNetworkDeleteItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -448,8 +416,8 @@ class VmNetworkDeleteItemReply(BaseModel):
     vm_id: str
     vm_fw_pos: int
 
-class VmNetworkDeleteReply(BaseModel):
 
+class VmNetworkDeleteReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmNetworkDeleteItemReply]
 
@@ -464,10 +432,9 @@ class VmNetworkDeleteReply(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                         "vm_id": "1000",
-                        "iface_model": "virtio"
-
-                     }
-                ]
+                        "iface_model": "virtio",
+                    }
+                ],
             }
         }
     }
@@ -477,18 +444,17 @@ class VmNetworkDeleteReply(BaseModel):
 # VM — List Network Interfaces
 # ---------------------------------------------------------------------------
 
-class VmNetworkListRequest(BaseModel):
 
+class VmNetworkListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -496,7 +462,7 @@ class VmNetworkListRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -511,7 +477,6 @@ class VmNetworkListRequest(BaseModel):
 
 
 class VmNetworkListItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -519,8 +484,8 @@ class VmNetworkListItemReply(BaseModel):
     # vm_id: int = Field(..., ge=1)
     vm_id: str
 
-class VmNetworkListReply(BaseModel):
 
+class VmNetworkListReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmNetworkListItemReply]
 
@@ -538,10 +503,9 @@ class VmNetworkListReply(BaseModel):
                         "vm_network_bridge": "vmbr0",
                         "vm_network_device": "net0",
                         "vm_network_mac": "AA:BB:CC:DD:EE:FF",
-                        "vm_network_type": "virtio"
-
+                        "vm_network_type": "virtio",
                     }
-                ]
+                ],
             }
         }
     }

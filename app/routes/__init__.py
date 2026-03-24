@@ -1,14 +1,14 @@
 from fastapi import APIRouter
 
-from app.routes.vms import vms_router, vm_id_router, vm_ids_router
-from app.routes.vm_config import router as vm_config_router
-from app.routes.snapshots import router as snapshots_router
+from app.routes.bundles import router as bundles_router
+from app.routes.debug import router as debug_router
 from app.routes.firewall import router as firewall_router
 from app.routes.network import router as network_router
-from app.routes.storage import storage_router, storage_name_router
-from app.routes.bundles import router as bundles_router
 from app.routes.runner import run_bundle, run_scenario
-from app.routes.debug import router as debug_router
+from app.routes.snapshots import router as snapshots_router
+from app.routes.storage import storage_name_router, storage_router
+from app.routes.vm_config import router as vm_config_router
+from app.routes.vms import vm_id_router, vm_ids_router, vms_router
 
 router = APIRouter()
 
@@ -21,7 +21,9 @@ router.include_router(bundles_router, prefix="/v0/admin/run/bundles")
 # /v0/admin/run/bundles/{name}/run
 _bundles_runner = APIRouter()
 _bundles_runner.add_api_route(
-    "/{bundles_name}/run", run_bundle, methods=["POST"],
+    "/{bundles_name}/run",
+    run_bundle,
+    methods=["POST"],
     summary="Run bundles",
     description="Run generic bundles with default (and static) extras_vars ",
     tags=["runner"],
@@ -31,7 +33,9 @@ router.include_router(_bundles_runner, prefix="/v0/admin/run/bundles")
 # /v0/admin/run/scenarios/{name}/run
 _scenarios_runner = APIRouter()
 _scenarios_runner.add_api_route(
-    "/{scenario_name}/run", run_scenario, methods=["POST"],
+    "/{scenario_name}/run",
+    run_scenario,
+    methods=["POST"],
     summary="Run scenario",
     description="Run generic scenario with default (and static) extras_vars ",
     tags=["runner"],
@@ -54,7 +58,9 @@ router.include_router(vm_config_router, prefix="/v0/admin/proxmox/vms/vm_id/conf
 router.include_router(snapshots_router, prefix="/v0/admin/proxmox/vms/vm_id/snapshot")
 
 # /v0/admin/proxmox/storage/storage_name
-router.include_router(storage_name_router, prefix="/v0/admin/proxmox/storage/storage_name")
+router.include_router(
+    storage_name_router, prefix="/v0/admin/proxmox/storage/storage_name"
+)
 
 # /v0/admin/proxmox/storage
 router.include_router(storage_router, prefix="/v0/admin/proxmox/storage")

@@ -44,7 +44,14 @@ def load_proxmox_credentials() -> dict:
             inv = yaml.safe_load(f)
 
         # Navigate to proxmox host vars
-        px = inv.get("all", {}).get("children", {}).get("range42_infrastructure", {}).get("children", {}).get("proxmox", {}).get("hosts", {})
+        px = (
+            inv.get("all", {})
+            .get("children", {})
+            .get("range42_infrastructure", {})
+            .get("children", {})
+            .get("proxmox", {})
+            .get("hosts", {})
+        )
         for host_name, host_vars in px.items():
             if host_vars and host_vars.get("proxmox_api_host"):
                 return {
@@ -108,9 +115,7 @@ async def fetch_vm_status(
         return []
 
 
-def compute_diff(
-    prev: Dict[int, dict], current: Dict[int, dict]
-) -> Optional[dict]:
+def compute_diff(prev: Dict[int, dict], current: Dict[int, dict]) -> Optional[dict]:
     """Compare previous and current VM states, return changes.
 
     :param prev: Previous poll's VM state keyed by ``vmid``.
@@ -127,7 +132,10 @@ def compute_diff(
         old = prev.get(vmid)
         if old is None:
             changes[vmid] = {"type": "added", **vm}
-        elif old["status"] != vm["status"] or abs(old.get("cpu", 0) - vm.get("cpu", 0)) > 2:
+        elif (
+            old["status"] != vm["status"]
+            or abs(old.get("cpu", 0) - vm.get("cpu", 0)) > 2
+        ):
             changes[vmid] = {"type": "changed", **vm}
 
     for vmid in prev:
@@ -152,7 +160,9 @@ async def vm_status_websocket(ws: WebSocket):
     # Read Proxmox credentials from backend inventory (not from client)
     creds = load_proxmox_credentials()
     if not creds:
-        await ws.send_json({"error": "Proxmox credentials not found in backend inventory"})
+        await ws.send_json(
+            {"error": "Proxmox credentials not found in backend inventory"}
+        )
         await ws.close()
         return
 
@@ -169,24 +179,32 @@ async def vm_status_websocket(ws: WebSocket):
     async with httpx.AsyncClient(verify=False) as client:
         try:
             while True:
-                vms = await fetch_vm_status(client, api_host, node, token_id, token_secret)
+                vms = await fetch_vm_status(
+                    client, api_host, node, token_id, token_secret
+                )
 
-                current_state = {vm["vmid"]: vm for vm in vms if vm.get("template", 0) != 1}
+                current_state = {
+                    vm["vmid"]: vm for vm in vms if vm.get("template", 0) != 1
+                }
 
                 # First message: send full state
                 if not prev_state:
-                    await ws.send_json({
-                        "type": "full",
-                        "vms": list(current_state.values()),
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "full",
+                            "vms": list(current_state.values()),
+                        }
+                    )
                 else:
                     # Subsequent: send only changes
                     diff = compute_diff(prev_state, current_state)
                     if diff:
-                        await ws.send_json({
-                            "type": "diff",
-                            "changes": diff,
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "diff",
+                                "changes": diff,
+                            }
+                        )
 
                 prev_state = current_state
                 await asyncio.sleep(POLL_INTERVAL)

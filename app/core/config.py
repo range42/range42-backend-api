@@ -42,16 +42,28 @@ class Settings:
     :type debug: bool
     """
 
-    project_root: Path = field(default_factory=lambda: Path(os.getenv("PROJECT_ROOT_DIR", ".")).resolve())
+    project_root: Path = field(
+        default_factory=lambda: Path(os.getenv("PROJECT_ROOT_DIR", ".")).resolve()
+    )
 
     # Playbook paths
-    wwwapp_playbooks_dir: str = field(default_factory=lambda: os.getenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", ""))
-    public_playbooks_dir: str = field(default_factory=lambda: os.getenv("API_BACKEND_PUBLIC_PLAYBOOKS_DIR", ""))
-    inventory_dir: str = field(default_factory=lambda: os.getenv("API_BACKEND_INVENTORY_DIR", ""))
-    vault_file: str = field(default_factory=lambda: os.getenv("API_BACKEND_VAULT_FILE", ""))
+    wwwapp_playbooks_dir: str = field(
+        default_factory=lambda: os.getenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", "")
+    )
+    public_playbooks_dir: str = field(
+        default_factory=lambda: os.getenv("API_BACKEND_PUBLIC_PLAYBOOKS_DIR", "")
+    )
+    inventory_dir: str = field(
+        default_factory=lambda: os.getenv("API_BACKEND_INVENTORY_DIR", "")
+    )
+    vault_file: str = field(
+        default_factory=lambda: os.getenv("API_BACKEND_VAULT_FILE", "")
+    )
 
     # Vault credentials
-    vault_password_file: str = field(default_factory=lambda: os.getenv("VAULT_PASSWORD_FILE", ""))
+    vault_password_file: str = field(
+        default_factory=lambda: os.getenv("VAULT_PASSWORD_FILE", "")
+    )
     vault_password: str = field(default_factory=lambda: os.getenv("VAULT_PASSWORD", ""))
 
     # CORS
@@ -65,7 +77,9 @@ class Settings:
     # Server
     host: str = field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(os.getenv("PORT", "8000")))
-    debug: bool = field(default_factory=lambda: os.getenv("DEBUG", "").lower() in ("1", "true", "yes"))
+    debug: bool = field(
+        default_factory=lambda: os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
+    )
 
     @property
     def playbook_path(self) -> Path:

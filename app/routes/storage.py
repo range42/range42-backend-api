@@ -15,15 +15,18 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.runner import run_playbook_core
-from app.core.extractor import extract_action_results
 from app import utils
-
+from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 from app.schemas.storage import (
-    Request_ProxmoxStorage_List, Reply_ProxmoxStorage_ListItem,
-    Request_ProxmoxStorage_DownloadIso, Reply_ProxmoxStorage_DownloadIsoItem,
-    Request_ProxmoxStorage_ListIso, Reply_ProxmoxStorageWithStorageName_ListIsoItem,
-    Request_ProxmoxStorage_ListTemplate, Reply_ProxmoxStorageWithStorageName_ListTemplate,
+    Reply_ProxmoxStorage_DownloadIsoItem,
+    Reply_ProxmoxStorage_ListItem,
+    Reply_ProxmoxStorageWithStorageName_ListIsoItem,
+    Reply_ProxmoxStorageWithStorageName_ListTemplate,
+    Request_ProxmoxStorage_DownloadIso,
+    Request_ProxmoxStorage_List,
+    Request_ProxmoxStorage_ListIso,
+    Request_ProxmoxStorage_ListTemplate,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,9 +44,13 @@ def _run_storage(req, action: str, extravars: dict) -> JSONResponse:
     extravars["proxmox_vm_action"] = action
     extravars["hosts"] = "proxmox"
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
     inventory = utils.resolve_inventory(INVENTORY_NAME)
-    rc, events, log_plain, _ = run_playbook_core(PLAYBOOK_SRC, inventory, limit=extravars["hosts"], extravars=extravars)
+    rc, events, log_plain, _ = run_playbook_core(
+        PLAYBOOK_SRC, inventory, limit=extravars["hosts"], extravars=extravars
+    )
     if req.as_json:
         payload = {"rc": rc, "result": extract_action_results(events, action)}
     else:
@@ -53,7 +60,15 @@ def _run_storage(req, action: str, extravars: dict) -> JSONResponse:
 
 # --- /v0/admin/proxmox/storage/ ---
 
-@storage_router.post(path="/list", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorage_ListItem, response_description="VM configuration details")
+
+@storage_router.post(
+    path="/list",
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
+    tags=["proxmox - storage"],
+    response_model=Reply_ProxmoxStorage_ListItem,
+    response_description="VM configuration details",
+)
 def proxmox_storage_list(req: Request_ProxmoxStorage_List):
     """List storage pools on the Proxmox node.
 
@@ -66,7 +81,14 @@ def proxmox_storage_list(req: Request_ProxmoxStorage_List):
     return _run_storage(req, "storage_list", extravars)
 
 
-@storage_router.post(path="/download_iso", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorage_DownloadIsoItem, response_description="VM configuration details")
+@storage_router.post(
+    path="/download_iso",
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
+    tags=["proxmox - storage"],
+    response_model=Reply_ProxmoxStorage_DownloadIsoItem,
+    response_description="VM configuration details",
+)
 def proxmox_storage_download_iso(req: Request_ProxmoxStorage_DownloadIso):
     """Download an ISO file to a Proxmox storage pool.
 
@@ -87,7 +109,15 @@ def proxmox_storage_download_iso(req: Request_ProxmoxStorage_DownloadIso):
 
 # --- /v0/admin/proxmox/storage/storage_name/ ---
 
-@storage_name_router.post(path="/list_iso", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorageWithStorageName_ListIsoItem, response_description="VM configuration details")
+
+@storage_name_router.post(
+    path="/list_iso",
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
+    tags=["proxmox - storage"],
+    response_model=Reply_ProxmoxStorageWithStorageName_ListIsoItem,
+    response_description="VM configuration details",
+)
 def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxStorage_ListIso):
     """List ISO files in a named storage pool.
 
@@ -100,8 +130,17 @@ def proxmox_storage_with_storage_name_list_iso(req: Request_ProxmoxStorage_ListI
     return _run_storage(req, "storage_list_iso", extravars)
 
 
-@storage_name_router.post(path="/list_template", summary="Retrieve configuration of a VM", description="Returns the configuration details of the specified virtual machine (VM).", tags=["proxmox - storage"], response_model=Reply_ProxmoxStorageWithStorageName_ListTemplate, response_description="VM configuration details")
-def proxmox_storage_with_storage_name_list_template(req: Request_ProxmoxStorage_ListTemplate):
+@storage_name_router.post(
+    path="/list_template",
+    summary="Retrieve configuration of a VM",
+    description="Returns the configuration details of the specified virtual machine (VM).",
+    tags=["proxmox - storage"],
+    response_model=Reply_ProxmoxStorageWithStorageName_ListTemplate,
+    response_description="VM configuration details",
+)
+def proxmox_storage_with_storage_name_list_template(
+    req: Request_ProxmoxStorage_ListTemplate,
+):
     """List VM templates in a named storage pool.
 
     :param req: Request body with ``proxmox_node`` and ``storage_name``.

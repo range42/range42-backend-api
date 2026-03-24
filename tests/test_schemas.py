@@ -1,15 +1,16 @@
 """Tests for consolidated schema modules — validates fields, patterns, and backward-compat aliases."""
 
-from pydantic import ValidationError
 import pytest
-
+from pydantic import ValidationError
 
 # ===========================================================================
 # vms.py
 # ===========================================================================
 
+
 def test_vm_list_request():
     from app.schemas.vms import VmListRequest
+
     req = VmListRequest(proxmox_node="px-testing")
     assert req.proxmox_node == "px-testing"
     assert req.as_json is True
@@ -17,18 +18,21 @@ def test_vm_list_request():
 
 def test_vm_action_request_validates_vm_id():
     from app.schemas.vms import VmActionRequest
+
     req = VmActionRequest(proxmox_node="px-testing", vm_id="100")
     assert req.vm_id == "100"
 
 
 def test_vm_action_request_rejects_invalid_vm_id():
     from app.schemas.vms import VmActionRequest
+
     with pytest.raises(ValidationError):
         VmActionRequest(proxmox_node="px-testing", vm_id="abc")
 
 
 def test_vm_create_request():
     from app.schemas.vms import VmCreateRequest
+
     req = VmCreateRequest(
         proxmox_node="px-testing",
         vm_id="200",
@@ -43,6 +47,7 @@ def test_vm_create_request():
 
 def test_vm_create_request_rejects_low_memory():
     from app.schemas.vms import VmCreateRequest
+
     with pytest.raises(ValidationError):
         VmCreateRequest(
             proxmox_node="px-testing",
@@ -57,18 +62,21 @@ def test_vm_create_request_rejects_low_memory():
 
 def test_proxmox_node_rejects_special_chars():
     from app.schemas.vms import VmListRequest
+
     with pytest.raises(ValidationError):
         VmListRequest(proxmox_node="node; rm -rf /")
 
 
 def test_vm_delete_request():
     from app.schemas.vms import VmDeleteRequest
+
     req = VmDeleteRequest(proxmox_node="px-testing", vm_id="1111")
     assert req.vm_id == "1111"
 
 
 def test_vm_clone_request():
     from app.schemas.vms import VmCloneRequest
+
     req = VmCloneRequest(
         proxmox_node="px-testing",
         vm_id="2000",
@@ -81,6 +89,7 @@ def test_vm_clone_request():
 
 def test_mass_delete_request():
     from app.schemas.vms import MassDeleteRequest, MassDeleteVmItem
+
     req = MassDeleteRequest(
         proxmox_node="px-testing",
         vms=[MassDeleteVmItem(id="4000", name="vuln-box-00")],
@@ -90,6 +99,7 @@ def test_mass_delete_request():
 
 def test_mass_delete_request_rejects_empty_vms():
     from app.schemas.vms import MassDeleteRequest
+
     with pytest.raises(ValidationError):
         MassDeleteRequest(proxmox_node="px-testing", vms=[])
 
@@ -98,14 +108,17 @@ def test_mass_delete_request_rejects_empty_vms():
 # vm_config.py
 # ===========================================================================
 
+
 def test_vm_get_config_request():
     from app.schemas.vm_config import VmGetConfigRequest
+
     req = VmGetConfigRequest(proxmox_node="px-testing", vm_id="1000")
     assert req.as_json is True
 
 
 def test_vm_set_tag_request():
     from app.schemas.vm_config import VmSetTagRequest
+
     req = VmSetTagRequest(
         proxmox_node="px-testing",
         vm_id="1111",
@@ -116,6 +129,7 @@ def test_vm_set_tag_request():
 
 def test_vm_set_tag_rejects_bad_pattern():
     from app.schemas.vm_config import VmSetTagRequest
+
     with pytest.raises(ValidationError):
         VmSetTagRequest(
             proxmox_node="px-testing",
@@ -128,8 +142,10 @@ def test_vm_set_tag_rejects_bad_pattern():
 # snapshots.py
 # ===========================================================================
 
+
 def test_snapshot_create_request():
     from app.schemas.snapshots import SnapshotCreateRequest
+
     req = SnapshotCreateRequest(
         proxmox_node="px-testing",
         vm_id="1000",
@@ -140,6 +156,7 @@ def test_snapshot_create_request():
 
 def test_snapshot_list_request():
     from app.schemas.snapshots import SnapshotListRequest
+
     req = SnapshotListRequest(proxmox_node="px-testing", vm_id="1000")
     assert req.vm_id == "1000"
 
@@ -148,8 +165,10 @@ def test_snapshot_list_request():
 # firewall.py
 # ===========================================================================
 
+
 def test_firewall_rule_request():
     from app.schemas.firewall import FirewallRuleApplyRequest
+
     req = FirewallRuleApplyRequest(
         proxmox_node="px-testing",
         vm_id="100",
@@ -164,6 +183,7 @@ def test_firewall_rule_request():
 
 def test_firewall_rule_rejects_invalid_action():
     from app.schemas.firewall import FirewallRuleApplyRequest
+
     with pytest.raises(ValidationError):
         FirewallRuleApplyRequest(
             proxmox_node="px-testing",
@@ -178,6 +198,7 @@ def test_firewall_rule_rejects_invalid_action():
 
 def test_firewall_alias_add_request():
     from app.schemas.firewall import FirewallAliasAddRequest
+
     req = FirewallAliasAddRequest(
         proxmox_node="px-testing",
         vm_id="1000",
@@ -192,14 +213,17 @@ def test_firewall_alias_add_request():
 # network.py
 # ===========================================================================
 
+
 def test_node_network_list_request():
     from app.schemas.network import NodeNetworkListRequest
+
     req = NodeNetworkListRequest(proxmox_node="px-testing")
     assert req.as_json is True
 
 
 def test_vm_network_list_request():
     from app.schemas.network import VmNetworkListRequest
+
     req = VmNetworkListRequest(proxmox_node="px-testing", vm_id="1001")
     assert req.vm_id == "1001"
 
@@ -208,8 +232,10 @@ def test_vm_network_list_request():
 # storage.py
 # ===========================================================================
 
+
 def test_storage_list_request():
     from app.schemas.storage import StorageListRequest
+
     req = StorageListRequest(
         proxmox_node="px-testing",
         storage_name="local",
@@ -219,6 +245,7 @@ def test_storage_list_request():
 
 def test_storage_download_iso_request():
     from app.schemas.storage import StorageDownloadIsoRequest
+
     req = StorageDownloadIsoRequest(
         proxmox_node="px-testing",
         proxmox_storage="local",
@@ -233,8 +260,10 @@ def test_storage_download_iso_request():
 # bundles.py
 # ===========================================================================
 
+
 def test_bundle_add_user_request():
     from app.schemas.bundles import BundleAddUserRequest
+
     req = BundleAddUserRequest(
         proxmox_node="px-testing",
         hosts="r42.vuln-box-00",
@@ -247,7 +276,11 @@ def test_bundle_add_user_request():
 
 
 def test_bundle_create_admin_vms_request():
-    from app.schemas.bundles import BundleCreateAdminVmsRequest, BundleCreateAdminVmsItemRequest
+    from app.schemas.bundles import (
+        BundleCreateAdminVmsItemRequest,
+        BundleCreateAdminVmsRequest,
+    )
+
     req = BundleCreateAdminVmsRequest(
         proxmox_node="px-testing",
         vms={
@@ -266,8 +299,10 @@ def test_bundle_create_admin_vms_request():
 # debug.py
 # ===========================================================================
 
+
 def test_debug_ping_request():
     from app.schemas.debug import DebugPingRequest
+
     req = DebugPingRequest(proxmox_node="px-testing", hosts="all")
     assert req.as_json is False  # default
 
@@ -276,14 +311,17 @@ def test_debug_ping_request():
 # base.py — ProxmoxBaseRequest
 # ===========================================================================
 
+
 def test_proxmox_base_request():
     from app.schemas.base import ProxmoxBaseRequest
+
     req = ProxmoxBaseRequest(proxmox_node="px-testing")
     assert req.as_json is True
 
 
 def test_proxmox_base_request_rejects_bad_node():
     from app.schemas.base import ProxmoxBaseRequest
+
     with pytest.raises(ValidationError):
         ProxmoxBaseRequest(proxmox_node="node; rm -rf /")
 
@@ -292,78 +330,133 @@ def test_proxmox_base_request_rejects_bad_node():
 # Backward-compatibility aliases
 # ===========================================================================
 
+
 def test_backward_compat_aliases_vms():
     """Old class names must still be importable."""
     from app.schemas.vms import Request_ProxmoxVms_VmList, VmListRequest
+
     assert Request_ProxmoxVms_VmList is VmListRequest
 
     from app.schemas.vms import Reply_ProxmoxVmList, VmListReply
+
     assert Reply_ProxmoxVmList is VmListReply
 
     from app.schemas.vms import Request_ProxmoxVmsVMID_Create, VmCreateRequest
+
     assert Request_ProxmoxVmsVMID_Create is VmCreateRequest
 
-    from app.schemas.vms import Request_ProxmoxVmsVMID_StartStopPauseResume, VmActionRequest
+    from app.schemas.vms import (
+        Request_ProxmoxVmsVMID_StartStopPauseResume,
+        VmActionRequest,
+    )
+
     assert Request_ProxmoxVmsVMID_StartStopPauseResume is VmActionRequest
 
-    from app.schemas.vms import Request_ProxmoxVmsVmIds_MassDelete, MassDeleteRequest
+    from app.schemas.vms import MassDeleteRequest, Request_ProxmoxVmsVmIds_MassDelete
+
     assert Request_ProxmoxVmsVmIds_MassDelete is MassDeleteRequest
 
 
 def test_backward_compat_aliases_vm_config():
-    from app.schemas.vm_config import Request_ProxmoxVmsVMID_VmGetConfig, VmGetConfigRequest
+    from app.schemas.vm_config import (
+        Request_ProxmoxVmsVMID_VmGetConfig,
+        VmGetConfigRequest,
+    )
+
     assert Request_ProxmoxVmsVMID_VmGetConfig is VmGetConfigRequest
 
     from app.schemas.vm_config import Request_ProxmoxVmsVMID_VmSetTag, VmSetTagRequest
+
     assert Request_ProxmoxVmsVMID_VmSetTag is VmSetTagRequest
 
 
 def test_backward_compat_aliases_snapshots():
-    from app.schemas.snapshots import Request_ProxmoxVmsVMID_CreateSnapshot, SnapshotCreateRequest
+    from app.schemas.snapshots import (
+        Request_ProxmoxVmsVMID_CreateSnapshot,
+        SnapshotCreateRequest,
+    )
+
     assert Request_ProxmoxVmsVMID_CreateSnapshot is SnapshotCreateRequest
 
-    from app.schemas.snapshots import Request_ProxmoxVmsVMID_RevertSnapshot, SnapshotRevertRequest
+    from app.schemas.snapshots import (
+        Request_ProxmoxVmsVMID_RevertSnapshot,
+        SnapshotRevertRequest,
+    )
+
     assert Request_ProxmoxVmsVMID_RevertSnapshot is SnapshotRevertRequest
 
 
 def test_backward_compat_aliases_firewall():
-    from app.schemas.firewall import Request_ProxmoxFirewall_ApplyIptablesRules, FirewallRuleApplyRequest
+    from app.schemas.firewall import (
+        FirewallRuleApplyRequest,
+        Request_ProxmoxFirewall_ApplyIptablesRules,
+    )
+
     assert Request_ProxmoxFirewall_ApplyIptablesRules is FirewallRuleApplyRequest
 
-    from app.schemas.firewall import Request_ProxmoxFirewall_EnableFirewallVm, FirewallEnableVmRequest
+    from app.schemas.firewall import (
+        FirewallEnableVmRequest,
+        Request_ProxmoxFirewall_EnableFirewallVm,
+    )
+
     assert Request_ProxmoxFirewall_EnableFirewallVm is FirewallEnableVmRequest
 
 
 def test_backward_compat_aliases_network():
-    from app.schemas.network import Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface, NodeNetworkAddRequest
-    assert Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface is NodeNetworkAddRequest
+    from app.schemas.network import (
+        NodeNetworkAddRequest,
+        Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface,
+    )
 
-    from app.schemas.network import Request_ProxmoxNetwork_WithVmId_ListNetwork, VmNetworkListRequest
+    assert (
+        Request_ProxmoxNetwork_WithNodeName_AddNetworkInterface is NodeNetworkAddRequest
+    )
+
+    from app.schemas.network import (
+        Request_ProxmoxNetwork_WithVmId_ListNetwork,
+        VmNetworkListRequest,
+    )
+
     assert Request_ProxmoxNetwork_WithVmId_ListNetwork is VmNetworkListRequest
 
 
 def test_backward_compat_aliases_storage():
     from app.schemas.storage import Request_ProxmoxStorage_List, StorageListRequest
+
     assert Request_ProxmoxStorage_List is StorageListRequest
 
-    from app.schemas.storage import Request_ProxmoxStorage_ListIso, StorageListIsoRequest
+    from app.schemas.storage import (
+        Request_ProxmoxStorage_ListIso,
+        StorageListIsoRequest,
+    )
+
     assert Request_ProxmoxStorage_ListIso is StorageListIsoRequest
 
 
 def test_backward_compat_aliases_bundles():
-    from app.schemas.bundles import Request_BundlesCoreLinuxUbuntuConfigure_AddUser, BundleAddUserRequest
+    from app.schemas.bundles import (
+        BundleAddUserRequest,
+        Request_BundlesCoreLinuxUbuntuConfigure_AddUser,
+    )
+
     assert Request_BundlesCoreLinuxUbuntuConfigure_AddUser is BundleAddUserRequest
 
     from app.schemas.bundles import (
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
         BundleCreateAdminVmsRequest,
+        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
     )
-    assert Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms is BundleCreateAdminVmsRequest
+
+    assert (
+        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms
+        is BundleCreateAdminVmsRequest
+    )
 
 
 def test_backward_compat_aliases_debug():
-    from app.schemas.debug import Request_DebugPing, DebugPingRequest
+    from app.schemas.debug import DebugPingRequest, Request_DebugPing
+
     assert Request_DebugPing is DebugPingRequest
 
-    from app.schemas.debug import Reply_DebugPing, DebugPingReply
+    from app.schemas.debug import DebugPingReply, Reply_DebugPing
+
     assert Reply_DebugPing is DebugPingReply
