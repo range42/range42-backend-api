@@ -9,11 +9,11 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
-  - [WebSocket API](#websocket-api)
+- [WebSocket API](#websocket-api)
 - [Project Structure](#project-structure)
 - [Architecture](#architecture)
 - [Development](#development)
-  - [Test Structure](#test-structure)
+- [Test Structure](#test-structure)
 - [License](#license)
 
 ---
