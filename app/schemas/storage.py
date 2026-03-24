@@ -1,6 +1,6 @@
 """Consolidated storage schemas: list, download ISO, list ISO, list templates."""
 
-from typing import List, Literal
+from typing import Literal
 from pydantic import BaseModel, Field
 
 

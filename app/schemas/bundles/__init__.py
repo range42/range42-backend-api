@@ -5,7 +5,7 @@ This __init__.py serves double duty:
 2. Exposes consolidated schema classes for new code to import from app.schemas.bundles.
 """
 
-from typing import Dict, List, Literal
+from typing import Dict, Literal
 from pydantic import BaseModel, Field
 
 
