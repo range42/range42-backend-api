@@ -74,3 +74,37 @@ class TestVmLifecycle:
             json={"proxmox_node": "pve01", "vm_id": "100", "as_json": False},
         )
         assert resp.status_code == 500
+
+
+class TestVmListUsageFields:
+    """Verify list_usage returns fields consumed by frontend."""
+
+    def test_list_usage_success(self, client, mock_runner):
+        mock_runner.return_value = (0, [{
+            "event": "runner_on_ok",
+            "event_data": {
+                "res": {
+                    "vm_list_usage": [{
+                        "vm_id": 1023,
+                        "vm_name": "test-vm",
+                        "vm_status": "running",
+                        "cpu_current_usage": 35.0,
+                        "cpu_allocated": 4,
+                        "ram_current_usage": 5264621568,
+                        "ram_max": 8589934592,
+                        "disk_current_usage": 0,
+                        "disk_read": 1258291,
+                        "disk_write": 419430,
+                        "disk_max": 34359738368,
+                        "net_in": 3670016,
+                        "net_out": 838860,
+                        "vm_uptime": 308520,
+                    }]
+                }
+            }
+        }], "ok", "ok")
+        resp = client.post(
+            "/v0/admin/proxmox/vms/list_usage",
+            json={"proxmox_node": "pve01", "as_json": True},
+        )
+        assert resp.status_code == 200
