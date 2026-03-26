@@ -1,6 +1,6 @@
 """Consolidated VM config schemas: get config, get cdrom, get cpu, get ram, set tag."""
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -379,6 +379,220 @@ class VmSetTagReply(BaseModel):
                         "tags": "group_01,group_02",
                     }
                 ],
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# VM Set Name
+# ---------------------------------------------------------------------------
+
+
+class Request_ProxmoxVmsVMID_VmSetName(BaseModel):
+    proxmox_node: str = Field(
+        ...,
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
+    )
+    as_json: bool = Field(
+        default=True, description="If true : JSON output else : raw output"
+    )
+    vm_id: str = Field(
+        ...,
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$",
+    )
+    vm_name: str = Field(
+        ...,
+        description="New name for the virtual machine",
+        pattern=r"^[A-Za-z0-9._-]+$",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "pve01",
+                "vm_id": "1023",
+                "vm_name": "web-server-01",
+                "as_json": True,
+            }
+        }
+    }
+
+
+class Reply_ProxmoxVmsVMID_VmSetName(BaseModel):
+    rc: int = Field(0, description="RETURN code (0 = OK)")
+    result: Optional[dict] = None
+    log_multiline: Optional[str] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "rc": 0,
+                "result": None,
+                "log_multiline": None,
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# VM Set Description
+# ---------------------------------------------------------------------------
+
+
+class Request_ProxmoxVmsVMID_VmSetDescription(BaseModel):
+    proxmox_node: str = Field(
+        ...,
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
+    )
+    as_json: bool = Field(
+        default=True, description="If true : JSON output else : raw output"
+    )
+    vm_id: str = Field(
+        ...,
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$",
+    )
+    vm_description: str = Field(
+        ...,
+        max_length=4096,
+        description="New description for the virtual machine",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "pve01",
+                "vm_id": "1023",
+                "vm_description": "Production web server",
+                "as_json": True,
+            }
+        }
+    }
+
+
+class Reply_ProxmoxVmsVMID_VmSetDescription(BaseModel):
+    rc: int = Field(0, description="RETURN code (0 = OK)")
+    result: Optional[dict] = None
+    log_multiline: Optional[str] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "rc": 0,
+                "result": None,
+                "log_multiline": None,
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# VM Set CPU
+# ---------------------------------------------------------------------------
+
+
+class Request_ProxmoxVmsVMID_VmSetCpu(BaseModel):
+    proxmox_node: str = Field(
+        ...,
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
+    )
+    as_json: bool = Field(
+        default=True, description="If true : JSON output else : raw output"
+    )
+    vm_id: str = Field(
+        ...,
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$",
+    )
+    vm_cores: int = Field(
+        ...,
+        ge=1,
+        le=128,
+        description="Number of CPU cores",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "pve01",
+                "vm_id": "1023",
+                "vm_cores": 4,
+                "as_json": True,
+            }
+        }
+    }
+
+
+class Reply_ProxmoxVmsVMID_VmSetCpu(BaseModel):
+    rc: int = Field(0, description="RETURN code (0 = OK)")
+    result: Optional[dict] = None
+    log_multiline: Optional[str] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "rc": 0,
+                "result": None,
+                "log_multiline": None,
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# VM Set Memory
+# ---------------------------------------------------------------------------
+
+
+class Request_ProxmoxVmsVMID_VmSetMemory(BaseModel):
+    proxmox_node: str = Field(
+        ...,
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
+    )
+    as_json: bool = Field(
+        default=True, description="If true : JSON output else : raw output"
+    )
+    vm_id: str = Field(
+        ...,
+        description="Virtual machine id",
+        pattern=r"^[0-9]+$",
+    )
+    vm_memory: int = Field(
+        ...,
+        ge=128,
+        le=1048576,
+        description="Memory in megabytes",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "proxmox_node": "pve01",
+                "vm_id": "1023",
+                "vm_memory": 4096,
+                "as_json": True,
+            }
+        }
+    }
+
+
+class Reply_ProxmoxVmsVMID_VmSetMemory(BaseModel):
+    rc: int = Field(0, description="RETURN code (0 = OK)")
+    result: Optional[dict] = None
+    log_multiline: Optional[str] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "rc": 0,
+                "result": None,
+                "log_multiline": None,
             }
         }
     }
