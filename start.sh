@@ -1,45 +1,35 @@
 #!/bin/bash
-
-# dirty & temp fix : 
-
-ansible-galaxy collection install community.general -p ~/.ansible/collections
-ansible-galaxy collection install ansible.posix -p ~/.ansible/collections
-ansible-galaxy collection install ansible.windows -p ~/.ansible/collections
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
+set -euo pipefail
 
 PROJECT_ROOT="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 export PROJECT_ROOT_DIR="$PROJECT_ROOT"
-APP_DIR="$PROJECT_ROOT_DIR/app"
-APP_MODULE="app.main:app"
 
+# Load .env file if it exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
 
-export API_BACKEND_PUBLIC_PLAYBOOKS_DIR="$HOME/_products.git-hyde-repo/range42-infrastructures-installers/"
-export API_BACKEND_WWWAPP_PLAYBOOKS_DIR="$PROJECT_ROOT_DIR/"
-export API_BACKEND_INVENTORY_DIR="$PROJECT_ROOT_DIR/inventory/"
-export API_BACKEND_VAULT_FILE="$HOME/_products.git-hyde-repo/range42-ansible_roles-private-devkit//secrets/px-testing.cr42_tailscale.yaml"
-#
-# vault pwd
-#
-export VAULT_PASSWORD_FILE="/tmp/vault/vault_pass.txt"
-#export VAULT_PASSWORD="redacted.
+# Install Ansible collections if needed
+if [ ! -d "$HOME/.ansible/collections/ansible_collections/community/general" ]; then
+    echo ":: Installing Ansible collections..."
+    ansible-galaxy collection install -r requirements.yml -p ~/.ansible/collections
+fi
 
-HOST="0.0.0.0"
-PORT="8000"
-WORKERS=1
+# Set defaults for required vars
+export API_BACKEND_WWWAPP_PLAYBOOKS_DIR="${API_BACKEND_WWWAPP_PLAYBOOKS_DIR:-$PROJECT_ROOT_DIR/}"
+export API_BACKEND_INVENTORY_DIR="${API_BACKEND_INVENTORY_DIR:-$PROJECT_ROOT_DIR/inventory/}"
 
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-8000}"
 
-# move to project + export
 cd "$PROJECT_ROOT_DIR" || exit
 export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
 
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ####
-
-echo ":: start :: $APP_MODULE - $PROJECT_ROOT_DIR"
-exec uvicorn "$APP_MODULE" \
-  --host "$HOST" \
-  --port "$PORT" \
-  --workers "$WORKERS" \
-  --log-level info  --reload
+echo ":: start :: app.main:app - $PROJECT_ROOT_DIR"
+exec uvicorn app.main:app \
+    --host "$HOST" \
+    --port "$PORT" \
+    --log-level info \
+    --reload

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+.venv
+venv
+*.egg-info
+.pytest_cache
+docs/
+curl_utils/
+tests/
+*.md
+!requirements.txt
+!requirements.yml

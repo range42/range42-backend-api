@@ -1,13 +1,34 @@
-import re
-from venv import logger
-import os
+"""Playbook path validation and resolution.
 
-from fastapi import HTTPException
+Provides resolver functions for actions, bundles, and scenarios.  Each
+function validates the action name against a strict regex, resolves the
+file path, and checks for path traversal before returning the absolute
+path to the playbook YAML file.
+"""
+
+import logging
+import os
+import re
 from pathlib import Path
 
-####
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
 
 def _warmup_checks(playbooks_dir_type: str) -> Path:
+    """Validate and resolve the playbooks base directory.
+
+    Reads the appropriate environment variable based on the directory
+    type and verifies that the resolved path exists and is a directory.
+
+    :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
+    :type playbooks_dir_type: str
+    :returns: Resolved absolute path to the playbooks directory.
+    :rtype: Path
+    :raises HTTPException: 400 if the directory type is unknown, the
+        environment variable is missing, or the directory does not exist.
+    """
     playbooks_dir: Path
 
     if playbooks_dir_type == "www_app":
@@ -35,7 +56,20 @@ def _warmup_checks(playbooks_dir_type: str) -> Path:
 
 
 def resolve_actions_playbook(action_name: str, playbooks_dir_type: str) -> Path:
-    """ resolve actions file path """
+    """Resolve an action playbook file path.
+
+    Looks for ``<playbooks_dir>/actions/<action_name>/main.yml`` after
+    validating the action name format.
+
+    :param action_name: Slash-separated action path (e.g. ``"vm/clone-template"``).
+    :type action_name: str
+    :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
+    :type playbooks_dir_type: str
+    :returns: Absolute path to the action's ``main.yml``.
+    :rtype: Path
+    :raises HTTPException: 400 if the name is invalid, the file is missing,
+        or a path traversal is detected.
+    """
 
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     actions_dir = (playbooks_dir / "actions").resolve()
@@ -55,8 +89,22 @@ def resolve_actions_playbook(action_name: str, playbooks_dir_type: str) -> Path:
 
     return main_filepath
 
+
 def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
-    """ resolve bundles file path """
+    """Resolve a bundle playbook file path.
+
+    Looks for ``<playbooks_dir>/bundles/<action_name>/main.yml`` after
+    validating the action name format.
+
+    :param action_name: Slash-separated bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :type action_name: str
+    :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
+    :type playbooks_dir_type: str
+    :returns: Absolute path to the bundle's ``main.yml``.
+    :rtype: Path
+    :raises HTTPException: 400 if the name is invalid, the file is missing,
+        or a path traversal is detected.
+    """
 
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     actions_dir = (playbooks_dir / "bundles").resolve()
@@ -68,8 +116,25 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
 
     return main_filepath
 
-def resolve_bundles_playbook_init_file(action_name: str, playbooks_dir_type: str) -> Path:
-    """ resolve bundles file path """
+
+def resolve_bundles_playbook_init_file(
+    action_name: str, playbooks_dir_type: str
+) -> Path:
+    """Resolve a bundle's init playbook file path.
+
+    Looks for ``<playbooks_dir>/bundles/<action_name>/init.yml`` instead
+    of the default ``main.yml``.  Used by multi-step bundle execution
+    that runs per-VM initialization before the main playbook.
+
+    :param action_name: Slash-separated bundle path.
+    :type action_name: str
+    :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
+    :type playbooks_dir_type: str
+    :returns: Absolute path to the bundle's ``init.yml``.
+    :rtype: Path
+    :raises HTTPException: 400 if the name is invalid, the file is missing,
+        or a path traversal is detected.
+    """
 
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     actions_dir = (playbooks_dir / "bundles").resolve()
@@ -77,13 +142,28 @@ def resolve_bundles_playbook_init_file(action_name: str, playbooks_dir_type: str
     # print (actions_dir)
 
     actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
-    main_filepath = _resolve_file(actions_dir, actions_regex_pattern, action_name, is_init_yaml=True )
+    main_filepath = _resolve_file(
+        actions_dir, actions_regex_pattern, action_name, is_init_yaml=True
+    )
 
     return main_filepath
 
 
 def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Path:
-    """ resolve scenarios file path """
+    """Resolve a scenario playbook file path.
+
+    Looks for ``<playbooks_dir>/scenarios/<action_name>/main.yml`` after
+    validating the action name format.
+
+    :param action_name: Slash-separated scenario path (e.g. ``"demo_lab"``).
+    :type action_name: str
+    :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
+    :type playbooks_dir_type: str
+    :returns: Absolute path to the scenario's ``main.yml``.
+    :rtype: Path
+    :raises HTTPException: 400 if the name is invalid, the file is missing,
+        or a path traversal is detected.
+    """
 
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     scenarios_dir = (playbooks_dir / "scenarios").resolve()
@@ -97,17 +177,36 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
 ####
 
 
-def _resolve_file(actions_dir: Path,
-                 actions_regex_pattern: re.Pattern[str],
-                 action_name: str,
-                 *,
-                 is_init_yaml: bool = False) -> Path:
+def _resolve_file(
+    actions_dir: Path,
+    actions_regex_pattern: re.Pattern[str],
+    action_name: str,
+    *,
+    is_init_yaml: bool = False,
+) -> Path:
+    """Validate an action name and resolve the corresponding playbook file.
+
+    Performs regex validation, path resolution, traversal detection, and
+    existence checks.
+
+    :param actions_dir: Base directory for the action type (actions/bundles/scenarios).
+    :type actions_dir: Path
+    :param actions_regex_pattern: Compiled regex pattern for name validation.
+    :type actions_regex_pattern: re.Pattern[str]
+    :param action_name: The action name to resolve (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :type action_name: str
+    :param is_init_yaml: If ``True``, resolve ``init.yml`` instead of ``main.yml``.
+    :type is_init_yaml: bool
+    :returns: Absolute path to the resolved playbook file.
+    :rtype: Path
+    :raises HTTPException: 400 if the name format is invalid, a path
+        traversal is detected, or the file does not exist.
+    """
     #
     # REGEX CHECKS
     #
 
     if not actions_regex_pattern.fullmatch(action_name):
-
         err = f":: err - INVALID ACTION NAME FORMAT {action_name!r}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -127,7 +226,6 @@ def _resolve_file(actions_dir: Path,
     #
 
     if not main_filepath.is_relative_to(actions_dir):
-
         err = f":: err - POTENTIAL PATH TRAVERSAL DETECTED : {main_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -139,10 +237,8 @@ def _resolve_file(actions_dir: Path,
     #     raise HTTPException(status_code=400, detail=err)
 
     if not main_filepath.exists():
-
         err = f":: err - PLAYBOOK NOT FOUND : {main_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
 
     return main_filepath
-

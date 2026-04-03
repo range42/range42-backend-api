@@ -1,14 +1,36 @@
+"""Inventory path validation and resolution.
 
+Provides :func:`resolve_inventory`, which validates an inventory name
+against a strict regex, resolves the file path under the project's
+``inventory/`` directory, and checks for path traversal before returning
+the absolute path.
+"""
+
+import logging
 import os
-from pathlib import Path
 import re
-from venv import logger
+from pathlib import Path
 
 from fastapi import HTTPException
 
+logger = logging.getLogger(__name__)
+
 
 def resolve_inventory(inventory_name: str) -> Path:
-    """ resolve inventory file path """
+    """Resolve an inventory file path from a logical name.
+
+    Constructs the path ``<PROJECT_ROOT_DIR>/inventory/<inventory_name>.yml``,
+    validates the name format, and checks for traversal or missing files.
+
+    :param inventory_name: Logical inventory name (e.g. ``"hosts"``).
+        Must match ``^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$``.
+    :type inventory_name: str
+    :returns: Absolute resolved path to the inventory YAML file.
+    :rtype: Path
+    :raises HTTPException: 400 if the name format is invalid, a path
+        traversal is detected, or the file does not exist.
+        500 if the inventory directory itself is missing.
+    """
 
     project_root = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
     inventory_dir = (project_root / "inventory").resolve()
@@ -23,12 +45,28 @@ def resolve_inventory(inventory_name: str) -> Path:
         name_pattern=inventory_name_pattern,
     )
 
-def _resolve_inventory_file(inventory_dir: Path,
-                            inventory_name: str,
-                            name_pattern: re.Pattern[str]) -> Path:
+
+def _resolve_inventory_file(
+    inventory_dir: Path, inventory_name: str, name_pattern: re.Pattern[str]
+) -> Path:
+    """Validate and resolve an inventory file path.
+
+    Performs regex validation, traversal detection, directory existence
+    check, and strict file resolution.
+
+    :param inventory_dir: Absolute path to the inventory directory.
+    :type inventory_dir: Path
+    :param inventory_name: The inventory name to resolve.
+    :type inventory_name: str
+    :param name_pattern: Compiled regex pattern for name validation.
+    :type name_pattern: re.Pattern[str]
+    :returns: Absolute resolved path to the inventory file.
+    :rtype: Path
+    :raises HTTPException: 400 if the name is invalid, traversal is detected,
+        or the file is not found.  500 if the inventory directory is missing.
+    """
 
     if not name_pattern.fullmatch(str(inventory_name)):
-
         err = f":: err - INVALID INVENTORY NAME FORMAT {inventory_name!r}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -41,7 +79,6 @@ def _resolve_inventory_file(inventory_dir: Path,
     #
 
     if not inventory_filepath.is_relative_to(inventory_dir):
-
         err = f":: err - POTENTIAL PATH TRAVERSAL DETECTED : {inventory_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -51,7 +88,6 @@ def _resolve_inventory_file(inventory_dir: Path,
     #
 
     if not inventory_dir.exists():
-
         err = f":: err - INVENTORY DIR  NOT FOUND : {inventory_dir}"
         logger.error(err)
         raise HTTPException(status_code=500, detail=err)
@@ -63,7 +99,6 @@ def _resolve_inventory_file(inventory_dir: Path,
         inventory_filepath = inventory_filepath.resolve(strict=True)
 
     except FileNotFoundError:
-
         err = f":: err - INVENTORY NOT FOUND : {inventory_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -71,6 +106,3 @@ def _resolve_inventory_file(inventory_dir: Path,
     logger.info(f":: ok - resolved inventory : {inventory_filepath}")
 
     return inventory_filepath
-
-
-

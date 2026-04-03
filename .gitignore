@@ -43,9 +43,12 @@ out/
 *.log
 logs/
 
-# misc 
+# misc
 *.swp
 *.swo
 *.tmp
 *.bak
+
+# claude
+CLAUDE.md
 

@@ -1,15 +1,34 @@
+"""VM ID to name resolution.
 
-from  pathlib import Path
-import os, json, logging
+Provides :func:`resolv_id_to_vm_name`, which queries the Proxmox VM list
+via Ansible and returns the ``vm_id`` / ``vm_name`` pair for a given VM ID.
+Used by routes that need the VM name for operations like delete, clone,
+and snapshot management.
+"""
+
+import json
+import logging
+import os
+from pathlib import Path
+
 from fastapi import HTTPException
 
-from app.runner import  run_playbook_core # , extract_action_results
-from app.extract_actions import extract_action_results
+from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 
-debug =1
+logger = logging.getLogger(__name__)
 
 
 def hack_same_vm_id(a, b) -> bool:
+    """Compare two VM IDs that may be int or str.
+
+    Attempts integer comparison first, falls back to string comparison.
+
+    :param a: First VM ID value.
+    :param b: Second VM ID value.
+    :returns: ``True`` if the IDs are equal after type coercion.
+    :rtype: bool
+    """
 
     try:
         return int(a) == int(b)
@@ -17,24 +36,38 @@ def hack_same_vm_id(a, b) -> bool:
     except (TypeError, ValueError):
         return str(a) == str(b)
 
+
 def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
+    """Resolve a VM ID to its name by querying the Proxmox VM list.
+
+    Runs the ``vm_list`` action via Ansible, iterates over the results,
+    and returns the matching ``vm_id`` / ``vm_name`` pair.
+
+    :param proxmox_node: The Proxmox node name to query.
+    :type proxmox_node: str
+    :param target_vm_id: The VM ID to look up.
+    :type target_vm_id: str
+    :returns: Dict with ``"vm_id"`` and ``"vm_name"`` keys.
+    :rtype: dict
+    :raises HTTPException: 500 if the VM ID is not found in the results
+        or the result data cannot be parsed.
+    """
 
     PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
     PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "generic.yml"
     INVENTORY_SRC = PROJECT_ROOT / "inventory" / "hosts.yml"
 
-    if debug == 1:
-        print(f":: PROJECT_ROOT  :: {PROJECT_ROOT} ")
-        print(f":: PLAYBOOK_SRC  :: {PLAYBOOK_SRC} ")
-        print(f":: INVENTORY_SRC :: {INVENTORY_SRC} ")
+    logger.debug("PROJECT_ROOT: %s", PROJECT_ROOT)
+    logger.debug("PLAYBOOK_SRC: %s", PLAYBOOK_SRC)
+    logger.debug("INVENTORY_SRC: %s", INVENTORY_SRC)
 
     if not PLAYBOOK_SRC.exists():
         err = f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
-        logging.error(err)
+        logger.error("Missing playbook: %s", PLAYBOOK_SRC)
 
     if not INVENTORY_SRC.exists():
         err = f":: err - MISSING INVENTORY : {INVENTORY_SRC}"
-        logging.error(err)
+        logger.error("Missing inventory: %s", INVENTORY_SRC)
 
     extravars = {}
     extravars["proxmox_vm_action"] = "vm_list"
@@ -57,35 +90,32 @@ def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
 
     # cross check json / py object
     if isinstance(action_result, str):
-
         try:
             data = json.loads(action_result)
 
-        except json.JSONDecodeError as e:
-            err = f":: err - INVALID actions_results JSONS"
-            logging.error(err)
+        except json.JSONDecodeError:
+            err = ":: err - INVALID actions_results JSONS"
+            logger.error("Invalid action_results JSON")
             raise HTTPException(status_code=500, detail=err)
 
     else:
         data = action_result
 
-    for outer in data: # first []
-
+    for outer in data:  # first []
         if not isinstance(outer, list):
             continue
 
-        for item in outer: # second[]
-
+        for item in outer:  # second[]
             # if isinstance(item, dict) and str(item.get("vm_id")) == target_vm_id:
             # if isinstance(item, dict) and item.get("vm_id") == target_vm_id:
-            if isinstance(item, dict) and hack_same_vm_id(item.get("vm_id"), target_vm_id): # hacky way - should be fixed.
-
-                if debug ==1 :
-
-                    print("=====================")
-                    print( item.get("vm_id"))
-                    print( item.get("vm_name"))
-                    print("=====================")
+            if isinstance(item, dict) and hack_same_vm_id(
+                item.get("vm_id"), target_vm_id
+            ):  # hacky way - should be fixed.
+                logger.debug(
+                    "Matched VM — vm_id: %s, vm_name: %s",
+                    item.get("vm_id"),
+                    item.get("vm_name"),
+                )
 
                 return {
                     "vm_id": item.get("vm_id"),
@@ -94,10 +124,6 @@ def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
 
     # return None
 
-    err = f":: err - vm_id NOT FOUND"
-    logging.error(err)
+    err = ":: err - vm_id NOT FOUND"
+    logger.error("vm_id not found: %s", target_vm_id)
     raise HTTPException(status_code=500, detail=err)
-
-
-
-
