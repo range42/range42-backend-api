@@ -102,6 +102,7 @@ async def fetch_vm_status(
                 "name": vm.get("name", ""),
                 "status": vm.get("status", "unknown"),
                 "cpu": round(vm.get("cpu", 0) * 100, 1),
+                "cores": vm.get("cpus", 0),
                 "mem": vm.get("mem", 0),
                 "maxmem": vm.get("maxmem", 0),
                 "uptime": vm.get("uptime", 0),
@@ -135,6 +136,9 @@ def compute_diff(prev: Dict[int, dict], current: Dict[int, dict]) -> Optional[di
         elif (
             old["status"] != vm["status"]
             or abs(old.get("cpu", 0) - vm.get("cpu", 0)) > 2
+            or old.get("tags", "") != vm.get("tags", "")
+            or old.get("cores", 0) != vm.get("cores", 0)
+            or old.get("maxmem", 0) != vm.get("maxmem", 0)
         ):
             changes[vmid] = {"type": "changed", **vm}
 

@@ -67,13 +67,13 @@ class TestComputeDiff:
         assert 101 in diff  # removed
         assert 102 in diff  # added
 
-    def test_tag_changes_not_detected_by_diff(self):
-        """Tags are only synced via full refreshes, not diffs.
-        compute_diff only compares status and cpu threshold."""
+    def test_tag_changes_detected_by_diff(self):
+        """Tag changes trigger a diff so the frontend can update actualConfig."""
         prev = {100: {"vmid": 100, "status": "running", "cpu": 5.0, "tags": "admin"}}
         curr = {100: {"vmid": 100, "status": "running", "cpu": 5.0, "tags": "admin;monitoring"}}
-        # Tags change alone does NOT trigger a diff
-        assert compute_diff(prev, curr) is None
+        diff = compute_diff(prev, curr)
+        assert diff is not None
+        assert diff[100]["type"] == "changed"
 
     def test_full_state_includes_tags(self):
         """Verify that VM status dicts include the tags field."""
