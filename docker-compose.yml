@@ -7,6 +7,7 @@ services:
       - ./app:/app/app:ro
       - ./playbooks:/app/playbooks:ro
       - ./inventory:/app/inventory:ro
+      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
     environment:
       - PROJECT_ROOT_DIR=/app
       - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/

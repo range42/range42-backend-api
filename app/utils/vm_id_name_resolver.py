@@ -6,12 +6,15 @@ Used by routes that need the VM name for operations like delete, clone,
 and snapshot management.
 """
 
-from  pathlib import Path
-import os, json, logging
+import json
+import logging
+import os
+from pathlib import Path
+
 from fastapi import HTTPException
 
-from app.core.runner import run_playbook_core
 from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,7 @@ def hack_same_vm_id(a, b) -> bool:
 
     except (TypeError, ValueError):
         return str(a) == str(b)
+
 
 def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
     """Resolve a VM ID to its name by querying the Proxmox VM list.
@@ -86,30 +90,32 @@ def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
 
     # cross check json / py object
     if isinstance(action_result, str):
-
         try:
             data = json.loads(action_result)
 
-        except json.JSONDecodeError as e:
-            err = f":: err - INVALID actions_results JSONS"
+        except json.JSONDecodeError:
+            err = ":: err - INVALID actions_results JSONS"
             logger.error("Invalid action_results JSON")
             raise HTTPException(status_code=500, detail=err)
 
     else:
         data = action_result
 
-    for outer in data: # first []
-
+    for outer in data:  # first []
         if not isinstance(outer, list):
             continue
 
-        for item in outer: # second[]
-
+        for item in outer:  # second[]
             # if isinstance(item, dict) and str(item.get("vm_id")) == target_vm_id:
             # if isinstance(item, dict) and item.get("vm_id") == target_vm_id:
-            if isinstance(item, dict) and hack_same_vm_id(item.get("vm_id"), target_vm_id): # hacky way - should be fixed.
-
-                logger.debug("Matched VM — vm_id: %s, vm_name: %s", item.get("vm_id"), item.get("vm_name"))
+            if isinstance(item, dict) and hack_same_vm_id(
+                item.get("vm_id"), target_vm_id
+            ):  # hacky way - should be fixed.
+                logger.debug(
+                    "Matched VM — vm_id: %s, vm_name: %s",
+                    item.get("vm_id"),
+                    item.get("vm_name"),
+                )
 
                 return {
                     "vm_id": item.get("vm_id"),
@@ -118,6 +124,6 @@ def resolv_id_to_vm_name(proxmox_node: str, target_vm_id: str) -> dict:
 
     # return None
 
-    err = f":: err - vm_id NOT FOUND"
+    err = ":: err - vm_id NOT FOUND"
     logger.error("vm_id not found: %s", target_vm_id)
     raise HTTPException(status_code=500, detail=err)

@@ -62,8 +62,12 @@ def _build_envvars(vm: VaultManager) -> dict:
         "PYTHONWARNINGS": "ignore::DeprecationWarning",
         "ANSIBLE_ROLES_PATH": os.environ.get("ANSIBLE_ROLES_PATH", ""),
         "ANSIBLE_FILTER_PLUGINS": os.environ.get("ANSIBLE_FILTER_PLUGINS", ""),
-        "ANSIBLE_COLLECTIONS_PATH": os.environ.get("ANSIBLE_COLLECTIONS_PATH", coll_paths),
-        "ANSIBLE_COLLECTIONS_PATHS": os.environ.get("ANSIBLE_COLLECTIONS_PATHS", coll_paths),
+        "ANSIBLE_COLLECTIONS_PATH": os.environ.get(
+            "ANSIBLE_COLLECTIONS_PATH", coll_paths
+        ),
+        "ANSIBLE_COLLECTIONS_PATHS": os.environ.get(
+            "ANSIBLE_COLLECTIONS_PATHS", coll_paths
+        ),
         "ANSIBLE_LIBRARY": os.environ.get("ANSIBLE_LIBRARY", ""),
     }
 
@@ -80,7 +84,9 @@ def _build_envvars(vm: VaultManager) -> dict:
 
 
 def _setup_temp_dir(
-    inventory: Path, playbook: Path, vm: VaultManager,
+    inventory: Path,
+    playbook: Path,
+    vm: VaultManager,
 ) -> tuple[Path, Path, Path]:
     """Create an isolated temp directory for a single playbook run.
 
@@ -117,9 +123,7 @@ def _setup_temp_dir(
     env_dir = tmp_dir / "env"
     env_dir.mkdir(parents=True, exist_ok=True)
     env_file = env_dir / "envvars"
-    env_file.write_text(
-        "\n".join(f"{k}={v}" for k, v in envvars.items()) + "\n"
-    )
+    env_file.write_text("\n".join(f"{k}={v}" for k, v in envvars.items()) + "\n")
 
     return tmp_dir, inv_dest, play_rel
 
@@ -155,7 +159,7 @@ def _build_cmdline(
         cmdline = f'{(cmdline or "").strip()} -e "@{vars_file}"'.strip()
 
     if tags:
-        cmdline = f'{(cmdline or "").strip()} --tags {tags}'.strip()
+        cmdline = f"{(cmdline or '').strip()} --tags {tags}".strip()
 
     return cmdline
 

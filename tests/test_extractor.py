@@ -17,7 +17,12 @@ def test_extract_returns_empty_for_no_match():
 
 
 def test_extract_skips_non_ok_events():
-    events = [{"event": "runner_on_failed", "event_data": {"res": {"vm_list": [{"vmid": 100}]}}}]
+    events = [
+        {
+            "event": "runner_on_failed",
+            "event_data": {"res": {"vm_list": [{"vmid": 100}]}},
+        }
+    ]
     result = extract_action_results(events, "vm_list")
     assert result == []
 

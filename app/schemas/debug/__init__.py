@@ -6,25 +6,24 @@ This __init__.py serves double duty:
 """
 
 from typing import List
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Debug Ping
 # ---------------------------------------------------------------------------
 
-class DebugPingRequest(BaseModel):
 
+class DebugPingRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default="px-testing",
         description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool | None = Field(
-        default=False,
-        description="If true : JSON output else : raw output"
+        default=False, description="If true : JSON output else : raw output"
     )
     #
 
@@ -32,31 +31,24 @@ class DebugPingRequest(BaseModel):
         ...,
         # default="all",
         description="Targeted ansible hosts",
-        pattern=r"^[A-Za-z0-9\._-]+$"
+        pattern=r"^[A-Za-z0-9\._-]+$",
     )
-
-
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "hosts": "all",
-                "as_json": False
-            }
+            "example": {"proxmox_node": "px-testing", "hosts": "all", "as_json": False}
         }
     }
 
 
 class DebugPingReply(BaseModel):
-
     rc: int = Field(
-        ..., # mandatory field.
-        description="Return code of the job (0 = success, >0 = error/warning)"
+        ...,  # mandatory field.
+        description="Return code of the job (0 = success, >0 = error/warning)",
     )
     log_multiline: List[str] = Field(
-        ..., # mandatory field.
-        description="Execution log as a list of lines (chronological order)"
+        ...,  # mandatory field.
+        description="Execution log as a list of lines (chronological order)",
     )
 
     model_config = {
@@ -70,8 +62,8 @@ class DebugPingReply(BaseModel):
                     "ok: [something-1]",
                     "",
                     "PLAY RECAP *********************************************************************",
-                    "something-1 : ok=1 changed=0 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0"
-                ]
+                    "something-1 : ok=1 changed=0 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0",
+                ],
             }
         }
     }

@@ -2,39 +2,34 @@
 
 from enum import Enum
 from typing import List, Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # VM List
 # ---------------------------------------------------------------------------
 
-class VmListRequest(BaseModel):
 
+class VmListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True
-            }
+            "example": {"proxmox_node": "px-testing", "as_json": True}
         }
     }
 
 
 class VmListActionEnum(str, Enum):
-
     LIST = "vm_list"
     START = "vm_start"
     STOP = "vm_stop"
@@ -44,14 +39,12 @@ class VmListActionEnum(str, Enum):
 
 
 class VmListStatusEnum(str, Enum):
-
     RUNNING = "running"
     STOPPED = "stopped"
     PAUSED = "paused"
 
 
 class VmListMetaReply(BaseModel):
-
     cpu_current_usage: int
     cpu_allocated: int
     disk_current_usage: int
@@ -65,53 +58,46 @@ class VmListMetaReply(BaseModel):
 
 
 class VmListInfoReply(BaseModel):
-
-    action:  VmListActionEnum
+    action: VmListActionEnum
     source: str = Field("proxmox", description="data source provider")
     proxmox_node: str
     vm_name: str
-    vm_status:  VmListStatusEnum
+    vm_status: VmListStatusEnum
     vm_id: int
     vm_uptime: int
-    vm_meta:  VmListMetaReply
+    vm_meta: VmListMetaReply
 
 
 class VmListReply(BaseModel):
-
     rc: int = Field(..., description="RETURN CODE (0 = OK) ")
-    result: List[List[ VmListInfoReply]]
+    result: List[List[VmListInfoReply]]
 
 
 # ---------------------------------------------------------------------------
 # VM List Usage
 # ---------------------------------------------------------------------------
 
-class VmListUsageRequest(BaseModel):
 
+class VmListUsageRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True
-            }
+            "example": {"proxmox_node": "px-testing", "as_json": True}
         }
     }
 
 
 class VmListUsageItemReply(BaseModel):
-
     action: Literal["vm_list_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -133,7 +119,6 @@ class VmListUsageItemReply(BaseModel):
 
 
 class VmListUsageReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmListUsageItemReply]
 
@@ -143,22 +128,22 @@ class VmListUsageReply(BaseModel):
                 "rc": 0,
                 "result": [
                     {
-                        "cpu_allocated":1,
-                        "cpu_current_usage":0,
-                        "disk_current_usage":0,
-                        "disk_max":34359738368,
-                        "disk_read":0,
-                        "disk_write":0,
-                        "net_in":280531583,
-                        "net_out":6330590,
-                        "ram_current_usage":1910544625,
-                        "ram_max":4294967296,
-                        "vm_id":1020,
-                        "vm_name":"admin-web-api-kong",
-                        "vm_status":"running",
-                        "vm_uptime":79940
+                        "cpu_allocated": 1,
+                        "cpu_current_usage": 0,
+                        "disk_current_usage": 0,
+                        "disk_max": 34359738368,
+                        "disk_read": 0,
+                        "disk_write": 0,
+                        "net_in": 280531583,
+                        "net_out": 6330590,
+                        "ram_current_usage": 1910544625,
+                        "ram_max": 4294967296,
+                        "vm_id": 1020,
+                        "vm_name": "admin-web-api-kong",
+                        "vm_status": "running",
+                        "vm_uptime": 79940,
                     }
-                ]
+                ],
             }
         }
     }
@@ -168,18 +153,17 @@ class VmListUsageReply(BaseModel):
 # VM Create
 # ---------------------------------------------------------------------------
 
-class VmCreateRequest(BaseModel):
 
+class VmCreateRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -187,54 +171,52 @@ class VmCreateRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
-    vm_name: str  = Field(
+    vm_name: str = Field(
         ...,
         # default="new-vm",
         description="Virtual machine meta name",
-        pattern = r"^[A-Za-z0-9-]*$"
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     vm_cpu: str = Field(
         ...,
         # default= "host",
-        description='CPU type/model - host)',
-        pattern=r"^[A-Za-z0-9._-]+$"
+        description="CPU type/model - host)",
+        pattern=r"^[A-Za-z0-9._-]+$",
     )
 
     vm_cores: int = Field(
         ...,
         # default=1,
         ge=1,
-        description="Number of cores per socket"
+        description="Number of cores per socket",
     )
 
     vm_sockets: int = Field(
         ...,
         # default=1,
         ge=1,
-        description="Number of CPU sockets"
+        description="Number of CPU sockets",
     )
 
     vm_memory: int = Field(
         ...,
         # default=1024,
         ge=128,
-        description="Memory in MiB"
+        description="Memory in MiB",
     )
 
     vm_disk_size: int | None = Field(
-        default=None,
-        ge=1,
-        description="Disk size in GiB - optional"
+        default=None, ge=1, description="Disk size in GiB - optional"
     )
 
     vm_iso: str | None = Field(
         default=None,
         description="ISO volume path like 'local:iso/xxx.iso' - optional",
-        pattern=r"^[A-Za-z0-9._-]+:iso/.+\.iso$"
+        pattern=r"^[A-Za-z0-9._-]+:iso/.+\.iso$",
     )
 
     model_config = {
@@ -248,30 +230,28 @@ class VmCreateRequest(BaseModel):
                 "vm_sockets": 1,
                 "vm_memory": 2042,
                 "vm_disk_size": 42,
-                "vm_iso": "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+                "vm_iso": "local:iso/ubuntu-24.04.2-live-server-amd64.iso",
             }
         }
     }
 
 
 class VmCreateItemReply(BaseModel):
-
     action: Literal["vm_create"]
     source: Literal["proxmox"]
     proxmox_node: str
-    vm_id     : int = Field(..., ge=1)
-    vm_name   : str
-    vm_cpu    : str
-    vm_cores  : int = Field(..., ge=1)
+    vm_id: int = Field(..., ge=1)
+    vm_name: str
+    vm_cpu: str
+    vm_cores: int = Field(..., ge=1)
     vm_sockets: int = Field(..., ge=1)
-    vm_memory : int = Field(..., ge=1)
-    vm_net0   : str
-    vm_scsi0  : str
-    raw_data  : str = Field(..., description="Raw string returned by Proxmox")
+    vm_memory: int = Field(..., ge=1)
+    vm_net0: str
+    vm_scsi0: str
+    raw_data: str = Field(..., description="Raw string returned by Proxmox")
 
 
 class VmCreateReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmCreateItemReply]
 
@@ -292,9 +272,9 @@ class VmCreateReply(BaseModel):
                         "vm_name": "vm-with-local-iso-2",
                         "vm_net0": "virtio,bridge=vmbr0",
                         "vm_scsi0": "local-lvm:42,format=raw",
-                        "vm_sockets": 1
+                        "vm_sockets": 1,
                     }
-                ]
+                ],
             }
         }
     }
@@ -304,18 +284,17 @@ class VmCreateReply(BaseModel):
 # VM Delete
 # ---------------------------------------------------------------------------
 
-class VmDeleteRequest(BaseModel):
 
+class VmDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -323,7 +302,7 @@ class VmDeleteRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -338,7 +317,6 @@ class VmDeleteRequest(BaseModel):
 
 
 class VmDeleteItemReply(BaseModel):
-
     action: Literal["vm_delete"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -347,8 +325,8 @@ class VmDeleteItemReply(BaseModel):
     vm_name: str
     raw_data: str = Field(..., description="Raw string returned by proxmox")
 
-class VmDeleteReply(BaseModel):
 
+class VmDeleteReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmDeleteItemReply]
 
@@ -363,9 +341,9 @@ class VmDeleteReply(BaseModel):
                         "proxmox_node": "px-testing",
                         "vm_id": 1023,
                         "vm_name": "admin-web-deployer-ui",
-                        "raw_data": "UPID:px-testing:123123:1123D4:68BFF2C7:qmdestroy:1023:API_master@pam!API_master:"
+                        "raw_data": "UPID:px-testing:123123:1123D4:68BFF2C7:qmdestroy:1023:API_master@pam!API_master:",
                     }
-                ]
+                ],
             }
         }
     }
@@ -375,18 +353,17 @@ class VmDeleteReply(BaseModel):
 # VM Clone
 # ---------------------------------------------------------------------------
 
-class VmCloneRequest(BaseModel):
 
+class VmCloneRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -394,27 +371,27 @@ class VmCloneRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_new_id: str = Field(
         ...,
         # default="5005",
         description="New virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_description: str | None = Field(
         default="cloned-vm",
         description="Virtual machine meta description field",
-        pattern = r"^[A-Za-z0-9\s.,_\-]*$"
+        pattern=r"^[A-Za-z0-9\s.,_\-]*$",
     )
 
-    vm_name: str  = Field(
+    vm_name: str = Field(
         ...,
         # default="new-vm",
         description="Virtual machine meta name",
-        pattern = r"^[A-Za-z0-9-]*$"
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     model_config = {
@@ -423,15 +400,14 @@ class VmCloneRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "vm_id": "2000",
                 "vm_new_id": "3000",
-                "vm_name":"test-cloned",
-                "vm_description":"my description"
+                "vm_name": "test-cloned",
+                "vm_description": "my description",
             }
         }
     }
 
 
 class VmCloneItemReply(BaseModel):
-
     action: Literal["vm_clone"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -443,7 +419,6 @@ class VmCloneItemReply(BaseModel):
 
 
 class VmCloneReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmCloneItemReply]
 
@@ -456,14 +431,15 @@ class VmCloneReply(BaseModel):
                         "action": "vm_clone",
                         "proxmox_node": "px-testing",
                         "raw_info": {
-                            "data": "UPID:px-testing:0027CE9B:167F1A2C:68C03C17:qmclone:4004:API_master@pam!API_master:"},
+                            "data": "UPID:px-testing:0027CE9B:167F1A2C:68C03C17:qmclone:4004:API_master@pam!API_master:"
+                        },
                         "source": "proxmox",
                         "vm_description": "my description",
                         "vm_id": "5004",
                         "vm_id_clone_from": "4004",
-                        "vm_name": "test-cloned"
+                        "vm_name": "test-cloned",
                     }
-               ]
+                ],
             }
         }
     }
@@ -473,18 +449,17 @@ class VmCloneReply(BaseModel):
 # VM Action (Start / Stop / Resume / Pause)
 # ---------------------------------------------------------------------------
 
-class VmActionRequest(BaseModel):
 
+class VmActionRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -492,9 +467,8 @@ class VmActionRequest(BaseModel):
         ...,
         # default="1000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
-
 
     model_config = {
         "json_schema_extra": {
@@ -507,17 +481,15 @@ class VmActionRequest(BaseModel):
 
 
 class VmActionItemReply(BaseModel):
-
-    action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force" ]
+    action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force"]
     source: Literal["proxmox"]
 
     proxmox_node: str
-    vm_id       : str  # int = Field(..., ge=1)
-    vm_name     : str
+    vm_id: str  # int = Field(..., ge=1)
+    vm_name: str
 
 
 class VmActionReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[VmActionItemReply]
 
@@ -526,7 +498,6 @@ class VmActionReply(BaseModel):
             "example": {
                 "rc": 0,
                 "result": [
-
                     {
                         "action": "vm_delete",
                         "source": "proxmox",
@@ -535,7 +506,7 @@ class VmActionReply(BaseModel):
                         "vm_name": "vuln-box-01",
                         "raw_data": {
                             "data": "UPID:px-testing:0033649C:1D2619CC:68D143C5:qmdestroy:4001:API_master@pam!API_master:"
-                        }
+                        },
                     },
                     {
                         "action": "vm_delete",
@@ -545,9 +516,9 @@ class VmActionReply(BaseModel):
                         "vm_name": "vuln-box-02",
                         "raw_data": {
                             "data": "UPID:px-testing:003364A6:1D261A84:68D143C6:qmdestroy:4002:API_master@pam!API_master:"
-                        }
+                        },
                     },
-                ]
+                ],
             }
         }
     }
@@ -557,34 +528,28 @@ class VmActionReply(BaseModel):
 # Mass Delete
 # ---------------------------------------------------------------------------
 
-class MassDeleteVmItem(BaseModel):
 
-    id: str = Field(
-        ...,
-        description="Virtual machine id",
-        pattern=r"^[0-9]+$"
-    )
+class MassDeleteVmItem(BaseModel):
+    id: str = Field(..., description="Virtual machine id", pattern=r"^[0-9]+$")
 
     name: str = Field(
         ...,
         description="Virtual machine meta name",
-        pattern="^[A-Za-z0-9-]+$" #  deny void name
+        pattern="^[A-Za-z0-9-]+$",  #  deny void name
         # pattern=r"^[A-Za-z0-9-]*$",
     )
 
 
 class MassDeleteRequest(BaseModel):
-
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
 
     vms: List[MassDeleteVmItem] = Field(
@@ -599,9 +564,9 @@ class MassDeleteRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "as_json": True,
                 "vms": [
-                    {"id":"4000", "name":"vuln-box-00"},
-                    {"id":"4001", "name":"vuln-box-01"},
-                    {"id":"4002", "name":"vuln-box-02"},
+                    {"id": "4000", "name": "vuln-box-00"},
+                    {"id": "4001", "name": "vuln-box-01"},
+                    {"id": "4002", "name": "vuln-box-02"},
                 ],
             }
         }
@@ -609,18 +574,17 @@ class MassDeleteRequest(BaseModel):
 
 
 class MassDeleteItemReply(BaseModel):
-
-    action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force" ]
+    action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force"]
     source: Literal["proxmox"]
 
     proxmox_node: str
-    vm_id       : str  # int = Field(..., ge=1)
+    vm_id: str  # int = Field(..., ge=1)
     # vm_new_id   : str  # int = Field(..., ge=1)
-    vm_name     : str
+    vm_name: str
     vm_status: Literal["running", "stopped", "paused"]
 
-class MassDeleteReply(BaseModel):
 
+class MassDeleteReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[MassDeleteItemReply]
 
@@ -629,29 +593,25 @@ class MassDeleteReply(BaseModel):
 # Mass Start / Stop / Resume / Pause
 # ---------------------------------------------------------------------------
 
-class MassActionRequest(BaseModel):
 
+class MassActionRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
     vm_ids: List[str] = Field(
         ...,
-        # default="1000",
         description="Virtual machine id",
-        min_items=1,
-        # pattern=r"^[0-9]+$"
+        min_length=1,
     )
-
 
     model_config = {
         "json_schema_extra": {

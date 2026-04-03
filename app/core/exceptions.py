@@ -34,7 +34,9 @@ def make_validation_error_detail(err: dict) -> dict:
     }
 
 
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """Verbose 422 handler with debug logging.
 
     Logs the HTTP method, URL, raw request body, and each validation
@@ -57,7 +59,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             if body_text.strip():
                 try:
                     parsed = json.loads(body_text)
-                    logger.error("Request body:\n%s", json.dumps(parsed, indent=2, ensure_ascii=False))
+                    logger.error(
+                        "Request body:\n%s",
+                        json.dumps(parsed, indent=2, ensure_ascii=False),
+                    )
                 except json.JSONDecodeError:
                     logger.error("Request body (raw): %s", body_text)
             else:
@@ -68,7 +73,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     details = []
     for err in exc.errors():
         detail = make_validation_error_detail(err)
-        logger.error("field=%s | msg=%s | type=%s", detail["field"], detail["msg"], detail["type"])
+        logger.error(
+            "field=%s | msg=%s | type=%s",
+            detail["field"],
+            detail["msg"],
+            detail["type"],
+        )
         details.append(detail)
 
     return JSONResponse(status_code=422, content={"detail": details})

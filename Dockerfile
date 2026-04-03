@@ -1,9 +1,8 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
 # Install system deps for ansible and ssh
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
-    sshpass \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,7 +20,6 @@ RUN ansible-galaxy collection install -r requirements.yml -p /usr/share/ansible/
 COPY app/ app/
 COPY playbooks/ playbooks/
 COPY inventory/ inventory/
-COPY start.sh .
 
 # Set env defaults
 ENV PROJECT_ROOT_DIR=/app

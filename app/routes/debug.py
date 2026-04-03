@@ -9,14 +9,13 @@ Endpoints
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.runner import run_playbook_core
 from app.schemas.debug import Request_DebugPing
-from app.utils.vm_id_name_resolver import *
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +39,13 @@ def debug_ping(req: Request_DebugPing):
     :returns: JSON with ``rc`` and ``log_multiline``.
     """
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
     if not INVENTORY_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: MISSING INVENTORY : {INVENTORY_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: MISSING INVENTORY : {INVENTORY_SRC}"
+        )
 
     extravars = {}
     if req.proxmox_node:
@@ -51,7 +54,10 @@ def debug_ping(req: Request_DebugPing):
         extravars = None
 
     rc, events, log_plain, log_ansi = run_playbook_core(
-        PLAYBOOK_SRC, INVENTORY_SRC, limit=req.hosts, extravars=extravars,
+        PLAYBOOK_SRC,
+        INVENTORY_SRC,
+        limit=req.hosts,
+        extravars=extravars,
     )
 
     payload = {"rc": rc, "log_multiline": log_plain.splitlines()}
@@ -70,9 +76,13 @@ def debug_func_test():
     :returns: None (debug only).
     """
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
     if not INVENTORY_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: MISSING INVENTORY : {INVENTORY_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: MISSING INVENTORY : {INVENTORY_SRC}"
+        )
 
     out = resolv_id_to_vm_name("px-testing", 1000)
     logger.debug("GOT: %s", out["vm_name"])

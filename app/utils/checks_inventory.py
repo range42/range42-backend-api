@@ -6,13 +6,14 @@ against a strict regex, resolves the file path under the project's
 the absolute path.
 """
 
-import os
-from pathlib import Path
-import re
 import logging
-logger = logging.getLogger(__name__)
+import os
+import re
+from pathlib import Path
 
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_inventory(inventory_name: str) -> Path:
@@ -44,9 +45,10 @@ def resolve_inventory(inventory_name: str) -> Path:
         name_pattern=inventory_name_pattern,
     )
 
-def _resolve_inventory_file(inventory_dir: Path,
-                            inventory_name: str,
-                            name_pattern: re.Pattern[str]) -> Path:
+
+def _resolve_inventory_file(
+    inventory_dir: Path, inventory_name: str, name_pattern: re.Pattern[str]
+) -> Path:
     """Validate and resolve an inventory file path.
 
     Performs regex validation, traversal detection, directory existence
@@ -65,7 +67,6 @@ def _resolve_inventory_file(inventory_dir: Path,
     """
 
     if not name_pattern.fullmatch(str(inventory_name)):
-
         err = f":: err - INVALID INVENTORY NAME FORMAT {inventory_name!r}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -78,7 +79,6 @@ def _resolve_inventory_file(inventory_dir: Path,
     #
 
     if not inventory_filepath.is_relative_to(inventory_dir):
-
         err = f":: err - POTENTIAL PATH TRAVERSAL DETECTED : {inventory_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
@@ -88,7 +88,6 @@ def _resolve_inventory_file(inventory_dir: Path,
     #
 
     if not inventory_dir.exists():
-
         err = f":: err - INVENTORY DIR  NOT FOUND : {inventory_dir}"
         logger.error(err)
         raise HTTPException(status_code=500, detail=err)
@@ -100,7 +99,6 @@ def _resolve_inventory_file(inventory_dir: Path,
         inventory_filepath = inventory_filepath.resolve(strict=True)
 
     except FileNotFoundError:
-
         err = f":: err - INVENTORY NOT FOUND : {inventory_filepath}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)

@@ -1,25 +1,24 @@
 """Consolidated snapshot schemas: create, delete, list, revert."""
 
 from typing import Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Snapshot Create
 # ---------------------------------------------------------------------------
 
-class SnapshotCreateRequest(BaseModel):
 
+class SnapshotCreateRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -27,19 +26,19 @@ class SnapshotCreateRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_snapshot_name: str | None = Field(
         default=None,
         description="Name of the snapshot to create",
-        pattern=r"^[A-Za-z0-9_-]+$"
+        pattern=r"^[A-Za-z0-9_-]+$",
     )
 
     vm_snapshot_description: str | None = Field(
         default=None,
         description="Optional description for the snapshot",
-        pattern=r"^[A-Za-z0-9_-]+$"
+        pattern=r"^[A-Za-z0-9_-]+$",
     )
 
     model_config = {
@@ -47,20 +46,19 @@ class SnapshotCreateRequest(BaseModel):
             "example": {
                 "proxmox_node": "px-testing",
                 "vm_id": "1111",
-                "vm_snapshot_name":"MY_VM_SNAPSHOT",
-                "vm_snapshot_description":"MY_DESCRIPTION",
-                "as_json": True
+                "vm_snapshot_name": "MY_VM_SNAPSHOT",
+                "vm_snapshot_description": "MY_DESCRIPTION",
+                "as_json": True,
             }
         }
     }
 
 
 class SnapshotCreateItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     proxmox_node: str
     source: Literal["proxmox"]
-    vm_id: str # int = Field(..., ge=1)
+    vm_id: str  # int = Field(..., ge=1)
 
     vm_name: str
     vm_snapshot_description: str
@@ -70,7 +68,6 @@ class SnapshotCreateItemReply(BaseModel):
 
 
 class SnapshotCreateReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[SnapshotCreateItemReply]
 
@@ -83,14 +80,15 @@ class SnapshotCreateReply(BaseModel):
                         "action": "snapshot_vm_create",
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
-
                         "vm_id": "1000",
                         "vm_name": "admin-wazuh",
                         "vm_snapshot_description": "MY_DESCRIPTION",
                         "vm_snapshot_name": "MY_VM_SNAPSHOT",
-                        "raw_data": { "data": "UPID:px-testing:002D5E30:1706941B:68C196E9:qmsnapshot:1000:API_master@pam!API_master:" }
+                        "raw_data": {
+                            "data": "UPID:px-testing:002D5E30:1706941B:68C196E9:qmsnapshot:1000:API_master@pam!API_master:"
+                        },
                     }
-                ]
+                ],
             }
         }
     }
@@ -100,18 +98,17 @@ class SnapshotCreateReply(BaseModel):
 # Snapshot Delete
 # ---------------------------------------------------------------------------
 
-class SnapshotDeleteRequest(BaseModel):
 
+class SnapshotDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -119,13 +116,13 @@ class SnapshotDeleteRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_snapshot_name: str | None = Field(
         default=None,
         description="Name of the snapshot to delete",
-        pattern=r"^[A-Za-z0-9_-]+$"
+        pattern=r"^[A-Za-z0-9_-]+$",
     )
 
     model_config = {
@@ -134,14 +131,13 @@ class SnapshotDeleteRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "vm_id": "1111",
                 "vm_snapshot_name": "MY_VM_SNAPSHOT",
-                "as_json": True
+                "as_json": True,
             }
         }
     }
 
 
 class SnapshotDeleteItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     source: Literal["proxmox"]
     # proxmox_node: str
@@ -151,7 +147,6 @@ class SnapshotDeleteItemReply(BaseModel):
 
 
 class SnapshotDeleteReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[SnapshotDeleteItemReply]
 
@@ -159,18 +154,19 @@ class SnapshotDeleteReply(BaseModel):
         "json_schema_extra": {
             "example": {
                 "rc": 0,
-                 "result": [
+                "result": [
                     {
                         "action": "snapshot_vm_delete",
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
-
                         "vm_id": "1000",
                         "vm_name": "admin-wazuh",
                         "vm_snapshot_name": "BBBB",
-                        "raw_data": { "data": "UPID:px-testing:002D6878:17077370:68C19925:qmdelsnapshot:1000:API_master@pam!API_master:"},
+                        "raw_data": {
+                            "data": "UPID:px-testing:002D6878:17077370:68C19925:qmdelsnapshot:1000:API_master@pam!API_master:"
+                        },
                     }
-                ]
+                ],
             }
         }
     }
@@ -180,18 +176,17 @@ class SnapshotDeleteReply(BaseModel):
 # Snapshot List
 # ---------------------------------------------------------------------------
 
-class SnapshotListRequest(BaseModel):
 
+class SnapshotListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -199,21 +194,17 @@ class SnapshotListRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "vm_id": "1111"
-            }
+            "example": {"proxmox_node": "px-testing", "vm_id": "1111"}
         }
     }
 
 
 class SnapshotListItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     source: Literal["proxmox"]
     # proxmox_node: str
@@ -223,7 +214,6 @@ class SnapshotListItemReply(BaseModel):
 
 
 class SnapshotListReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[SnapshotListItemReply]
 
@@ -231,31 +221,28 @@ class SnapshotListReply(BaseModel):
         "json_schema_extra": {
             "example": {
                 "rc": 0,
-
                 "result": [
                     {
                         "action": "snapshot_vm_list",
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
-
                         "vm_id": "1000",
                         "vm_snapshot_description": "MY_DESCRIPTION",
                         "vm_snapshot_name": "MY_VM_SNAPSHOT",
                         "vm_snapshot_parent": "",
-                        "vm_snapshot_time": 1757517545
+                        "vm_snapshot_time": 1757517545,
                     },
                     {
                         "action": "snapshot_vm_list",
                         "proxmox_node": "px-testing",
                         "source": "proxmox",
-
                         "vm_id": "1000",
                         "vm_snapshot_description": "You are here!",
                         "vm_snapshot_name": "current",
                         "vm_snapshot_parent": "MY_VM_SNAPSHOT",
-                        "vm_snapshot_sha1": "7cc59c988bb8f18601fe076ad239f8b760667270"
-                    }
-                ]
+                        "vm_snapshot_sha1": "7cc59c988bb8f18601fe076ad239f8b760667270",
+                    },
+                ],
             }
         }
     }
@@ -265,18 +252,17 @@ class SnapshotListReply(BaseModel):
 # Snapshot Revert
 # ---------------------------------------------------------------------------
 
-class SnapshotRevertRequest(BaseModel):
 
+class SnapshotRevertRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -284,13 +270,13 @@ class SnapshotRevertRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_snapshot_name: str | None = Field(
         default=None,
         description="Name of the snapshot to create",
-        pattern=r"^[A-Za-z0-9_-]+$"
+        pattern=r"^[A-Za-z0-9_-]+$",
     )
 
     model_config = {
@@ -298,7 +284,7 @@ class SnapshotRevertRequest(BaseModel):
             "example": {
                 "proxmox_node": "px-testing",
                 "vm_id": "1111",
-                "vm_snapshot_name":"CCCC",
+                "vm_snapshot_name": "CCCC",
                 "as_json": True,
             }
         }
@@ -306,7 +292,6 @@ class SnapshotRevertRequest(BaseModel):
 
 
 class SnapshotRevertItemReply(BaseModel):
-
     action: Literal["vm_get_config"]
     source: Literal["proxmox"]
     # proxmox_node: str
@@ -316,7 +301,6 @@ class SnapshotRevertItemReply(BaseModel):
 
 
 class SnapshotRevertReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[SnapshotRevertItemReply]
 
@@ -329,13 +313,14 @@ class SnapshotRevertReply(BaseModel):
                         "action": "snapshot_vm_revert",
                         "source": "proxmox",
                         "proxmox_node": "px-testing",
-
                         "vm_id": "1000",
                         "vm_name": "admin-wazuh",
                         "vm_snapshot_name": "CCCC",
-                        "raw_data": {"data": "UPID:px-testing:002D7C57:17096777:68C19E25:qmrollback:1000:API_master@pam!API_master:"},
+                        "raw_data": {
+                            "data": "UPID:px-testing:002D7C57:17096777:68C19E25:qmrollback:1000:API_master@pam!API_master:"
+                        },
                     }
-                ]
+                ],
             }
         }
     }

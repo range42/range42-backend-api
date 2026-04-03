@@ -15,17 +15,20 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.runner import run_playbook_core
-from app.core.extractor import extract_action_results
-from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 from app import utils
-
+from app.core.extractor import extract_action_results
+from app.core.runner import run_playbook_core
 from app.schemas.snapshots import (
-    Request_ProxmoxVmsVMID_ListSnapshot, Reply_ProxmoxVmsVMID_ListSnapshot,
-    Request_ProxmoxVmsVMID_CreateSnapshot, Reply_ProxmoxVmsVMID_CreateSnapshot,
-    Request_ProxmoxVmsVMID_DeleteSnapshot, Reply_ProxmoxVmsVMID_DeleteSnapshot,
-    Request_ProxmoxVmsVMID_RevertSnapshot, Reply_ProxmoxVmsVMID_RevertSnapshot,
+    Reply_ProxmoxVmsVMID_CreateSnapshot,
+    Reply_ProxmoxVmsVMID_DeleteSnapshot,
+    Reply_ProxmoxVmsVMID_ListSnapshot,
+    Reply_ProxmoxVmsVMID_RevertSnapshot,
+    Request_ProxmoxVmsVMID_CreateSnapshot,
+    Request_ProxmoxVmsVMID_DeleteSnapshot,
+    Request_ProxmoxVmsVMID_ListSnapshot,
+    Request_ProxmoxVmsVMID_RevertSnapshot,
 )
+from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +44,17 @@ def _run_snapshot_action(req, action: str, extravars: dict) -> JSONResponse:
     extravars["hosts"] = "proxmox"
 
     if not PLAYBOOK_SRC.exists():
-        raise HTTPException(status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}")
+        raise HTTPException(
+            status_code=400, detail=f":: err - MISSING PLAYBOOK : {PLAYBOOK_SRC}"
+        )
 
     inventory = utils.resolve_inventory(INVENTORY_NAME)
 
     rc, events, log_plain, log_ansi = run_playbook_core(
-        PLAYBOOK_SRC, inventory, limit=extravars["hosts"], extravars=extravars,
+        PLAYBOOK_SRC,
+        inventory,
+        limit=extravars["hosts"],
+        extravars=extravars,
     )
 
     if req.as_json:
@@ -97,7 +105,9 @@ def proxmox_vms_vm_id_create_snapshot(req: Request_ProxmoxVmsVMID_CreateSnapshot
     extravars = {"proxmox_node": req.proxmox_node}
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"])
+    extravars["vm_name"] = resolv_id_to_vm_name(
+        extravars["proxmox_node"], extravars["vm_id"]
+    )
     if req.vm_snapshot_name is not None:
         extravars["vm_snapshot_name"] = req.vm_snapshot_name
     if req.vm_snapshot_description is not None:
@@ -124,7 +134,9 @@ def proxmox_vms_vm_id_delete_snapshot(req: Request_ProxmoxVmsVMID_DeleteSnapshot
         extravars["proxmox_node"] = req.proxmox_node
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"])
+    extravars["vm_name"] = resolv_id_to_vm_name(
+        extravars["proxmox_node"], extravars["vm_id"]
+    )
     if req.vm_snapshot_name:
         extravars["vm_snapshot_name"] = req.vm_snapshot_name
     return _run_snapshot_action(req, "snapshot_vm_delete", extravars)
@@ -149,7 +161,9 @@ def proxmox_vms_vm_id_revert_snapshot(req: Request_ProxmoxVmsVMID_RevertSnapshot
         extravars["proxmox_node"] = req.proxmox_node
     if req.vm_id is not None:
         extravars["vm_id"] = req.vm_id
-    extravars["vm_name"] = resolv_id_to_vm_name(extravars["proxmox_node"], extravars["vm_id"])
+    extravars["vm_name"] = resolv_id_to_vm_name(
+        extravars["proxmox_node"], extravars["vm_id"]
+    )
     if req.vm_snapshot_name is not None:
         extravars["vm_snapshot_name"] = req.vm_snapshot_name
     return _run_snapshot_action(req, "snapshot_vm_revert", extravars)

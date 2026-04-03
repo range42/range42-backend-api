@@ -1,25 +1,24 @@
 """Consolidated firewall schemas: rules, aliases, enable/disable at DC/node/VM level."""
 
-from typing import List, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # Add Iptables Alias
 # ---------------------------------------------------------------------------
 
-class FirewallAliasAddRequest(BaseModel):
 
+class FirewallAliasAddRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -27,7 +26,7 @@ class FirewallAliasAddRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_fw_alias_name: str = Field(
@@ -54,18 +53,17 @@ class FirewallAliasAddRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "as_json": True,
                 #
-                "vm_id":"1000",
+                "vm_id": "1000",
                 #
-                "vm_fw_alias_name":"test",
-                "vm_fw_alias_cidr":"192.168.123.0/24",
-                "vm_fw_alias_comment":"this_comment"
+                "vm_fw_alias_name": "test",
+                "vm_fw_alias_cidr": "192.168.123.0/24",
+                "vm_fw_alias_comment": "this_comment",
             }
         }
     }
 
 
 class FirewallAliasAddItemReply(BaseModel):
-
     action: Literal["vm_ListIso_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -75,8 +73,8 @@ class FirewallAliasAddItemReply(BaseModel):
     vm_fw_alias_name: str
     vm_id: str
 
-class FirewallAliasAddReply(BaseModel):
 
+class FirewallAliasAddReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallAliasAddItemReply]
 
@@ -92,9 +90,9 @@ class FirewallAliasAddReply(BaseModel):
                         ##
                         "vm_fw_alias_cidr": "192.168.123.0/24",
                         "vm_fw_alias_name": "test",
-                        "vm_id": "1000"
+                        "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -104,8 +102,8 @@ class FirewallAliasAddReply(BaseModel):
 # Apply Iptables Rules
 # ---------------------------------------------------------------------------
 
-class FirewallRuleApplyRequest(BaseModel):
 
+class FirewallRuleApplyRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         description="Target Proxmox node name.",
@@ -122,7 +120,7 @@ class FirewallRuleApplyRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_fw_action: str = Field(
@@ -197,24 +195,24 @@ class FirewallRuleApplyRequest(BaseModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example":[
+            "example": [
                 {
-                "proxmox_node": "px-node-01",
-                "as_json": True,
-                #
-                "vm_id": "1000",
-                "vm_fw_action": "ACCEPT",
-                "vm_fw_type": "in",
-                "vm_fw_proto": "tcp",
-                "vm_fw_dport": "22",
-                "vm_fw_enable": 1,
-                "vm_fw_iface": "net0",
-                "vm_fw_source": "192.168.1.0/24",
-                "vm_fw_dest": "0.0.0.0/0",
-                "vm_fw_sport": "1024",
-                "vm_fw_comment": "Test comment",
-                "vm_fw_pos": 5,
-                "vm_fw_log": "debug",
+                    "proxmox_node": "px-node-01",
+                    "as_json": True,
+                    #
+                    "vm_id": "1000",
+                    "vm_fw_action": "ACCEPT",
+                    "vm_fw_type": "in",
+                    "vm_fw_proto": "tcp",
+                    "vm_fw_dport": "22",
+                    "vm_fw_enable": 1,
+                    "vm_fw_iface": "net0",
+                    "vm_fw_source": "192.168.1.0/24",
+                    "vm_fw_dest": "0.0.0.0/0",
+                    "vm_fw_sport": "1024",
+                    "vm_fw_comment": "Test comment",
+                    "vm_fw_pos": 5,
+                    "vm_fw_log": "debug",
                 },
             ]
         }
@@ -222,28 +220,27 @@ class FirewallRuleApplyRequest(BaseModel):
 
 
 class FirewallRuleApplyItemReply(BaseModel):
-
     action: Literal["vm_ApplyIptablesRules_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
     ##
     # vm_id: int = Field(..., ge=1)
-    vm_fw_action   : str
-    vm_fw_comment  : str
-    vm_fw_dest     : str
-    vm_fw_dport    : str
-    vm_fw_enable   : int
-    vm_fw_iface    : str
-    vm_fw_log      : str
-    vm_fw_pos      : int
-    vm_fw_proto    : str
-    vm_fw_source   : str
-    vm_fw_sport    : str
-    vm_fw_type     : str
-    vm_id          : str
+    vm_fw_action: str
+    vm_fw_comment: str
+    vm_fw_dest: str
+    vm_fw_dport: str
+    vm_fw_enable: int
+    vm_fw_iface: str
+    vm_fw_log: str
+    vm_fw_pos: int
+    vm_fw_proto: str
+    vm_fw_source: str
+    vm_fw_sport: str
+    vm_fw_type: str
+    vm_id: str
+
 
 class FirewallRuleApplyReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallRuleApplyItemReply]
 
@@ -262,9 +259,9 @@ class FirewallRuleApplyReply(BaseModel):
                         "vm_fw_enable": "1",
                         "vm_fw_proto": "tcp",
                         "vm_fw_type": "out",
-                        "vm_id": "100"
+                        "vm_id": "100",
                     },
-                ]
+                ],
             }
         }
     }
@@ -274,18 +271,17 @@ class FirewallRuleApplyReply(BaseModel):
 # Delete Iptables Alias
 # ---------------------------------------------------------------------------
 
-class FirewallAliasDeleteRequest(BaseModel):
 
+class FirewallAliasDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -293,7 +289,7 @@ class FirewallAliasDeleteRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_fw_alias_name: str = Field(
@@ -316,7 +312,6 @@ class FirewallAliasDeleteRequest(BaseModel):
 
 
 class FirewallAliasDeleteItemReply(BaseModel):
-
     action: Literal["firewall_vm_delete_iptables_alias"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -327,7 +322,6 @@ class FirewallAliasDeleteItemReply(BaseModel):
 
 
 class FirewallAliasDeleteReply(BaseModel):
-
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallAliasDeleteItemReply]
 
@@ -344,7 +338,7 @@ class FirewallAliasDeleteReply(BaseModel):
                         "vm_fw_alias_name": "test",
                         "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -354,18 +348,17 @@ class FirewallAliasDeleteReply(BaseModel):
 # Delete Iptables Rule
 # ---------------------------------------------------------------------------
 
-class FirewallRuleDeleteRequest(BaseModel):
 
+class FirewallRuleDeleteRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -373,7 +366,7 @@ class FirewallRuleDeleteRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     vm_fw_pos: int | None = Field(
@@ -387,16 +380,14 @@ class FirewallRuleDeleteRequest(BaseModel):
                 "proxmox_node": "px-testing",
                 "as_json": True,
                 #
-                "vm_id":"1000",
-                "vm_fw_pos":1,
-
+                "vm_id": "1000",
+                "vm_fw_pos": 1,
             }
         }
     }
 
 
 class FirewallRuleDeleteItemReply(BaseModel):
-
     action: Literal["vm_DeleteIptablesRule_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -405,8 +396,8 @@ class FirewallRuleDeleteItemReply(BaseModel):
     vm_id: str
     vm_fw_pos: int
 
-class FirewallRuleDeleteReply(BaseModel):
 
+class FirewallRuleDeleteReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallRuleDeleteItemReply]
 
@@ -421,9 +412,9 @@ class FirewallRuleDeleteReply(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                         "vm_fw_pos": "0",
-                        "vm_id": "1000"
+                        "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -433,18 +424,17 @@ class FirewallRuleDeleteReply(BaseModel):
 # List Iptables Alias
 # ---------------------------------------------------------------------------
 
-class FirewallAliasListRequest(BaseModel):
 
+class FirewallAliasListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -452,7 +442,7 @@ class FirewallAliasListRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -468,7 +458,6 @@ class FirewallAliasListRequest(BaseModel):
 
 
 class FirewallAliasListItemReply(BaseModel):
-
     action: Literal["vm_ListIptablesAlias_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -478,8 +467,8 @@ class FirewallAliasListItemReply(BaseModel):
     vm_fw_alias_name: int
     vm_id: str
 
-class FirewallAliasListReply(BaseModel):
 
+class FirewallAliasListReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallAliasListItemReply]
 
@@ -495,9 +484,9 @@ class FirewallAliasListReply(BaseModel):
                         ##
                         "vm_fw_alias_cidr": "192.168.123.0/24",
                         "vm_fw_alias_name": "test",
-                        "vm_id": "1000"
+                        "vm_id": "1000",
                     }
-                ]
+                ],
             }
         }
     }
@@ -507,18 +496,17 @@ class FirewallAliasListReply(BaseModel):
 # List Iptables Rules
 # ---------------------------------------------------------------------------
 
-class FirewallRuleListRequest(BaseModel):
 
+class FirewallRuleListRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -526,7 +514,7 @@ class FirewallRuleListRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -536,14 +524,12 @@ class FirewallRuleListRequest(BaseModel):
                 "as_json": True,
                 #
                 "vm_id": "1000",
-
             }
         }
     }
 
 
 class FirewallRuleListItemReply(BaseModel):
-
     action: Literal["vm_ListIptablesRules_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -563,8 +549,8 @@ class FirewallRuleListItemReply(BaseModel):
     vm_fw_type: str
     vm_id: str
 
-class FirewallRuleListReply(BaseModel):
 
+class FirewallRuleListReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallRuleListItemReply]
 
@@ -582,9 +568,9 @@ class FirewallRuleListReply(BaseModel):
                         "vm_fw_log": "nolog",
                         "vm_fw_pos": 0,
                         "vm_fw_type": "in",
-                        "vm_id": "100"
+                        "vm_id": "100",
                     },
-                ]
+                ],
             }
         }
     }
@@ -594,18 +580,17 @@ class FirewallRuleListReply(BaseModel):
 # Enable / Disable Firewall — Datacenter
 # ---------------------------------------------------------------------------
 
-class FirewallEnableDcRequest(BaseModel):
 
+class FirewallEnableDcRequest(BaseModel):
     proxmox_api_host: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox api - ip:port",
-        pattern=r"^[A-Za-z0-9\.:-]*$"
+        description="Proxmox api - ip:port",
+        pattern=r"^[A-Za-z0-9\.:-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -622,7 +607,6 @@ class FirewallEnableDcRequest(BaseModel):
 
 
 class FirewallEnableDcItemReply(BaseModel):
-
     action: Literal["vm_EnableFirewallDc_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -630,8 +614,8 @@ class FirewallEnableDcItemReply(BaseModel):
     # vm_id: int = Field(..., ge=1)
     proxmox_api_host: str
 
-class FirewallEnableDcReply(BaseModel):
 
+class FirewallEnableDcReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallEnableDcItemReply]
 
@@ -647,34 +631,32 @@ class FirewallEnableDcReply(BaseModel):
                         ##
                         "vm_id": "100",
                         "vm_firewall": "disable",
-                        "vm_name": "test"
+                        "vm_name": "test",
                     }
-                ]
+                ],
             }
         }
     }
 
 
 class FirewallDisableDcRequest(BaseModel):
-
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
     proxmox_api_host: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox api - ip:port",
-        pattern=r"^[A-Za-z0-9\.:-]*$"
+        description="Proxmox api - ip:port",
+        pattern=r"^[A-Za-z0-9\.:-]*$",
     )
 
     model_config = {
@@ -684,21 +666,19 @@ class FirewallDisableDcRequest(BaseModel):
                 "as_json": True,
                 #
                 "proxmox_api_host": "127.0.0.1:1234",
-
             }
         }
     }
 
 
 class FirewallDisableDcItemReply(BaseModel):
-
     action: Literal["vm_DisableFirewallDc_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
     ##
 
-class FirewallDisableDcReply(BaseModel):
 
+class FirewallDisableDcReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallDisableDcItemReply]
 
@@ -713,7 +693,7 @@ class FirewallDisableDcReply(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                     }
-                ]
+                ],
             }
         }
     }
@@ -723,33 +703,28 @@ class FirewallDisableDcReply(BaseModel):
 # Enable / Disable Firewall — Node
 # ---------------------------------------------------------------------------
 
-class FirewallEnableNodeRequest(BaseModel):
 
+class FirewallEnableNodeRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
         description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True
-            }
+            "example": {"proxmox_node": "px-testing", "as_json": True}
         }
     }
 
 
 class FirewallEnableNodeItemReply(BaseModel):
-
     action: Literal["vm_EnableFirewallNode_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -757,8 +732,8 @@ class FirewallEnableNodeItemReply(BaseModel):
     # vm_id: int = Field(..., ge=1)
     node_firewall: str
 
-class FirewallEnableNodeReply(BaseModel):
 
+class FirewallEnableNodeReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallEnableNodeItemReply]
 
@@ -773,41 +748,34 @@ class FirewallEnableNodeReply(BaseModel):
                         "proxmox_node": "px-testing",
                         ##
                         "node_firewall": "enabled",
-
                     }
-                ]
+                ],
             }
         }
     }
 
 
 class FirewallDisableNodeRequest(BaseModel):
-
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
         description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True
-            }
+            "example": {"proxmox_node": "px-testing", "as_json": True}
         }
     }
 
 
 class FirewallDisableNodeItemReply(BaseModel):
-
     action: Literal["vm_EnableFirewallNode_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -815,8 +783,8 @@ class FirewallDisableNodeItemReply(BaseModel):
     # vm_id: int = Field(..., ge=1)
     node_firewall: str
 
-class FirewallDisableNodeReply(BaseModel):
 
+class FirewallDisableNodeReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallDisableNodeItemReply]
 
@@ -835,7 +803,7 @@ class FirewallDisableNodeReply(BaseModel):
                         ##
                         "node_firewall": "disabled",
                     }
-                ]
+                ],
             }
         }
     }
@@ -845,18 +813,17 @@ class FirewallDisableNodeReply(BaseModel):
 # Enable / Disable Firewall — VM
 # ---------------------------------------------------------------------------
 
-class FirewallEnableVmRequest(BaseModel):
 
+class FirewallEnableVmRequest(BaseModel):
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -864,7 +831,7 @@ class FirewallEnableVmRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -881,7 +848,6 @@ class FirewallEnableVmRequest(BaseModel):
 
 
 class FirewallEnableVmItemReply(BaseModel):
-
     action: Literal["vm_EnableFirewallVm_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -891,8 +857,8 @@ class FirewallEnableVmItemReply(BaseModel):
     vm_name: str
     vm_firewall: str
 
-class FirewallEnableVmReply(BaseModel):
 
+class FirewallEnableVmReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallEnableVmItemReply]
 
@@ -908,26 +874,24 @@ class FirewallEnableVmReply(BaseModel):
                         ##
                         "vm_id": "100",
                         "vm_firewall": "enabled",
-                        "vm_name": "test"
+                        "vm_name": "test",
                     }
-                ]
+                ],
             }
         }
     }
 
 
 class FirewallDisableVmRequest(BaseModel):
-
     proxmox_node: str = Field(
         ...,
         # default= "px-testing",
-        description = "Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$"
+        description="Proxmox node name",
+        pattern=r"^[A-Za-z0-9-]*$",
     )
 
     as_json: bool = Field(
-        default=True,
-        description="If true : JSON output else : raw output"
+        default=True, description="If true : JSON output else : raw output"
     )
     #
 
@@ -935,7 +899,7 @@ class FirewallDisableVmRequest(BaseModel):
         ...,
         # default="4000",
         description="Virtual machine id",
-        pattern=r"^[0-9]+$"
+        pattern=r"^[0-9]+$",
     )
 
     model_config = {
@@ -951,7 +915,6 @@ class FirewallDisableVmRequest(BaseModel):
 
 
 class FirewallDisableVmItemReply(BaseModel):
-
     action: Literal["vm_EnableFirewallDc_usage"]
     source: Literal["proxmox"]
     proxmox_node: str
@@ -959,8 +922,8 @@ class FirewallDisableVmItemReply(BaseModel):
     # vm_id: int = Field(..., ge=1)
     proxmox_api_host: str
 
-class FirewallDisableVmReply(BaseModel):
 
+class FirewallDisableVmReply(BaseModel):
     rc: int = Field(0, description="RETURN code (0 = OK)")
     result: list[FirewallDisableVmItemReply]
 
@@ -976,9 +939,9 @@ class FirewallDisableVmReply(BaseModel):
                         ##
                         "vm_id": "1000",
                         "vm_firewall": "disable",
-                        "vm_name": "test"
+                        "vm_name": "test",
                     }
-                ]
+                ],
             }
         }
     }
@@ -1000,12 +963,16 @@ Reply_ProxmoxFirewallWithStorageName_ApplyIptablesRules = FirewallRuleApplyReply
 
 # firewall/delete_iptables_alias.py
 Request_ProxmoxFirewall_DeleteIptablesAlias = FirewallAliasDeleteRequest
-Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAliasItem = FirewallAliasDeleteItemReply
+Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAliasItem = (
+    FirewallAliasDeleteItemReply
+)
 Reply_ProxmoxFirewallWithStorageName_DeleteIptablesAlias = FirewallAliasDeleteReply
 
 # firewall/delete_iptables_rule.py
 Request_ProxmoxFirewall_DeleteIptablesRule = FirewallRuleDeleteRequest
-Reply_ProxmoxFirewallWithStorageName_DeleteIptablesRuleItem = FirewallRuleDeleteItemReply
+Reply_ProxmoxFirewallWithStorageName_DeleteIptablesRuleItem = (
+    FirewallRuleDeleteItemReply
+)
 Reply_ProxmoxFirewallWithStorageName_DeleteIptablesRule = FirewallRuleDeleteReply
 
 # firewall/list_iptables_alias.py
@@ -1030,12 +997,16 @@ Reply_ProxmoxFirewallWithStorageName_DisableFirewallDc = FirewallDisableDcReply
 
 # firewall/enable_firewall_node.py
 Request_ProxmoxFirewall_EnableFirewallNode = FirewallEnableNodeRequest
-Reply_ProxmoxFirewallWithStorageName_EnableFirewallNodeItem = FirewallEnableNodeItemReply
+Reply_ProxmoxFirewallWithStorageName_EnableFirewallNodeItem = (
+    FirewallEnableNodeItemReply
+)
 Reply_ProxmoxFirewallWithStorageName_EnableFirewallNode = FirewallEnableNodeReply
 
 # firewall/disable_firewall_node.py
 Request_ProxmoxFirewall_DistableFirewallNode = FirewallDisableNodeRequest
-Reply_ProxmoxFirewallWithStorageName_DistableFirewallNodeItem = FirewallDisableNodeItemReply
+Reply_ProxmoxFirewallWithStorageName_DistableFirewallNodeItem = (
+    FirewallDisableNodeItemReply
+)
 Reply_ProxmoxFirewallWithStorageName_DisableFirewallNode = FirewallDisableNodeReply
 
 # firewall/enable_firewall_vm.py

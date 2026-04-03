@@ -9,9 +9,11 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
+- [WebSocket API](#websocket-api)
 - [Project Structure](#project-structure)
 - [Architecture](#architecture)
 - [Development](#development)
+- [Test Structure](#test-structure)
 - [License](#license)
 
 ---
@@ -25,6 +27,15 @@ docker compose up
 ```
 
 Builds the image, installs dependencies and Ansible collections, and starts the API on port `8000`.
+
+**Environment variables:** Configured via the host environment or a `.env` file. Required: at least one of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` for vault-encrypted operations.
+
+**Volumes:**
+- `./app` -- Application source (read-only)
+- `./playbooks` -- Ansible playbooks (read-only)
+- `./inventory` -- Ansible inventory files (read-only)
+
+**Health check:** The container pings `/docs/openapi.json` every 30s (5s timeout, 10s start period, 3 retries).
 
 ### Option 2 -- start.sh
 
@@ -59,21 +70,33 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 All settings are read from environment variables in `app/core/config.py`. Nothing is hard-coded.
 
-| Variable | Required | Description | Default |
-|---|---|---|---|
-| `PROJECT_ROOT_DIR` | Yes | Absolute path to the project root | `.` (cwd) |
-| `VAULT_PASSWORD_FILE` | Yes* | Path to the Ansible Vault password file | -- |
-| `VAULT_PASSWORD` | Yes* | Ansible Vault password as a string | -- |
-| `API_BACKEND_WWWAPP_PLAYBOOKS_DIR` | No | Local playbooks directory | `PROJECT_ROOT_DIR/` |
-| `API_BACKEND_PUBLIC_PLAYBOOKS_DIR` | No | External playbooks repository path | -- |
-| `API_BACKEND_INVENTORY_DIR` | No | Ansible inventory directory | `PROJECT_ROOT_DIR/inventory/` |
-| `API_BACKEND_VAULT_FILE` | No | Path to vault-encrypted variables file | -- |
-| `CORS_ORIGIN_REGEX` | No | Regex for allowed CORS origins | `localhost` / `127.0.0.1` / `[::1]` only |
-| `HOST` | No | Server bind address | `0.0.0.0` |
-| `PORT` | No | Server listen port | `8000` |
-| `DEBUG` | No | Enable debug mode (`true`, `1`, or `yes`) | `false` |
+| Variable                           | Required | Description                               | Default                                  |
+| ---------------------------------- | -------- | ----------------------------------------- | ---------------------------------------- |
+| `PROJECT_ROOT_DIR`                 | Yes      | Absolute path to the project root         | `.` (cwd)                                |
+| `VAULT_PASSWORD_FILE`              | Yes\*    | Path to the Ansible Vault password file   | --                                       |
+| `VAULT_PASSWORD`                   | Yes\*    | Ansible Vault password as a string        | --                                       |
+| `API_BACKEND_WWWAPP_PLAYBOOKS_DIR` | No       | Local playbooks directory                 | `PROJECT_ROOT_DIR/`                      |
+| `API_BACKEND_PUBLIC_PLAYBOOKS_DIR` | No       | External playbooks repository path        | --                                       |
+| `API_BACKEND_INVENTORY_DIR`        | No       | Ansible inventory directory               | `PROJECT_ROOT_DIR/inventory/`            |
+| `API_BACKEND_VAULT_FILE`           | No       | Path to vault-encrypted variables file    | --                                       |
+| `CORS_ORIGIN_REGEX`                | No       | Regex for allowed CORS origins            | `localhost` / `127.0.0.1` / `[::1]` only |
+| `HOST`                             | No       | Server bind address                       | `0.0.0.0`                                |
+| `PORT`                             | No       | Server listen port                        | `8000`                                   |
+| `DEBUG`                            | No       | Enable debug mode (`true`, `1`, or `yes`) | `false`                                  |
 
-> *One of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` must be set for vault-encrypted operations.
+> \*One of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` must be set for vault-encrypted operations.
+
+### Logging
+
+The API uses Python's `logging` module with structured output. Log level is controlled by uvicorn:
+
+```bash
+uvicorn app.main:app --log-level debug   # verbose
+uvicorn app.main:app --log-level info    # default
+uvicorn app.main:app --log-level warning # quiet
+```
+
+When `DEBUG=true`, the app registers a custom 422 handler that logs full validation error details at `ERROR` level -- useful for debugging malformed requests during development.
 
 ---
 
@@ -81,11 +104,72 @@ All settings are read from environment variables in `app/core/config.py`. Nothin
 
 Once the server is running, interactive docs are available at:
 
-| Format | URL |
-|---|---|
-| Swagger UI | `/docs/swagger` |
-| ReDoc | `/docs/redoc` |
+| Format       | URL                  |
+| ------------ | -------------------- |
+| Swagger UI   | `/docs/swagger`      |
+| ReDoc        | `/docs/redoc`        |
 | OpenAPI JSON | `/docs/openapi.json` |
+
+### WebSocket API
+
+#### VM Status Stream
+
+Real-time VM status updates via WebSocket. Polls the Proxmox API directly (not via Ansible) for low latency.
+
+**URL:** `ws://host:8000/ws/vm-status`
+
+**Query Parameters:**
+
+| Parameter | Required | Description                          | Default             |
+| --------- | -------- | ------------------------------------ | ------------------- |
+| `node`    | No       | Proxmox node name to monitor         | Read from inventory |
+
+**Authentication:** Proxmox API credentials are read from the backend's `inventory/hosts.yml` file. The frontend does not need to handle tokens.
+
+#### Message Format
+
+**Initial connection -- full state:**
+```json
+{
+  "type": "full",
+  "vms": [
+    {
+      "vmid": 100,
+      "name": "my-vm",
+      "status": "running",
+      "cpu": 12.5,
+      "mem": 2147483648,
+      "maxmem": 4294967296,
+      "uptime": 86400,
+      "template": 0,
+      "tags": "web;production"
+    }
+  ]
+}
+```
+
+**Subsequent updates -- diff only:**
+```json
+{
+  "type": "diff",
+  "changes": {
+    "100": { "type": "changed", "vmid": 100, "status": "stopped", "cpu": 0.0 },
+    "102": { "type": "added", "vmid": 102, "name": "new-vm", "status": "running" },
+    "101": { "type": "removed", "vmid": 101 }
+  }
+}
+```
+
+**Error:**
+```json
+{ "error": "Proxmox credentials not found in backend inventory" }
+```
+
+**Behavior:**
+- Polls every 5 seconds
+- Template VMs are excluded
+- Status changes and CPU changes > 2% trigger a diff
+- Connection closes on credential errors
 
 ---
 
@@ -169,20 +253,20 @@ HTTP Request
 
 ### Route Prefixes
 
-| Prefix | Module | Purpose |
-|---|---|---|
-| `/v0/admin/proxmox/vms/` | `vms.py` | VM list and lifecycle |
-| `/v0/admin/proxmox/vms/vm_id/` | `vms.py` | Single VM operations |
-| `/v0/admin/proxmox/vms/vm_ids/` | `vms.py` | Mass VM operations |
-| `/v0/admin/proxmox/vms/vm_id/config/` | `vm_config.py` | VM configuration |
-| `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py` | VM snapshots |
-| `/v0/admin/proxmox/firewall/` | `firewall.py` | Firewall management |
-| `/v0/admin/proxmox/network/` | `network.py` | Network interfaces |
-| `/v0/admin/proxmox/storage/` | `storage.py` | Storage and ISOs |
-| `/v0/admin/run/bundles/` | `bundles.py`, `runner.py` | Bundle execution |
-| `/v0/admin/run/scenarios/` | `runner.py` | Scenario execution |
-| `/v0/admin/debug/` | `debug.py` | Debug/test endpoints |
-| `/ws/vm-status` | `ws_status.py` | WebSocket VM status |
+| Prefix                                  | Module                    | Purpose               |
+| --------------------------------------- | ------------------------- | --------------------- |
+| `/v0/admin/proxmox/vms/`                | `vms.py`                  | VM list and lifecycle |
+| `/v0/admin/proxmox/vms/vm_id/`          | `vms.py`                  | Single VM operations  |
+| `/v0/admin/proxmox/vms/vm_ids/`         | `vms.py`                  | Mass VM operations    |
+| `/v0/admin/proxmox/vms/vm_id/config/`   | `vm_config.py`            | VM configuration      |
+| `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py`            | VM snapshots          |
+| `/v0/admin/proxmox/firewall/`           | `firewall.py`             | Firewall management   |
+| `/v0/admin/proxmox/network/`            | `network.py`              | Network interfaces    |
+| `/v0/admin/proxmox/storage/`            | `storage.py`              | Storage and ISOs      |
+| `/v0/admin/run/bundles/`                | `bundles.py`, `runner.py` | Bundle execution      |
+| `/v0/admin/run/scenarios/`              | `runner.py`               | Scenario execution    |
+| `/v0/admin/debug/`                      | `debug.py`                | Debug/test endpoints  |
+| `/ws/vm-status`                         | `ws_status.py`            | WebSocket VM status   |
 
 ---
 
@@ -191,17 +275,43 @@ HTTP Request
 ### Running Tests
 
 ```bash
+# All tests
 python3 -m pytest tests/ -v
+
+# Specific test file
+python3 -m pytest tests/test_checks_playbooks.py -v
+
+# Specific test
+python3 -m pytest tests/test_ws_helpers.py::TestComputeDiff::test_detects_status_change -v
 ```
+
+### Test Structure
+
+| File                        | Covers                                                        |
+| --------------------------- | ------------------------------------------------------------- |
+| `test_api_smoke.py`         | App startup, OpenAPI schema, docs endpoints                   |
+| `test_routes_registered.py` | Golden route reference (verifies all 69 routes are registered)|
+| `test_config.py`            | `app/core/config.py` settings and defaults                    |
+| `test_vault.py`             | `app/core/vault.py` VaultManager lifecycle                    |
+| `test_runner.py`            | `app/core/runner.py` log building                             |
+| `test_runner_internals.py`  | Runner helpers: envvars, cmdline, temp dir setup              |
+| `test_extractor.py`         | `app/core/extractor.py` event parsing                         |
+| `test_exceptions.py`        | Custom validation error formatting                            |
+| `test_schemas.py`           | Pydantic request schema validation + backward-compat aliases  |
+| `test_schemas_replies.py`   | Pydantic response schema validation                           |
+| `test_checks_inventory.py`  | Inventory name validation and path traversal detection         |
+| `test_checks_playbooks.py`  | Playbook name validation and path traversal detection          |
+| `test_ws_helpers.py`        | WebSocket helpers: diff computation, credential loading        |
+| `test_route_debug.py`       | Debug endpoint integration tests (mocked runner)               |
+| `test_route_vms.py`         | VM endpoint integration tests (mocked runner)                  |
+
+Route handler tests mock `run_playbook_core()` so no Ansible or Proxmox connection is needed.
+
+The **golden route reference** (`tests/fixtures/routes_golden.json`) is a safety net that ensures refactoring never accidentally drops an endpoint. If you add or remove a route, update this file.
 
 ### Manual Testing
 
-Curl scripts for every endpoint are available in `curl_utils/`:
-
-```bash
-# Example: list VMs
-bash curl_utils/proxmox.vms.list.sh
-```
+Curl scripts for every endpoint are available in `curl_utils/`.
 
 ### Code Conventions
 
