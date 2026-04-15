@@ -1,0 +1,65 @@
+name: schema-and-operators
+
+on:
+  push:
+    branches: [main, dev, 'feature/**']
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  operators-and-codegen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout backend-api
+        uses: actions/checkout@v4
+        with:
+          path: range42-backend-api
+
+      - name: Checkout deployer-ui (schema + vectors)
+        uses: actions/checkout@v4
+        with:
+          repository: range42/range42-deployer-ui
+          path: range42-deployer-ui
+          ref: ${{ github.base_ref || github.ref_name }}
+        continue-on-error: true
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bundle schema
+        if: hashFiles('range42-deployer-ui/package.json') != ''
+        working-directory: range42-deployer-ui
+        run: |
+          npm ci
+          npm run bundle-schema
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        working-directory: range42-backend-api
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Regenerate Pydantic + drift check
+        if: hashFiles('range42-deployer-ui/schema/bundled.json') != ''
+        working-directory: range42-backend-api
+        run: |
+          . .venv/bin/activate
+          bash ../range42-deployer-ui/tools/generate-pydantic.sh
+          git diff --exit-code -- app/schemas/generated.py \
+            || { echo "::error::app/schemas/generated.py is out of date — regenerate and commit"; exit 1; }
+
+      - name: Pytest (operators on shared vectors)
+        working-directory: range42-backend-api
+        run: |
+          . .venv/bin/activate
+          pytest tests/overlay/ -v
