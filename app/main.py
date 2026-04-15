@@ -114,6 +114,22 @@ def create_app() -> FastAPI:
     from app.routes.v1 import router as v1_router
     _app.include_router(v1_router)
 
+    workers_env = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS")
+    if settings.uvicorn_workers_guard and workers_env:
+        try:
+            if int(workers_env) > 1:
+                get_logger(__name__).warning(
+                    "multi_worker_deploy_invariant_violated",
+                    workers=workers_env,
+                    remediation=(
+                        "Set WEB_CONCURRENCY=1 in deploy environments; SSE "
+                        "open_streams counter and live subscriber map are "
+                        "in-process. Set RANGE42_UVICORN_WORKERS_GUARD=0 to silence."
+                    ),
+                )
+        except ValueError:
+            pass
+
     return _app
 
 
