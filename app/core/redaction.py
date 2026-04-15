@@ -124,3 +124,43 @@ class ConfigDenylistLayer:
 
         walk(new, "")
         return new, fired
+
+
+VAULT_MARKER = "__range42_vault_origin__"
+
+
+class VaultTaggedLayer:
+    """Layer 3 (hard invariant). Redacts any value that was resolved via
+    the vault resolver (carries ``__range42_vault_origin__`` marker) or
+    any raw string whose lstrip starts with ``!vault`` (leaked inline
+    YAML vault tag)."""
+
+    name = "vault_tagged"
+
+    def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+        fired: list[dict[str, str]] = []
+        new = deepcopy(event)
+
+        def walk(obj: Any, path: str) -> tuple[Any, bool, str]:
+            if isinstance(obj, dict) and obj.get(VAULT_MARKER) is True:
+                return "[REDACTED:vault_tagged]", True, "vault:tagged-value"
+            if isinstance(obj, str) and obj.lstrip().startswith("!vault"):
+                return "[REDACTED:vault_tagged]", True, "vault:ansible-vault-inline"
+            if isinstance(obj, dict):
+                for k, v in list(obj.items()):
+                    sub = f"{path}.{k}" if path else k
+                    replaced, hit, rule = walk(v, sub)
+                    if hit:
+                        obj[k] = replaced
+                        fired.append({"rule_id": rule, "field_path": sub})
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    sub = f"{path}[{i}]"
+                    replaced, hit, rule = walk(item, sub)
+                    if hit:
+                        obj[i] = replaced
+                        fired.append({"rule_id": rule, "field_path": sub})
+            return obj, False, ""
+
+        walk(new, "")
+        return new, fired
