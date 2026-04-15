@@ -81,3 +81,102 @@ class EventsWriter:
     @property
     def current_seq(self) -> int:
         return self._seq
+
+
+import asyncio  # noqa: E402
+from typing import AsyncIterator, Iterator  # noqa: E402
+
+
+class EventsReader:
+    """Synchronous seq-indexed reader over events.jsonl."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def read_range(self, *, from_seq: int = 0,
+                   to_seq: int | None = None) -> Iterator[dict[str, Any]]:
+        if not self.path.exists():
+            return
+        with self.path.open("rb") as fh:
+            for raw in fh:
+                s = raw.strip()
+                if not s or s == b'""':
+                    continue
+                try:
+                    obj = json.loads(s)
+                except ValueError:
+                    # partial trailing line
+                    continue
+                seq = obj.get("event_seq")
+                if not isinstance(seq, int) or seq < from_seq:
+                    continue
+                if to_seq is not None and seq > to_seq:
+                    break
+                yield obj
+
+
+async def tail_events(path: Path, *, from_seq: int = 0,
+                      stop: asyncio.Event | None = None,
+                      poll_ms: int = 250) -> AsyncIterator[dict[str, Any]]:
+    """Async generator that yields events with event_seq > from_seq.
+
+    Uses watchfiles on Linux when available, else falls back to polling.
+    Skips the last line if it parses as a partial JSON (see SENTINEL).
+    """
+    path = Path(path)
+    last = from_seq - 1
+    stop = stop or asyncio.Event()
+
+    def _read_from(threshold: int) -> list[dict[str, Any]]:
+        r = EventsReader(path)
+        return [e for e in r.read_range(from_seq=threshold + 1)]
+
+    try:
+        from watchfiles import awatch  # type: ignore
+        use_watch = True
+    except Exception:
+        use_watch = False
+
+    # Initial drain.
+    for ev in _read_from(last):
+        last = ev["event_seq"]
+        yield ev
+
+    if use_watch:
+        # awatch(parent_dir) yields change batches; each batch triggers a
+        # re-scan. Wrap __anext__ in a task so asyncio.wait() timeouts don't
+        # cancel the underlying coroutine (cancellation would poison the
+        # async generator). Falls back to polling interval as an idle tick
+        # so the stop event is honoured even when no fs events arrive.
+        watcher = awatch(path.parent, stop_event=stop)
+        pending_task: asyncio.Task | None = None
+        try:
+            while not stop.is_set():
+                if pending_task is None:
+                    pending_task = asyncio.create_task(watcher.__anext__())
+                done, _ = await asyncio.wait(
+                    {pending_task}, timeout=poll_ms / 1000,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if pending_task in done:
+                    try:
+                        pending_task.result()
+                    except StopAsyncIteration:
+                        pass
+                    pending_task = None
+                for ev in _read_from(last):
+                    last = ev["event_seq"]
+                    yield ev
+        finally:
+            if pending_task is not None and not pending_task.done():
+                pending_task.cancel()
+                try:
+                    await pending_task
+                except (asyncio.CancelledError, StopAsyncIteration, Exception):
+                    pass
+    else:
+        while not stop.is_set():
+            await asyncio.sleep(poll_ms / 1000)
+            for ev in _read_from(last):
+                last = ev["event_seq"]
+                yield ev
