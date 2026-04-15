@@ -126,6 +126,29 @@ class ConfigDenylistLayer:
         return new, fired
 
 
+class SaveTimeLintLayer:
+    """Layer 1 (stretch, deferred per spec §13). Interface reserved so the
+    pipeline supports all four layers from day one."""
+
+    name = "save_time_lint"
+
+    def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+        raise NotImplementedError("save_time_lint deferred per spec §13")
+
+
+class ContentRegexLayer:
+    """Layer 4 (stretch, deferred per spec §13). Accepts a list of
+    (rule_id, regex) tuples for future activation."""
+
+    name = "content_regex"
+
+    def __init__(self, rules: tuple[tuple[str, str], ...] = ()) -> None:
+        self.rules = rules
+
+    def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+        raise NotImplementedError("content_regex deferred per spec §13")
+
+
 VAULT_MARKER = "__range42_vault_origin__"
 
 
