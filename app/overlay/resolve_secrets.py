@@ -1,21 +1,47 @@
-"""resolve_secrets — substitute env/secret references against a vault map.
+"""Resolve 'env.secret.<name>' references in attachment vars into
+marker-wrapped values for downstream redaction.
 
-Plan A skeleton: identity when vault is empty OR doc has no env;
-otherwise NotImplementedOperator (Plan B).
+Pure transform; caller supplies a SecretLookup (vault-backed in prod,
+dict-backed in tests).
+
+Spec refs: §3 operator chain resolve_secrets, §7 redaction layer 3.
 """
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import Protocol
 
-from app.overlay.errors import NotImplementedOperator
+from app.core.redaction import VAULT_MARKER
 
 
-def resolve_secrets(
-    document: dict[str, Any], vault: Mapping[str, str]
-) -> dict[str, Any]:
-    has_env = bool(document.get("env"))
-    has_vault = bool(vault)
-    if has_env and has_vault:
-        raise NotImplementedOperator(
-            "resolve_secrets", "env-substitution", "Plan B delivery"
-        )
-    return deepcopy(document)
+class SecretLookup(Protocol):
+    def get(self, name: str) -> str | None: ...
+
+
+def _walk(obj, lookup: SecretLookup) -> None:
+    if isinstance(obj, dict):
+        # Rewrite any *_from: "env.secret.<name>" -> key without _from,
+        # wrapped with the vault origin marker.
+        rewrites: list[tuple[str, str]] = []
+        for k, v in list(obj.items()):
+            if isinstance(v, str) and k.endswith("_from") and v.startswith("env.secret."):
+                name = v[len("env.secret."):]
+                val = lookup.get(name)
+                if val is None:
+                    raise KeyError(f"Secret not found: {name}")
+                dst = k[: -len("_from")]
+                rewrites.append((k, dst))
+                obj[dst] = {VAULT_MARKER: True, "value": val}
+        for k, _ in rewrites:
+            obj.pop(k, None)
+        for v in obj.values():
+            _walk(v, lookup)
+    elif isinstance(obj, list):
+        for item in obj:
+            _walk(item, lookup)
+
+
+def resolve_secrets(document: dict, lookup: SecretLookup) -> dict:
+    out = deepcopy(document)
+    _walk(out, lookup)
+    return out
