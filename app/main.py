@@ -51,11 +51,17 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("No vault password provided")
 
+    # v1 state layer
+    from app.core.db import get_engine, dispose_engine
+    engine = get_engine()
+    logger.info("v1 state engine ready", db_url=settings.db_url)
+
     try:
         yield
     finally:
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
+        await dispose_engine()
 
 
 def create_app() -> FastAPI:
