@@ -13,7 +13,6 @@ Endpoints
 """
 
 import asyncio
-import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional
@@ -22,7 +21,9 @@ import httpx
 import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
