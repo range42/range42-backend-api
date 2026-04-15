@@ -20,6 +20,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import validation_exception_handler
+from app.core.logging import configure_logging
+from app.core.middleware_trace import TraceIdMiddleware
 from app.core.runner import vault_manager
 from app.routes import router as api_router
 from app.routes.ws_status import router as ws_router
@@ -59,6 +61,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """Application factory. Creates and configures the FastAPI application."""
+    configure_logging(json_output=True)
+
     middleware = [
         Middleware(
             CORSMiddleware,
@@ -67,7 +71,8 @@ def create_app() -> FastAPI:
             allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
             allow_headers=["Content-Type", "Accept", "Authorization"],
             max_age=600,
-        )
+        ),
+        Middleware(TraceIdMiddleware),
     ]
 
     _app = FastAPI(

@@ -14,23 +14,30 @@ from typing import Iterator
 import structlog
 
 
-class _NamedPrintLogger(structlog.PrintLogger):
-    """PrintLogger that remembers the name it was constructed with."""
+class _NamedPrintLogger:
+    """Print-based logger that remembers its name and resolves stdout lazily.
 
-    def __init__(self, name: str | None = None, file=None):
-        super().__init__(file=file)
+    Resolving ``sys.stdout`` at emit time (not construction time) is important
+    so that pytest ``capsys`` / contextual stdout redirection works across
+    repeated ``configure_logging`` calls in the test suite.
+    """
+
+    def __init__(self, name: str | None = None):
         self.name = name
+
+    def msg(self, message: str) -> None:
+        print(message, file=sys.stdout, flush=True)
+
+    # structlog calls the method matching the level name (info, warning, etc.)
+    log = debug = info = warning = error = critical = fatal = msg
 
 
 class _NamedPrintLoggerFactory:
     """Factory that captures the name argument passed to structlog.get_logger()."""
 
-    def __init__(self, file=None):
-        self._file = file
-
     def __call__(self, *args):
         name = args[0] if args else None
-        return _NamedPrintLogger(name=name, file=self._file)
+        return _NamedPrintLogger(name=name)
 
 
 def configure_logging(json_output: bool = True, level: str = "INFO") -> None:
@@ -66,7 +73,7 @@ def configure_logging(json_output: bool = True, level: str = "INFO") -> None:
             getattr(logging, level.upper(), logging.INFO)
         ),
         context_class=dict,
-        logger_factory=_NamedPrintLoggerFactory(file=sys.stdout),
+        logger_factory=_NamedPrintLoggerFactory(),
         cache_logger_on_first_use=False,
     )
 
