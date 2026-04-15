@@ -56,9 +56,25 @@ async def lifespan(app: FastAPI):
     engine = get_engine()
     logger.info("v1 state engine ready", db_url=settings.db_url)
 
+    # v1 orphan reconcile: run once synchronously at boot so the structured
+    # log captures any detached ansible-runner subprocesses inherited from
+    # a prior FastAPI process, then register the periodic apscheduler job.
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.core.orphans import reconcile_once
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(reconcile_once, "interval",
+                      seconds=settings.orphan_reconcile_interval_s,
+                      id="orphan_reconcile", max_instances=1, coalesce=True)
+    try:
+        await reconcile_once()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("orphan reconcile boot failed", error=str(exc))
+    scheduler.start()
+
     try:
         yield
     finally:
+        scheduler.shutdown(wait=False)
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         await dispose_engine()
