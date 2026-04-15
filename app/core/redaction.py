@@ -11,7 +11,9 @@ never short-circuit -- every fired layer appends one audit row.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
@@ -78,3 +80,47 @@ def run_pipeline(
                 field_path=f["field_path"],
             )
     return current
+
+
+class ConfigDenylistLayer:
+    """Layer 2 (hard invariant). Redacts any dict key whose name matches
+    one of the configured fnmatch patterns, at any depth. Also handles the
+    structural `{name, value, secret: true}` env shape emitted by the
+    deployment plan extractor."""
+
+    name = "config_denylist"
+
+    def __init__(self, patterns: tuple[str, ...]) -> None:
+        self.patterns = patterns
+
+    def _matches(self, key: str) -> bool:
+        return any(fnmatch.fnmatchcase(key, pat) for pat in self.patterns)
+
+    def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+        fired: list[dict[str, str]] = []
+        new = deepcopy(event)
+
+        def walk(obj: Any, path: str) -> None:
+            if isinstance(obj, dict):
+                # env.secret=true handling
+                if obj.get("secret") is True and "value" in obj:
+                    obj["value"] = "[REDACTED:config_denylist]"
+                    fired.append(
+                        {
+                            "rule_id": "denylist:env.secret-true",
+                            "field_path": f"{path}.value" if path else "value",
+                        }
+                    )
+                for k, v in list(obj.items()):
+                    sub = f"{path}.{k}" if path else k
+                    if isinstance(v, (dict, list)):
+                        walk(v, sub)
+                    elif self._matches(k):
+                        obj[k] = "[REDACTED:config_denylist]"
+                        fired.append({"rule_id": f"denylist:{k}", "field_path": sub})
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    walk(item, f"{path}[{i}]")
+
+        walk(new, "")
+        return new, fired
