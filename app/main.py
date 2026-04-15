@@ -5,7 +5,6 @@ lifecycle management, custom exception handlers, and route registration.
 The module-level ``app`` object is the ASGI entry point used by uvicorn.
 """
 
-import logging
 import os
 import shutil
 import stat
@@ -20,13 +19,13 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import validation_exception_handler
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, get_logger
 from app.core.middleware_trace import TraceIdMiddleware
 from app.core.runner import vault_manager
 from app.routes import router as api_router
 from app.routes.ws_status import router as ws_router
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
