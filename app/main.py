@@ -111,6 +111,9 @@ def create_app() -> FastAPI:
     _app.include_router(api_router)
     _app.include_router(ws_router)
 
+    from app.routes.v1 import router as v1_router
+    _app.include_router(v1_router)
+
     return _app
 
 
