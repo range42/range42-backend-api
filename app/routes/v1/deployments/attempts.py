@@ -61,4 +61,15 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
     dep.state = "pending"
     await session.commit()
     await session.refresh(row)
+
+    import os
+    if os.getenv("RANGE42_AUTO_START_ATTEMPTS", "1") in ("1", "true", "yes"):
+        try:
+            from app.core.deploy_trigger import start_attempt
+            await start_attempt(session, attempt=row)
+        except Exception as e:  # noqa: BLE001
+            from app.core.logging import get_logger
+            get_logger(__name__).warning("attempt_autostart_failed",
+                                         attempt_id=row.id, err=str(e))
+
     return AttemptOut.model_validate(row, from_attributes=True)
