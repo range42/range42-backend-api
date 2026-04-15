@@ -180,3 +180,20 @@ async def tail_events(path: Path, *, from_seq: int = 0,
             for ev in _read_from(last):
                 last = ev["event_seq"]
                 yield ev
+
+
+class EventsIdx:
+    """Sidecar index mapping event_seq -> byte_offset.
+
+    Deferred per spec §13 — stub raises NotImplementedError. Current
+    runtime uses the line-count cursor in EventsReader/EventsWriter.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def build(self) -> None:
+        raise NotImplementedError("events.idx deferred per spec §13")
+
+    def lookup(self, event_seq: int) -> int:
+        raise NotImplementedError("events.idx deferred per spec §13")
