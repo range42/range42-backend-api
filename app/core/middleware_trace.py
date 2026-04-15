@@ -17,6 +17,9 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request, call_next):
         incoming = request.headers.get(HEADER) or uuid.uuid4().hex
+        # Expose on request.state so exception handlers can retrieve it even
+        # when the client did not send the header (generated id case).
+        request.state.trace_id = incoming
         tokens = structlog.contextvars.bind_contextvars(trace_id=incoming)
         try:
             response = await call_next(request)

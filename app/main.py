@@ -13,12 +13,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.exceptions import validation_exception_handler
+from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware_trace import TraceIdMiddleware
 from app.core.runner import vault_manager
@@ -108,7 +107,7 @@ def create_app() -> FastAPI:
         middleware=middleware,
     )
 
-    _app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    install_exception_handlers(_app)
     _app.include_router(api_router)
     _app.include_router(ws_router)
 
