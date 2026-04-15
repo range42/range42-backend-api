@@ -69,6 +69,44 @@ class _SubprocessHandle:
                     pass
 
 
+async def signal_running_attempt(workspace_path: str | Path, *,
+                                 signal: str = "SIGTERM") -> bool:
+    """Signal the detached ansible-runner subprocess for a workspace.
+
+    Reads the pidfile produced by ansible-runner at
+    ``<workspace>/runner/pid`` and sends SIGTERM (or SIGKILL for force).
+    Returns True if a signal was sent, False if no pidfile or process.
+    The events watcher then writes attempt_end with
+    ``terminal_state=cancelled``.
+    """
+    ws = Path(workspace_path)
+    pid_candidates = [
+        ws / "runner" / "pid",
+        ws / "runner" / "artifacts" / "pid",
+    ]
+    # Fall back: look inside any artifact dir.
+    artifacts_dir = ws / "runner" / "artifacts"
+    if artifacts_dir.exists():
+        for child in artifacts_dir.iterdir():
+            pid_candidates.append(child / "pid")
+    sig = getattr(__import__("signal"), signal, None)
+    if sig is None:
+        logger.warning("unknown_signal", signal=signal)
+        return False
+    for p in pid_candidates:
+        try:
+            pid = int(p.read_text().strip())
+        except (FileNotFoundError, ValueError, OSError):
+            continue
+        try:
+            os.kill(pid, sig)
+            logger.info("signalled_attempt", pid=pid, signal=signal)
+            return True
+        except ProcessLookupError:
+            continue
+    return False
+
+
 class DetachedRunner:
     def __init__(self, runner_bin: str | None = None) -> None:
         self.runner_bin = runner_bin or settings.runner_bin
