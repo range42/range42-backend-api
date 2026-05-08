@@ -218,6 +218,53 @@ async def check_git_reachable(repo_url: str) -> PreflightCheck:
     return PreflightCheck(check="git_reachable", result="pass")
 
 
+async def check_vmid_safety_for_topology(
+    topology: dict,
+    team_count: int,
+    host_overrides: list[list[int]] | None,
+) -> PreflightCheck:
+    """Wrap ``check_vmids()`` with topology-aware VMID expansion.
+
+    Mirrors the universal playbook's ``r42_vmid_for_node`` filter:
+    - shared scope: ``(vmid_base or template_vmid) + seq`` (seq within shared list)
+    - per_team scope: for ``team_id in 1..team_count``,
+      ``(vmid_base or template_vmid) + (team_id * vms_per_team) + seq``
+      (seq within per-team list, ``vms_per_team`` = total per-team VM count).
+
+    Async for call-site symmetry with the other ``check_*`` async functions
+    even though no I/O is performed — just expansion + sync ``check_vmids``.
+    """
+    nodes = topology.get("nodes") or []
+    vm_kinds = ("vm", "lxc")
+
+    shared_vms = [
+        n for n in nodes
+        if n.get("kind") in vm_kinds
+        and (n.get("replication") or {}).get("scope") == "shared"
+    ]
+    per_team_vms = [
+        n for n in nodes
+        if n.get("kind") in vm_kinds
+        and (n.get("replication") or {}).get("scope") == "per_team"
+    ]
+
+    vmids: list[int] = []
+
+    # Shared VMs use vmid_base + seq
+    for seq, n in enumerate(shared_vms):
+        base = n.get("vmid_base", n.get("template_vmid", 0))
+        vmids.append(int(base) + seq)
+
+    # Per-team: vmid_base + (team_id * vms_per_team) + seq
+    vms_per_team = len(per_team_vms)
+    for team_id in range(1, team_count + 1):
+        for seq, n in enumerate(per_team_vms):
+            base = n.get("vmid_base", n.get("template_vmid", 0))
+            vmids.append(int(base) + (team_id * vms_per_team) + seq)
+
+    return check_vmids(vmids, host_overrides=host_overrides)
+
+
 async def check_topology_assets(
     project_dir: Path,
     catalog_dir: Path | None,
