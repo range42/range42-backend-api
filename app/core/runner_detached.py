@@ -148,6 +148,17 @@ class DetachedRunner:
             # Symlink for speed; ansible-runner is happy with this on Linux.
             project_dir.symlink_to(playbook_root, target_is_directory=True)
 
+            # Compute the playbook's path relative to the project root so
+            # ansible-runner can locate it via -p <relative path>.
+            playbook_rel = playbook_path.relative_to(playbook_root)
+
+            env_dir = private_data_dir / "env"
+            env_dir.mkdir(exist_ok=True, mode=0o700)
+
+            cmdline_path = env_dir / "cmdline"
+            cmdline_path.write_text(f"-p {playbook_rel} -i inventory\n")
+            cmdline_path.chmod(0o600)
+
         env_dir = private_data_dir / "env"
         env_dir.mkdir(parents=True, exist_ok=True)
         (env_dir / "extravars").write_text(json.dumps(extravars or {}))

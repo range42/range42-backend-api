@@ -99,3 +99,47 @@ async def test_detached_runner_writes_project_dir(tmp_path: Path, monkeypatch):
     assert (
         private_data_dir / "project" / "scenarios" / "_universal" / "main.yml"
     ).exists(), "DetachedRunner did not copy/symlink the playbook tree into project/"
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_writes_cmdline(tmp_path: Path, monkeypatch):
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "_universal").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "_universal" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    # Stub the subprocess spawn so the test runs offline (same pattern as
+    # test_detached_runner_writes_project_dir).
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    await runner.start(
+        private_data_dir=private_data_dir,
+        extravars={
+            "r42_playbook_path": str(pb),
+            "r42_inventory_dir": str(tmp_path / "inv"),
+        },
+        envvars={},
+    )
+
+    cmdline = (private_data_dir / "env" / "cmdline").read_text()
+    assert "-p scenarios/_universal/main.yml" in cmdline
+    assert "-i inventory" in cmdline
