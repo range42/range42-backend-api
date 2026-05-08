@@ -76,6 +76,12 @@ class RunnerSetupError(Range42Error):
     code = "RUNNER_SETUP_ERROR"
 
 
+class ProjectCheckoutError(Range42Error):
+    status = 502
+    error = "project_checkout_error"
+    code = "PROJECT_CHECKOUT_FAILED"
+
+
 def _trace_id(request: Request) -> str:
     """Resolve trace id with fallback chain:
     request.state (set by TraceIdMiddleware) -> incoming header -> "".
