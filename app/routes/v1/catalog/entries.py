@@ -1,11 +1,20 @@
 """/v1/catalog/entries — cross-source browse + single-entry detail.
 
 Each request shallow-clones every registered SourceRepo into a tmpdir,
-walks the trees for ``range42.yaml`` manifests, and synthesises catalog
-entry summaries. Detail endpoint also reads ``README.md`` alongside.
+walks the trees for catalog manifests, and synthesises catalog entry
+summaries. Three manifest formats are recognised:
+
+* ``range42.yaml`` — native Range42 manifest (kind/name/description/tags
+  read straight from the document).
+* ``meta.json`` — container/CTF challenges with an ``x_range42`` namespace.
+* ``meta/main.yml`` — Ansible Galaxy roles with a ``galaxy_info`` block.
+
+Detail endpoint also reads ``README.md`` alongside.
 """
 from __future__ import annotations
 
+import json
+import logging
 import tempfile
 from pathlib import Path
 
@@ -23,6 +32,7 @@ from app.schemas.v1.common import Page
 
 router = APIRouter()
 _yaml = YAML(typ="safe")
+_log = logging.getLogger(__name__)
 
 
 async def _session() -> AsyncSession:
@@ -48,15 +58,81 @@ def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
     return dest
 
 
-def _discover(repo_dir: Path) -> list[tuple[str, dict]]:
-    out: list[tuple[str, dict]] = []
+def _entry_from_range42_yaml(p: Path, repo_dir: Path) -> dict | None:
+    try:
+        doc = _yaml.load(p.read_text()) or {}
+    except Exception as e:
+        _log.warning("skipping malformed range42.yaml %s: %s", p, e)
+        return None
+    rel = p.parent.relative_to(repo_dir).as_posix() or "."
+    return {
+        "path": rel,
+        "kind": doc.get("kind", "unknown"),
+        "name": doc.get("name", rel),
+        "description": doc.get("description"),
+        "tags": doc.get("tags") or [],
+    }
+
+
+def _entry_from_meta_json(p: Path, repo_dir: Path) -> dict | None:
+    try:
+        doc = json.loads(p.read_text()) or {}
+    except Exception as e:
+        _log.warning("skipping malformed meta.json %s: %s", p, e)
+        return None
+    rel = p.parent.relative_to(repo_dir).as_posix() or "."
+    x = (doc.get("x_range42") or {}) if isinstance(doc, dict) else {}
+    exercise = x.get("exercise") or {}
+    catalog = x.get("catalog") or {}
+    vuln = x.get("vuln") or {}
+    return {
+        "path": rel,
+        "kind": "container",
+        "name": exercise.get("id") or p.parent.name,
+        "description": vuln.get("title"),
+        "tags": catalog.get("tags") or [],
+    }
+
+
+def _entry_from_meta_main_yml(p: Path, repo_dir: Path) -> dict | None:
+    try:
+        doc = _yaml.load(p.read_text()) or {}
+    except Exception as e:
+        _log.warning("skipping malformed meta/main.yml %s: %s", p, e)
+        return None
+    role_dir = p.parent.parent  # parent of the `meta` directory
+    rel = role_dir.relative_to(repo_dir).as_posix() or "."
+    galaxy = (doc.get("galaxy_info") or {}) if isinstance(doc, dict) else {}
+    return {
+        "path": rel,
+        "kind": "ansible_role",
+        "name": role_dir.name,
+        "description": galaxy.get("description"),
+        "tags": galaxy.get("galaxy_tags") or [],
+    }
+
+
+def _discover(repo_dir: Path) -> list[dict]:
+    """Walk ``repo_dir`` for the three known manifest types.
+
+    Returns a list of synthesised entry dicts with keys
+    ``path``, ``kind``, ``name``, ``description``, ``tags`` — ready to
+    feed into :class:`CatalogEntrySummary`.
+    Malformed manifests are logged at WARNING and skipped.
+    """
+    out: list[dict] = []
     for p in repo_dir.rglob("range42.yaml"):
-        try:
-            doc = _yaml.load(p.read_text())
-            rel = p.parent.relative_to(repo_dir).as_posix() or "."
-            out.append((rel, doc or {}))
-        except Exception:
-            continue
+        entry = _entry_from_range42_yaml(p, repo_dir)
+        if entry is not None:
+            out.append(entry)
+    for p in repo_dir.rglob("meta.json"):
+        entry = _entry_from_meta_json(p, repo_dir)
+        if entry is not None:
+            out.append(entry)
+    for p in repo_dir.rglob("meta/main.yml"):
+        entry = _entry_from_meta_main_yml(p, repo_dir)
+        if entry is not None:
+            out.append(entry)
     return out
 
 
@@ -84,19 +160,19 @@ async def list_entries(
             ).scalars().all()
             for repo in repos:
                 dest = _clone_repo(src, repo, workdir)
-                for rel, doc in _discover(dest):
-                    if kind and doc.get("kind") != kind:
+                for entry in _discover(dest):
+                    if kind and entry["kind"] != kind:
                         continue
-                    if tag and tag not in (doc.get("tags") or []):
+                    if tag and tag not in (entry.get("tags") or []):
                         continue
                     summaries.append(
                         CatalogEntrySummary(
                             source_id=src.id,
-                            path=rel,
-                            kind=doc.get("kind", "unknown"),
-                            name=doc.get("name", rel),
-                            description=doc.get("description"),
-                            tags=doc.get("tags", []),
+                            path=entry["path"],
+                            kind=entry["kind"],
+                            name=entry["name"],
+                            description=entry.get("description"),
+                            tags=entry.get("tags") or [],
                             sha=None,
                         )
                     )
