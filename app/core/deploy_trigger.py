@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.allocation import ssh_controlmaster_env
 from app.core.config import settings
+from app.core.errors import ProjectCheckoutError
 from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
 from app.core.inventory_writer import write_inventory
@@ -131,6 +132,16 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         target_host = (await session.execute(
             select(ProxmoxHost).where(ProxmoxHost.id == dep.target_host_id))
         ).scalar_one()
+
+        # Guard against missing required fields (typed errors, not cryptic git failures)
+        if not dep.project_sha:
+            raise ProjectCheckoutError(
+                message="project_sha is not set on this deployment; cannot clone for _universal scenario"
+            )
+        if not project.repo_owner or not project.repo_name:
+            raise ProjectCheckoutError(
+                message=f"project repo_owner/repo_name not set (got owner={project.repo_owner!r}, name={project.repo_name!r}); cannot construct clone URL"
+            )
 
         # v1 simplification: source.token_ref is treated as the actual token
         # string (acknowledged debt — no secret store yet).

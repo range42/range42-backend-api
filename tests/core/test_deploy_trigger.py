@@ -371,3 +371,182 @@ async def test_start_attempt_legacy_scenario_does_not_clone_or_write_inventory(
     assert not (ws / "project").exists()
     # Inventory dir points to existing legacy path
     assert captured["extravars"]["r42_inventory_dir"].endswith("/inventory")
+
+
+# ---------------------------------------------------------------------------
+# Guards: nullable project_sha / repo_owner / repo_name on _universal scenarios
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_start_attempt_universal_requires_project_sha(tmp_path, monkeypatch):
+    """For _universal scenario, missing project_sha raises ProjectCheckoutError."""
+    monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+
+    pb_root = tmp_path / "playbooks"
+    (pb_root / "scenarios" / "_universal").mkdir(parents=True)
+    (pb_root / "scenarios" / "_universal" / "main.yml").write_text(
+        "- hosts: all\n  tasks: []\n"
+    )
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(pb_root))
+
+    from importlib import reload
+    from app.core import config as cfg, db as dbmod
+    reload(cfg)
+    reload(dbmod)
+    from app.core.models import (
+        Base, Source, ProxmoxHost, Project, Deployment, Attempt,
+    )
+    engine = dbmod.get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    ws = tmp_path / "WS-no-sha"
+    ws.mkdir(parents=True)
+    (ws / "runner").mkdir()
+    (ws / "ssh_keys").mkdir()
+    (ws / "secrets").mkdir()
+    (ws / "inventory").mkdir()
+
+    async with dbmod.get_session_factory()() as s:
+        s.add(Source(id="s", provider="github", base_url="https://github.com",
+                     auth_kind="none"))
+        s.add(ProxmoxHost(
+            id="h", name="n", api_url="https://10.0.0.5:8006",
+            node_name="n", token_ref="t",
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Project(
+            id="p", name="p", source_id="s",
+            branch_strategy="shared_repo_subdir",
+            repo_owner="me", repo_name="proj",
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        # project_sha intentionally NOT set
+        s.add(Deployment(
+            id="dep-nosha", codename="WS", scenario_label="_universal",
+            project_id="p", target_host_id="h", team_count=1, state="pending",
+            workspace_path=str(ws),
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Attempt(id="att-nosha", deployment_id="dep-nosha", scope="full",
+                      state="pending"))
+        await s.commit()
+
+    class _NoOpHandle:
+        pid = 1
+
+        async def wait(self) -> int:
+            return 0
+
+        async def kill(self) -> None:
+            pass
+
+    class _NoOpRunner:
+        async def start(self, *, private_data_dir, extravars, envvars):
+            private_data_dir.mkdir(parents=True, exist_ok=True)
+            return _NoOpHandle()
+
+    from app.core.deploy_trigger import start_attempt
+    from app.core.errors import ProjectCheckoutError
+    from sqlalchemy import select
+
+    async with dbmod.get_session_factory()() as s:
+        att = (await s.execute(
+            select(Attempt).where(Attempt.id == "att-nosha"))).scalar_one()
+        with pytest.raises(ProjectCheckoutError) as exc:
+            await start_attempt(s, attempt=att, runner=_NoOpRunner())
+        assert "project_sha" in str(exc.value.message)
+
+
+@pytest.mark.asyncio
+async def test_start_attempt_universal_requires_repo_owner_and_name(
+    tmp_path, monkeypatch,
+):
+    """For _universal scenario, missing repo_owner or repo_name raises ProjectCheckoutError."""
+    monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+
+    pb_root = tmp_path / "playbooks"
+    (pb_root / "scenarios" / "_universal").mkdir(parents=True)
+    (pb_root / "scenarios" / "_universal" / "main.yml").write_text(
+        "- hosts: all\n  tasks: []\n"
+    )
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(pb_root))
+
+    from importlib import reload
+    from app.core import config as cfg, db as dbmod
+    reload(cfg)
+    reload(dbmod)
+    from app.core.models import (
+        Base, Source, ProxmoxHost, Project, Deployment, Attempt,
+    )
+    engine = dbmod.get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    ws = tmp_path / "WS-noowner"
+    ws.mkdir(parents=True)
+    (ws / "runner").mkdir()
+    (ws / "ssh_keys").mkdir()
+    (ws / "secrets").mkdir()
+    (ws / "inventory").mkdir()
+
+    async with dbmod.get_session_factory()() as s:
+        s.add(Source(id="s", provider="github", base_url="https://github.com",
+                     auth_kind="none"))
+        s.add(ProxmoxHost(
+            id="h", name="n", api_url="https://10.0.0.5:8006",
+            node_name="n", token_ref="t",
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        # repo_owner/repo_name intentionally NOT set
+        s.add(Project(
+            id="p", name="p", source_id="s",
+            branch_strategy="shared_repo_subdir",
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Deployment(
+            id="dep-noowner", codename="WS", scenario_label="_universal",
+            project_id="p", target_host_id="h", team_count=1, state="pending",
+            workspace_path=str(ws),
+            project_sha="0000000000000000000000000000000000000000",
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Attempt(id="att-noowner", deployment_id="dep-noowner", scope="full",
+                      state="pending"))
+        await s.commit()
+
+    class _NoOpHandle:
+        pid = 1
+
+        async def wait(self) -> int:
+            return 0
+
+        async def kill(self) -> None:
+            pass
+
+    class _NoOpRunner:
+        async def start(self, *, private_data_dir, extravars, envvars):
+            private_data_dir.mkdir(parents=True, exist_ok=True)
+            return _NoOpHandle()
+
+    from app.core.deploy_trigger import start_attempt
+    from app.core.errors import ProjectCheckoutError
+    from sqlalchemy import select
+
+    async with dbmod.get_session_factory()() as s:
+        att = (await s.execute(
+            select(Attempt).where(Attempt.id == "att-noowner"))).scalar_one()
+        with pytest.raises(ProjectCheckoutError) as exc:
+            await start_attempt(s, attempt=att, runner=_NoOpRunner())
+        assert "repo_owner" in str(exc.value.message) or "repo_name" in str(exc.value.message)

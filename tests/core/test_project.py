@@ -73,3 +73,37 @@ def test_checkout_project_fails_when_topology_missing(tmp_path):
     with pytest.raises(ProjectCheckoutError) as exc:
         checkout_project(repo_url=f"file://{src}", sha=sha, dest=dst, token=None)
     assert "topology.json" in str(exc.value.message) or "topology.json" in str(exc.value)
+
+
+def test_run_git_redacts_token_in_error_message(tmp_path):
+    """Token in URL must not appear in error messages or details.
+
+    Exercises the existing-repo fetch branch where the authed URL is passed
+    as an arg to `git fetch <url> <sha>`. On failure the args are joined
+    into the error message — without redaction the raw token would leak.
+    """
+    fake_token = "ghp_FAKETOKENABCDEFGHIJ12345"
+    bad_url = f"https://x-access-token:{fake_token}@github.com/nonexistent/repo.git"
+
+    # Pre-create a .git directory so checkout_project takes the fetch branch
+    # (which passes the URL directly to `git fetch <url> <sha>`).
+    dst = tmp_path / "ws" / "project"
+    dst.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=dst, check=True)
+
+    with pytest.raises(ProjectCheckoutError) as exc:
+        checkout_project(
+            repo_url=bad_url,
+            sha="0000000000000000000000000000000000000001",  # different from current
+            dest=dst,
+            token=None,  # token already in URL
+        )
+
+    err = exc.value
+    # Token must not appear anywhere in the error
+    assert fake_token not in str(err.message), f"Token leaked in message: {err.message}"
+    if err.details:
+        for detail in err.details:
+            for v in detail.values():
+                assert fake_token not in str(v), f"Token leaked in details: {detail}"
+    assert "[REDACTED]" in str(err.message) or "git not installed" in str(err.message)

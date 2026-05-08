@@ -5,14 +5,23 @@ Shallow clone (depth=1) — full history not needed at deploy time.
 Idempotent: same SHA → no-op.
 """
 from __future__ import annotations
+import re
 import subprocess
 from pathlib import Path
 
 from app.core.errors import ProjectCheckoutError
 
 
+_AUTHED_URL_RE = re.compile(r'https://[^@]+@')
+
+
+def _redact_authed_url(s: str) -> str:
+    """Replace 'https://x-access-token:TOKEN@host/...' with 'https://[REDACTED]@host/...'"""
+    return _AUTHED_URL_RE.sub('https://[REDACTED]@', s)
+
+
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    """Run a git command, raising ProjectCheckoutError with stderr on failure."""
+    """Run a git command, raising ProjectCheckoutError with redacted stderr on failure."""
     try:
         return subprocess.run(
             ["git", *args],
@@ -22,9 +31,11 @@ def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
             text=True,
         )
     except subprocess.CalledProcessError as e:
+        safe_args = [_redact_authed_url(a) for a in args]
+        safe_stderr = _redact_authed_url(e.stderr.strip())
         raise ProjectCheckoutError(
-            message=f"git {' '.join(args)} failed: {e.stderr.strip()}",
-            details=[{"stderr": e.stderr, "returncode": str(e.returncode)}],
+            message=f"git {' '.join(safe_args)} failed: {safe_stderr}",
+            details=[{"stderr": safe_stderr, "returncode": str(e.returncode)}],
         ) from e
     except FileNotFoundError as e:
         raise ProjectCheckoutError(message="git not installed") from e
