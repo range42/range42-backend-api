@@ -149,6 +149,77 @@ class ContentRegexLayer:
         raise NotImplementedError("content_regex deferred per spec §13")
 
 
+class TaintedStringLayer:
+    """Substring-replace known-secret values in event content fields.
+
+    Used to catch secrets that leak via stdout/stderr/msg/debug regardless
+    of which key carried them. Build the tainted set at attempt start from
+    cloudinit vars, vault password, and Source PAT.
+
+    Unlike ConfigDenylistLayer (matches by key name), this layer scans
+    the *content* of free-text fields and substring-replaces any known
+    tainted value. Targeted fields are stdout/stderr/msg (strings) and
+    stdout_lines/stderr_lines (lists of strings).
+    """
+
+    name = "tainted_string"
+
+    # Fields where free-text content may contain secret values
+    _SCAN_FIELDS = ("stdout", "stderr", "msg")
+    _SCAN_LINES_FIELDS = ("stdout_lines", "stderr_lines")
+
+    def __init__(self, tainted_strings: set[str]) -> None:
+        # Filter empty strings (would match everywhere) — sort by length
+        # descending so longer secrets are replaced before any shorter
+        # substrings of them, avoiding partial-redaction artefacts.
+        self._tainted = tuple(
+            sorted((t for t in tainted_strings if t), key=len, reverse=True)
+        )
+
+    def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+        if not self._tainted:
+            return event, []
+        fired: list[dict[str, str]] = []
+        new = deepcopy(event)
+        self._walk(new, "", fired)
+        return new, fired
+
+    def _walk(self, obj: Any, path: str, fired: list[dict[str, str]]) -> None:
+        if isinstance(obj, dict):
+            for k, v in list(obj.items()):
+                sub = f"{path}.{k}" if path else k
+                if k in self._SCAN_FIELDS and isinstance(v, str):
+                    obj[k] = self._redact_string(v, sub, fired)
+                elif k in self._SCAN_LINES_FIELDS and isinstance(v, list):
+                    obj[k] = [
+                        self._redact_string(s, f"{sub}[{i}]", fired)
+                        if isinstance(s, str)
+                        else s
+                        for i, s in enumerate(v)
+                    ]
+                elif isinstance(v, (dict, list)):
+                    self._walk(v, sub, fired)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                self._walk(item, f"{path}[{i}]", fired)
+
+    def _redact_string(self, s: str, field_path: str, fired: list[dict[str, str]]) -> str:
+        out = s
+        for t in self._tainted:
+            if t and t in out:
+                out = out.replace(t, "[REDACTED:tainted_string]")
+                # Audit rule_id includes a short prefix for traceability
+                # without leaking the full secret.
+                prefix = t[:4] if len(t) > 4 else "***"
+                fired.append(
+                    {
+                        "rule_id": f"tainted_string:{prefix}***",
+                        "field_path": field_path,
+                    }
+                )
+        return out
+
+
 VAULT_MARKER = "__range42_vault_origin__"
 
 

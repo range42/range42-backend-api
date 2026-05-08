@@ -29,6 +29,7 @@ from app.core.project import checkout_project
 from app.core.redaction import (
     ConfigDenylistLayer,
     RedactionAuditWriter,
+    TaintedStringLayer,
     VaultTaggedLayer,
 )
 from app.core.runner_detached import DetachedRunner
@@ -106,6 +107,16 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         "r42_playbook_path": str(playbook_path),
     }
 
+    # Build the tainted-string set for substring redaction. Always includes
+    # the vault password (when present); _universal scenarios additionally
+    # add the Source PAT used for project clone.
+    tainted: set[str] = set()
+    if vault_pass.is_file():
+        try:
+            tainted.add(vault_pass.read_text().strip())
+        except OSError:
+            pass
+
     # Universal scenario: clone the project repo at the pinned project_sha and
     # render hosts.yml from the topology. Legacy scenarios (demo_lab, blank_*)
     # keep using the pre-rendered inventory at <ws>/inventory/ unchanged.
@@ -122,6 +133,8 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
 
         # v1 simplification: source.token_ref is treated as the actual token
         # string (acknowledged debt — no secret store yet).
+        if source.token_ref:
+            tainted.add(str(source.token_ref))
         repo_url = (
             f"{source.base_url.rstrip('/')}/"
             f"{project.repo_owner}/{project.repo_name}.git"
@@ -171,7 +184,8 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     (artifact_dir / "pid").write_text(str(handle.pid or 0))
 
     layers = [ConfigDenylistLayer(settings.redaction_denylist),
-              VaultTaggedLayer()]
+              VaultTaggedLayer(),
+              TaintedStringLayer(tainted_strings=tainted)]
     stop = asyncio.Event()
     watcher = EventsWatcher(
         job_events_dir=artifact_dir / "job_events",
