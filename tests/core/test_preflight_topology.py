@@ -151,16 +151,9 @@ async def test_vmid_safety_blocks_duplicate_vmids():
     """Two per-team VMs whose computed VMIDs collide must block."""
     from app.core.preflight import check_vmid_safety_for_topology
 
-    # team_count=2, vms_per_team=2.
-    # node-a vmid_base=5000: team 1 seq 0 = 5000 + 1*2 + 0 = 5002
-    #                         team 2 seq 0 = 5000 + 2*2 + 0 = 5004
-    # node-b vmid_base=4998: team 1 seq 1 = 4998 + 1*2 + 1 = 5001
-    #                         team 2 seq 1 = 4998 + 2*2 + 1 = 5003
-    # Adjust node-b base so it collides with node-a:
-    # node-b vmid_base=5000: team 1 seq 1 = 5000 + 2 + 1 = 5003
-    #                        team 2 seq 1 = 5000 + 4 + 1 = 5005
-    # That's no collision yet — make node-b base=4999:
-    # team 1 seq 1 = 4999 + 2 + 1 = 5002 → collides with node-a team 1 seq 0 (5002)
+    # team_count=2, vms_per_team=2:
+    # node-a (base=5000) team 1 seq 0 → 5000 + 1*2 + 0 = 5002
+    # node-b (base=4999) team 1 seq 1 → 4999 + 1*2 + 1 = 5002  (collides)
     topology = {
         "nodes": [
             {"id": "vm-a", "kind": "vm", "role": "trainee",
