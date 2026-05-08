@@ -108,7 +108,7 @@ async def _run_universal_topology_checks(
         report.checks.append(PreflightCheck(
             check="topology_load",
             result="block",
-            code="PROJECT_FIELDS_MISSING",
+            code="SOURCE_NOT_FOUND",
             detail=f"Source {project.source_id} not found",
         ))
         return
@@ -136,7 +136,7 @@ async def _run_universal_topology_checks(
         return
 
     try:
-        topology = json.loads(Path(topology_path).read_text())
+        topology = json.loads(topology_path.read_text())
     except (OSError, ValueError) as e:
         report.checks.append(PreflightCheck(
             check="topology_load",
