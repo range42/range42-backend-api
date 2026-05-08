@@ -189,3 +189,49 @@ async def test_vmid_safety_passes_for_safe_topology():
     }
     check = await check_vmid_safety_for_topology(topology, team_count=2, host_overrides=None)
     assert check.result == "pass", f"expected pass, got {check.result}: {check.detail}"
+
+
+def test_check_topology_node_role_blocks_missing_role():
+    """A VM node without a 'role' field must produce a block check."""
+    from app.core.preflight import check_topology_node_role
+
+    topology = {
+        "nodes": [
+            {"id": "vm-noop", "kind": "vm", "replication": {"scope": "shared"}},
+        ]
+    }
+    checks = check_topology_node_role(topology)
+    blocks = [c for c in checks if c.result == "block"]
+    assert blocks, "expected at least one block for missing role"
+    assert any(c.code == "TOPOLOGY_NODE_MISSING_ROLE" for c in blocks)
+
+
+def test_check_topology_node_role_passes_when_all_have_roles():
+    """Every VM/LXC node has a role → exactly one pass check."""
+    from app.core.preflight import check_topology_node_role
+
+    topology = {
+        "nodes": [
+            {"id": "vm-a", "kind": "vm", "role": "admin", "replication": {"scope": "shared"}},
+            {"id": "lxc-b", "kind": "lxc", "role": "trainee", "replication": {"scope": "per_team"}},
+        ]
+    }
+    checks = check_topology_node_role(topology)
+    assert len(checks) == 1
+    assert checks[0].result == "pass"
+
+
+def test_check_topology_node_role_ignores_non_vm_nodes():
+    """Networks, routers, etc. without 'role' do not block — only vm/lxc require it."""
+    from app.core.preflight import check_topology_node_role
+
+    topology = {
+        "nodes": [
+            {"id": "net-a", "kind": "network"},
+            {"id": "rt-a", "kind": "router"},
+            {"id": "vm-a", "kind": "vm", "role": "admin", "replication": {"scope": "shared"}},
+        ]
+    }
+    checks = check_topology_node_role(topology)
+    assert all(c.result == "pass" for c in checks)
+    assert len(checks) == 1

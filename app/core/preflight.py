@@ -353,3 +353,26 @@ async def check_topology_assets(
             detail="all attachment refs resolved",
         ))
     return checks
+
+
+def check_topology_node_role(topology: dict) -> list[PreflightCheck]:
+    """Every VM/LXC topology node must declare a non-empty 'role'."""
+    checks: list[PreflightCheck] = []
+    for node in (topology.get("nodes") or []):
+        if node.get("kind") not in ("vm", "lxc"):
+            continue
+        if not node.get("role"):
+            checks.append(PreflightCheck(
+                check="topology_node_role",
+                result="block",
+                detail=f"VM/LXC node {node.get('id')} missing 'role'",
+                field_path=f"nodes[{node.get('id')}]",
+                code="TOPOLOGY_NODE_MISSING_ROLE",
+            ))
+    if not checks:
+        checks.append(PreflightCheck(
+            check="topology_node_role",
+            result="pass",
+            detail="all VM/LXC nodes have role",
+        ))
+    return checks
