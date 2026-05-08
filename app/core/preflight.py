@@ -6,8 +6,10 @@ else 'pass'.
 """
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse
 
 import httpx
@@ -376,3 +378,97 @@ def check_topology_node_role(topology: dict) -> list[PreflightCheck]:
             detail="all VM/LXC nodes have role",
         ))
     return checks
+
+
+# ---------------------------------------------------------------------------
+# Declarative preflight_checks[] dispatcher (spec §5.5.4)
+#
+# Topologies MAY declare ``preflight_checks: [...]`` listing named checks the
+# backend should run.  Names map to the existing ``check_*`` callables here.
+# ---------------------------------------------------------------------------
+
+_DECLARATIVE_CHECKS: dict[str, Callable] = {
+    "proxmox.connectivity": check_proxmox_api_status,
+    "vmid.safety": check_vmid_safety_for_topology,
+    "topology.assets": check_topology_assets,
+    "topology.node_role": check_topology_node_role,
+    "secrets.completeness": check_secret_completeness,
+    "git.reachable": check_git_reachable,
+    "docker.images": check_docker_image_pull,
+    "sdn.bridge": check_sdn_bridge,
+    "resource.budget": check_resource_budget,
+}
+
+
+async def run_declarative_checks(
+    names: list[str],
+    *,
+    context: dict,
+) -> list[PreflightCheck]:
+    """Run named checks from the declarative preflight_checks[] list.
+
+    Unknown names → warn with code=UNKNOWN_PREFLIGHT_CHECK; do not raise.
+
+    The dispatcher introspects each callable's signature via
+    ``inspect.signature`` and passes only the kwargs it needs from
+    ``context``.  Missing kwargs are simply not passed (the callable will
+    raise ``TypeError`` if a required argument is absent — caught and
+    surfaced as a ``DECLARATIVE_CHECK_RAISED`` warn).
+    """
+    out: list[PreflightCheck] = []
+
+    for name in names:
+        fn = _DECLARATIVE_CHECKS.get(name)
+        if fn is None:
+            out.append(PreflightCheck(
+                check="declarative",
+                result="warn",
+                code="UNKNOWN_PREFLIGHT_CHECK",
+                detail=f"unknown declarative check: {name}",
+            ))
+            continue
+
+        try:
+            sig = inspect.signature(fn)
+            # Build kwargs from context for parameters that exist in `sig`
+            # and are present in `context`.  Skip *args/**kwargs.
+            kwargs = {
+                pname: context[pname]
+                for pname, p in sig.parameters.items()
+                if p.kind not in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                )
+                and pname in context
+            }
+
+            if inspect.iscoroutinefunction(fn):
+                result = await fn(**kwargs)
+            else:
+                result = fn(**kwargs)
+        except Exception as e:
+            out.append(PreflightCheck(
+                check="declarative",
+                result="warn",
+                code="DECLARATIVE_CHECK_RAISED",
+                detail=f"check '{name}' raised {type(e).__name__}: {e}",
+            ))
+            continue
+
+        if isinstance(result, list):
+            out.extend(result)
+        elif isinstance(result, PreflightCheck):
+            out.append(result)
+        else:
+            # Defensive: callable returned something unexpected.
+            out.append(PreflightCheck(
+                check="declarative",
+                result="warn",
+                code="DECLARATIVE_CHECK_RAISED",
+                detail=(
+                    f"check '{name}' returned unexpected type "
+                    f"{type(result).__name__}"
+                ),
+            ))
+
+    return out

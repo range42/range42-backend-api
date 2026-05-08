@@ -235,3 +235,104 @@ def test_check_topology_node_role_ignores_non_vm_nodes():
     checks = check_topology_node_role(topology)
     assert all(c.result == "pass" for c in checks)
     assert len(checks) == 1
+
+
+# ---------------------------------------------------------------------------
+# Declarative preflight_checks[] dispatcher (Task B-T10, spec §5.5.4)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_declarative_checks_resolves_known_names():
+    """Known name → matching callable runs and returns its checks."""
+    from app.core.preflight import run_declarative_checks
+
+    topology = {
+        "nodes": [
+            {"id": "vm-a", "kind": "vm", "role": "admin",
+             "replication": {"scope": "shared"}},
+        ]
+    }
+    out = await run_declarative_checks(
+        ["topology.node_role"],
+        context={"topology": topology},
+    )
+    assert len(out) == 1
+    assert out[0].result == "pass"
+    assert out[0].check == "topology_node_role"
+
+
+@pytest.mark.asyncio
+async def test_run_declarative_checks_warns_on_unknown_name():
+    """Unknown name → warn with code UNKNOWN_PREFLIGHT_CHECK, not a raise."""
+    from app.core.preflight import run_declarative_checks
+
+    out = await run_declarative_checks(
+        ["does.not.exist"],
+        context={},
+    )
+    assert len(out) == 1
+    assert out[0].result == "warn"
+    assert out[0].code == "UNKNOWN_PREFLIGHT_CHECK"
+    assert "does.not.exist" in out[0].detail
+
+
+@pytest.mark.asyncio
+async def test_run_declarative_checks_passes_kwargs_from_context(tmp_path):
+    """Dispatcher introspects signature and pulls each kwarg from context."""
+    from app.core.preflight import run_declarative_checks
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "ansible").mkdir()
+    (project_dir / "ansible" / "configure.yml").write_text("- hosts: all\n")
+
+    topology = {
+        "nodes": [
+            {"id": "n1", "kind": "vm", "role": "admin",
+             "replication": {"scope": "shared"},
+             "attachments": [
+                 {"source": {"kind": "file_upload",
+                             "path": "ansible/configure.yml"},
+                  "stage": "configure"},
+                 {"source": {"kind": "external_git",
+                             "url": "https://github.com/me/repo.git"},
+                  "stage": "configure"},
+             ]},
+        ]
+    }
+    out = await run_declarative_checks(
+        ["topology.assets"],
+        context={
+            "project_dir": project_dir,
+            "catalog_dir": None,
+            "topology": topology,
+            "registered_source_base_urls": {"https://github.com"},
+            # Extra keys in context should be ignored harmlessly.
+            "team_count": 99,
+            "api_url": "ignored",
+        },
+    )
+    assert all(c.result == "pass" for c in out), [
+        (c.result, c.detail) for c in out if c.result != "pass"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_declarative_checks_swallows_exceptions(monkeypatch):
+    """A raising check → warn DECLARATIVE_CHECK_RAISED, not propagation."""
+    from app.core import preflight
+
+    def boom(topology):
+        raise RuntimeError("boom")
+
+    monkeypatch.setitem(preflight._DECLARATIVE_CHECKS, "topology.node_role", boom)
+
+    out = await preflight.run_declarative_checks(
+        ["topology.node_role"],
+        context={"topology": {}},
+    )
+    assert len(out) == 1
+    assert out[0].result == "warn"
+    assert out[0].code == "DECLARATIVE_CHECK_RAISED"
+    assert "RuntimeError" in out[0].detail
+    assert "topology.node_role" in out[0].detail
