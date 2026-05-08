@@ -10,6 +10,7 @@ Spec refs: §7 runner lifecycle, §8 detached runner + watcher.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +21,11 @@ from app.core.allocation import ssh_controlmaster_env
 from app.core.config import settings
 from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
+from app.core.inventory_writer import write_inventory
 from app.core.locks import acquire_lock
 from app.core.logging import get_logger
-from app.core.models import Attempt, Deployment
+from app.core.models import Attempt, Deployment, Project, ProxmoxHost, Source
+from app.core.project import checkout_project
 from app.core.redaction import (
     ConfigDenylistLayer,
     RedactionAuditWriter,
@@ -95,14 +98,74 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     if vault_pass.exists():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault_pass)
 
+    extravars: dict[str, Any] = {
+        "r42_deployment_id": dep.id,
+        "r42_attempt_id": attempt.id,
+        "r42_scope": attempt.scope,
+        "r42_team_id": attempt.team_id,
+        "r42_playbook_path": str(playbook_path),
+    }
+
+    # Universal scenario: clone the project repo at the pinned project_sha and
+    # render hosts.yml from the topology. Legacy scenarios (demo_lab, blank_*)
+    # keep using the pre-rendered inventory at <ws>/inventory/ unchanged.
+    if dep.scenario_label == "_universal":
+        project = (await session.execute(
+            select(Project).where(Project.id == dep.project_id))
+        ).scalar_one()
+        source = (await session.execute(
+            select(Source).where(Source.id == project.source_id))
+        ).scalar_one()
+        target_host = (await session.execute(
+            select(ProxmoxHost).where(ProxmoxHost.id == dep.target_host_id))
+        ).scalar_one()
+
+        # v1 simplification: source.token_ref is treated as the actual token
+        # string (acknowledged debt — no secret store yet).
+        repo_url = (
+            f"{source.base_url.rstrip('/')}/"
+            f"{project.repo_owner}/{project.repo_name}.git"
+        )
+        project_dir = ws / "project"
+        topology_path = checkout_project(
+            repo_url=repo_url,
+            sha=dep.project_sha,
+            dest=project_dir,
+            token=source.token_ref,
+        )
+
+        topology = json.loads(topology_path.read_text())
+
+        # Extract Proxmox host/IP from api_url
+        # (e.g. "https://192.168.1.10:8006" -> "192.168.1.10").
+        api_url = str(target_host.api_url)
+        if "://" in api_url:
+            proxmox_address = api_url.split("://", 1)[1].split(":", 1)[0]
+        else:
+            proxmox_address = api_url.split(":", 1)[0]
+
+        inventory_dir = ws / "inventory"
+        inventory_dir.mkdir(parents=True, exist_ok=True)
+        write_inventory(
+            topology=topology,
+            team_count=dep.team_count or 1,
+            codename=dep.codename,
+            proxmox_address=proxmox_address,
+            ssh_keys_dir=ws / "ssh_keys",
+            dest=inventory_dir / "hosts.yml",
+        )
+
+        extravars["r42_topology_path"] = str(topology_path)
+        extravars["r42_inventory_dir"] = str(inventory_dir)
+    else:
+        # Legacy path: pre-rendered inventory (e.g. demo_lab) lives under
+        # <ws>/inventory/; do not clone or generate anything.
+        extravars["r42_inventory_dir"] = str(ws / "inventory")
+
     runner = runner or DetachedRunner()
     handle = await runner.start(
         private_data_dir=artifact_dir,
-        extravars={"r42_deployment_id": dep.id,
-                   "r42_attempt_id": attempt.id,
-                   "r42_scope": attempt.scope,
-                   "r42_team_id": attempt.team_id,
-                   "r42_playbook_path": str(playbook_path)},
+        extravars=extravars,
         envvars=envvars,
     )
     (artifact_dir / "pid").write_text(str(handle.pid or 0))
