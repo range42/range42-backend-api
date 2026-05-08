@@ -34,6 +34,7 @@ from app.core.redaction import (
 )
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
+from app.core.workspace import shred_envvars
 from app.utils.checks_playbooks import resolve_scenarios_playbook
 
 logger = get_logger(__name__)
@@ -195,14 +196,22 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
 
     async def _run() -> None:
         task_watch = asyncio.create_task(watcher.run())
-        rc = await handle.wait()
-        stop.set()
-        await task_watch
-        writer.append({"event_type": "attempt_end",
-                       "payload": {"terminal_state": "completed" if rc == 0 else "failed",
-                                   "rc": rc}},
-                      attempt_id=attempt.id, deployment_id=dep.id)
-        logger.info("attempt finished", attempt_id=attempt.id, rc=rc)
+        try:
+            rc = await handle.wait()
+            stop.set()
+            await task_watch
+            writer.append({"event_type": "attempt_end",
+                           "payload": {"terminal_state": "completed" if rc == 0 else "failed",
+                                       "rc": rc}},
+                          attempt_id=attempt.id, deployment_id=dep.id)
+            logger.info("attempt finished", attempt_id=attempt.id, rc=rc)
+        finally:
+            # Shred secrets-bearing files in the runner's private_data_dir.
+            # Defense-in-depth: prevents the snapshotted PAT / vault pass from
+            # sitting on disk after the attempt completes. Runs on both success
+            # and failure paths so cleanup is guaranteed.
+            shred_envvars(artifact_dir / "env" / "envvars")
+            shred_envvars(artifact_dir / "env" / "extravars")
 
     task = asyncio.create_task(_run())
     _BACKGROUND_TASKS.add(task)

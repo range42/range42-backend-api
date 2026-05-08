@@ -8,6 +8,7 @@ Refuses non-local filesystems (nfs, cifs, fuse) with WORKSPACE_NON_LOCAL_FS.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -102,3 +103,29 @@ class Workspace:
         root = Path(workspace_root or settings.workspace_root)
         return cls(path=root / f"{codename}-{scenario_label}",
                    codename=codename, scenario_label=scenario_label)
+
+
+def shred_envvars(path: Path) -> None:
+    """Overwrite then unlink a file containing secrets.
+
+    Defense-in-depth: prevents the snapshotted PAT / vault pass from sitting
+    on disk after the attempt completes. Not a true cryptographic shred —
+    if the filesystem stores backups (CoW snapshots), the file may persist.
+
+    No-op if the file doesn't exist (so cleanup is idempotent).
+    """
+    if not path.is_file():
+        return
+    try:
+        size = path.stat().st_size
+        with path.open("rb+") as f:
+            f.write(b"\x00" * size)
+            f.flush()
+            os.fsync(f.fileno())
+        path.unlink()
+    except OSError:
+        # Best-effort: if shredding fails for any reason, still try to unlink
+        try:
+            path.unlink()
+        except OSError:
+            pass

@@ -1,6 +1,6 @@
 import pytest
 from app.core.workspace import (
-    Workspace, WorkspaceError, detect_fs_type, is_local_fs,
+    Workspace, WorkspaceError, detect_fs_type, is_local_fs, shred_envvars,
 )
 
 
@@ -32,3 +32,34 @@ def test_workspace_refuses_non_local_fs(tmp_path, monkeypatch):
     with pytest.raises(WorkspaceError) as ei:
         Workspace.create(codename="X", scenario_label="y", workspace_root=tmp_path)
     assert ei.value.code == "WORKSPACE_NON_LOCAL_FS"
+
+
+# ---------------------------------------------------------------------------
+# T10: token shred at attempt completion
+# ---------------------------------------------------------------------------
+
+def test_shred_envvars_overwrites_then_unlinks(tmp_path):
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    envvars = env_dir / "envvars"
+    envvars.write_text("SECRET=xyz\n")
+    assert envvars.is_file()
+
+    shred_envvars(envvars)
+    assert not envvars.exists()
+
+
+def test_shred_envvars_no_op_on_missing_file(tmp_path):
+    """Shredding a non-existent file is a no-op (idempotent on cleanup)."""
+    nonexistent = tmp_path / "missing"
+    # Should not raise
+    shred_envvars(nonexistent)
+
+
+def test_shred_envvars_handles_extravars_path(tmp_path):
+    """Helper signature accepts arbitrary file paths, not just env/envvars by name."""
+    f = tmp_path / "env" / "extravars"
+    f.parent.mkdir(parents=True)
+    f.write_text('{"r42_topology_path": "/tmp/x"}')
+    shred_envvars(f)
+    assert not f.exists()
