@@ -70,6 +70,12 @@ class AuthFailedError(Range42Error):
     code = "AUTH_FAILED"
 
 
+class RunnerSetupError(Range42Error):
+    status = 500
+    error = "runner_setup_error"
+    code = "RUNNER_SETUP_ERROR"
+
+
 def _trace_id(request: Request) -> str:
     """Resolve trace id with fallback chain:
     request.state (set by TraceIdMiddleware) -> incoming header -> "".

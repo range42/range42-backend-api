@@ -13,11 +13,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import signal
 from pathlib import Path
 from typing import Any, AsyncIterator
 
 from app.core.config import settings
+from app.core.errors import RunnerSetupError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -116,6 +118,36 @@ class DetachedRunner:
                     envvars: dict[str, str]) -> _SubprocessHandle:
         private_data_dir = Path(private_data_dir)
         private_data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Populate project/ with the playbook tree so ansible-runner can
+        # resolve the playbook by relative path. We resolve the playbook
+        # root by walking up from r42_playbook_path until we find the
+        # directory whose child is `scenarios/` (the playbooks repo root).
+        playbook_path_str = (extravars or {}).get("r42_playbook_path", "")
+        if playbook_path_str:
+            playbook_path = Path(playbook_path_str)
+            if not playbook_path.is_file():
+                raise RunnerSetupError(
+                    message=f"r42_playbook_path missing or not a file: {playbook_path}"
+                )
+
+            playbook_root = playbook_path.parent
+            while playbook_root.parent.name and playbook_root.parent.name != "scenarios":
+                playbook_root = playbook_root.parent
+            if playbook_root.parent.name == "scenarios":
+                playbook_root = playbook_root.parent.parent
+
+            project_dir = private_data_dir / "project"
+            if project_dir.exists() or project_dir.is_symlink():
+                # Idempotent: same SHA -> same content; remove and re-link.
+                if project_dir.is_symlink():
+                    project_dir.unlink()
+                else:
+                    shutil.rmtree(project_dir)
+
+            # Symlink for speed; ansible-runner is happy with this on Linux.
+            project_dir.symlink_to(playbook_root, target_is_directory=True)
+
         env_dir = private_data_dir / "env"
         env_dir.mkdir(parents=True, exist_ok=True)
         (env_dir / "extravars").write_text(json.dumps(extravars or {}))
