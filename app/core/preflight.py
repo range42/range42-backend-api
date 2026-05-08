@@ -7,6 +7,8 @@ else 'pass'.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -19,6 +21,7 @@ class PreflightCheck:
     result: str  # pass | warn | block
     detail: str = ""
     field_path: str | None = None
+    code: str | None = None
 
 
 @dataclass
@@ -213,3 +216,93 @@ async def check_git_reachable(repo_url: str) -> PreflightCheck:
             field_path="project.source",
         )
     return PreflightCheck(check="git_reachable", result="pass")
+
+
+async def check_topology_assets(
+    project_dir: Path,
+    catalog_dir: Path | None,
+    topology: dict,
+    *,
+    registered_source_base_urls: set[str] | None = None,
+) -> list[PreflightCheck]:
+    """Verify every attachment ref in the topology resolves to a real artifact.
+
+    For each node's attachments[]:
+    - kind=file_upload: project_dir / source.path must exist
+    - kind=inline_yaml: source.content must be non-empty (whitespace-trimmed)
+    - kind=external_git: source.url's host must be in registered_source_base_urls
+    - kind=catalog_role / catalog_container: catalog_dir / source.ref must exist
+      (warns if catalog_dir is None — caller hasn't checked out catalog yet)
+
+    Returns a list with one entry per failure, or a single 'pass' if all resolve.
+    """
+    checks: list[PreflightCheck] = []
+    registered = registered_source_base_urls or set()
+
+    for node in (topology.get("nodes") or []):
+        for idx, att in enumerate(node.get("attachments") or []):
+            source = (att.get("source") or {})
+            kind = source.get("kind")
+            node_path = f"nodes[{node.get('id')}].attachments[{idx}]"
+
+            if kind == "file_upload":
+                rel_path = source.get("path") or ""
+                if not rel_path or not (project_dir / rel_path).is_file():
+                    checks.append(PreflightCheck(
+                        check="topology_assets",
+                        result="block",
+                        detail=f"file_upload path '{rel_path}' not found in project repo",
+                        field_path=node_path,
+                        code="MISSING_ASSET",
+                    ))
+            elif kind == "inline_yaml":
+                content = source.get("content") or ""
+                if not content.strip():
+                    checks.append(PreflightCheck(
+                        check="topology_assets",
+                        result="block",
+                        detail="inline_yaml content is empty",
+                        field_path=node_path,
+                        code="MISSING_ASSET",
+                    ))
+            elif kind == "external_git":
+                url = source.get("url") or ""
+                parsed = urlparse(url)
+                base = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+                if not base or base not in registered:
+                    checks.append(PreflightCheck(
+                        check="topology_assets",
+                        result="block",
+                        detail=(
+                            f"external_git URL host {base or url} is not a registered Source "
+                            f"(allowed: {sorted(registered)})"
+                        ),
+                        field_path=node_path,
+                        code="EXTERNAL_GIT_NOT_REGISTERED",
+                    ))
+            elif kind in ("catalog_role", "catalog_container"):
+                ref = source.get("ref") or ""
+                if catalog_dir is None:
+                    checks.append(PreflightCheck(
+                        check="topology_assets",
+                        result="warn",
+                        detail=f"catalog_dir not provided; cannot verify {kind} ref '{ref}'",
+                        field_path=node_path,
+                        code="CATALOG_NOT_RESOLVED",
+                    ))
+                elif not ref or not (catalog_dir / ref).exists():
+                    checks.append(PreflightCheck(
+                        check="topology_assets",
+                        result="block",
+                        detail=f"{kind} ref '{ref}' not found in catalog",
+                        field_path=node_path,
+                        code="MISSING_ASSET",
+                    ))
+
+    if not checks:
+        checks.append(PreflightCheck(
+            check="topology_assets",
+            result="pass",
+            detail="all attachment refs resolved",
+        ))
+    return checks
