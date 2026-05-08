@@ -123,12 +123,29 @@ class Kind1(Enum):
     group = "group"
 
 
+class Role(Enum):
+    """
+    Node role for inventory grouping (admin → r42_admin, team/trainee → r42_blank_group)
+    """
+
+    admin = "admin"
+    team = "team"
+    trainee = "trainee"
+    shared = "shared"
+
+
 class Node(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     id: str
     kind: Kind1
+    role: Annotated[
+        Role | None,
+        Field(
+            description="Node role for inventory grouping (admin → r42_admin, team/trainee → r42_blank_group)"
+        ),
+    ] = None
     replication: Replication | None = None
     host_ref: str | None = None
     config: dict[str, Any] | None = None
