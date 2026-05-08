@@ -161,9 +161,25 @@ class DetachedRunner:
 
         env_dir = private_data_dir / "env"
         env_dir.mkdir(parents=True, exist_ok=True)
-        (env_dir / "extravars").write_text(json.dumps(extravars or {}))
-        env_file = env_dir / "envvars"
-        env_file.write_text(json.dumps(envvars or {}))
+        extravars_path = env_dir / "extravars"
+        extravars_path.write_text(json.dumps(extravars or {}))
+        extravars_path.chmod(0o600)
+
+        # ansible-runner CLI expects env/envvars in KEY=VALUE format (one per
+        # line), not JSON. Values are not shell-quoted, so newlines in values
+        # are not allowed — reject explicitly to fail fast.
+        envvars_path = env_dir / "envvars"
+        envvars_lines = []
+        for k, v in (envvars or {}).items():
+            if "\n" in str(v):
+                raise RunnerSetupError(
+                    message=f"envvar {k} contains newline; not allowed in env/envvars"
+                )
+            envvars_lines.append(f"{k}={v}")
+        envvars_path.write_text(
+            "\n".join(envvars_lines) + "\n" if envvars_lines else ""
+        )
+        envvars_path.chmod(0o600)
 
         merged_env = dict(os.environ)
         merged_env.update({k: str(v) for k, v in (envvars or {}).items()})

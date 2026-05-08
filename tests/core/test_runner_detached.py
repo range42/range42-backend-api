@@ -143,3 +143,126 @@ async def test_detached_runner_writes_cmdline(tmp_path: Path, monkeypatch):
     cmdline = (private_data_dir / "env" / "cmdline").read_text()
     assert "-p scenarios/_universal/main.yml" in cmdline
     assert "-i inventory" in cmdline
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_envvars_key_value_format(tmp_path: Path, monkeypatch):
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "x").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "x" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    await runner.start(
+        private_data_dir=private_data_dir,
+        extravars={"r42_playbook_path": str(pb), "r42_inventory_dir": str(tmp_path / "inv")},
+        envvars={"FOO": "bar", "QUX": "with spaces"},
+    )
+
+    envvars_path = private_data_dir / "env" / "envvars"
+    content = envvars_path.read_text()
+
+    # KEY=VALUE lines (one per line), not JSON
+    assert "FOO=bar\n" in content
+    assert "QUX=with spaces\n" in content
+    assert not content.startswith("{")  # not JSON
+
+    # Permissions are 0600
+    mode = envvars_path.stat().st_mode & 0o777
+    assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_extravars_perms_0600(tmp_path: Path, monkeypatch):
+    """env/extravars must also be 0600 (it can carry vault passwords / tokens via extravars)."""
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "x").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "x" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    await runner.start(
+        private_data_dir=private_data_dir,
+        extravars={"r42_playbook_path": str(pb), "r42_inventory_dir": str(tmp_path / "inv")},
+        envvars={},
+    )
+
+    extravars_path = private_data_dir / "env" / "extravars"
+    mode = extravars_path.stat().st_mode & 0o777
+    assert mode == 0o600, f"Expected 0o600 on extravars, got {oct(mode)}"
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_envvars_rejects_newline_in_value(tmp_path: Path, monkeypatch):
+    """KEY=VALUE format can't safely encode newlines; reject explicitly."""
+    from app.core.errors import RunnerSetupError
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "x").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "x" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    with pytest.raises(RunnerSetupError, match="newline"):
+        await runner.start(
+            private_data_dir=private_data_dir,
+            extravars={"r42_playbook_path": str(pb), "r42_inventory_dir": str(tmp_path / "inv")},
+            envvars={"BAD": "line1\nline2"},
+        )
