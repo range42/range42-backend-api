@@ -152,6 +152,29 @@ class DetachedRunner:
             # ansible-runner can locate it via -p <relative path>.
             playbook_rel = playbook_path.relative_to(playbook_root)
 
+            # Mirror the project/ symlink for inventory/. The cmdline below
+            # writes "-i inventory" (a relative path), and ansible-runner
+            # resolves that against private_data_dir. Without this symlink
+            # ansible-runner errors out with "inventory not found" the moment
+            # we run against a real binary instead of the test stub.
+            inventory_dir_str = (extravars or {}).get("r42_inventory_dir")
+            if inventory_dir_str:
+                inventory_src = Path(inventory_dir_str)
+                if not inventory_src.is_dir():
+                    raise RunnerSetupError(
+                        message=(
+                            "r42_inventory_dir does not exist or is not a "
+                            f"directory: {inventory_src}"
+                        )
+                    )
+                inventory_dir = private_data_dir / "inventory"
+                if inventory_dir.exists() or inventory_dir.is_symlink():
+                    if inventory_dir.is_symlink():
+                        inventory_dir.unlink()
+                    elif inventory_dir.is_dir():
+                        shutil.rmtree(inventory_dir)
+                inventory_dir.symlink_to(inventory_src, target_is_directory=True)
+
             env_dir = private_data_dir / "env"
             env_dir.mkdir(exist_ok=True, mode=0o700)
 

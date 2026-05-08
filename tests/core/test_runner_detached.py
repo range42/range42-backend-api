@@ -63,6 +63,7 @@ async def test_detached_runner_writes_project_dir(tmp_path: Path, monkeypatch):
 
     private_data_dir = tmp_path / "pdd"
     private_data_dir.mkdir()
+    (tmp_path / "inv").mkdir()
 
     # Stub the subprocess spawn so the test runs offline (no real ansible-runner).
     class _FakeProc:
@@ -110,6 +111,7 @@ async def test_detached_runner_writes_cmdline(tmp_path: Path, monkeypatch):
 
     private_data_dir = tmp_path / "pdd"
     private_data_dir.mkdir()
+    (tmp_path / "inv").mkdir()
 
     # Stub the subprocess spawn so the test runs offline (same pattern as
     # test_detached_runner_writes_project_dir).
@@ -154,6 +156,7 @@ async def test_detached_runner_envvars_key_value_format(tmp_path: Path, monkeypa
 
     private_data_dir = tmp_path / "pdd"
     private_data_dir.mkdir()
+    (tmp_path / "inv").mkdir()
 
     class _FakeProc:
         pid = 12345
@@ -201,6 +204,7 @@ async def test_detached_runner_extravars_perms_0600(tmp_path: Path, monkeypatch)
     pb.write_text("- hosts: all\n  tasks: []\n")
     private_data_dir = tmp_path / "pdd"
     private_data_dir.mkdir()
+    (tmp_path / "inv").mkdir()
 
     class _FakeProc:
         pid = 12345
@@ -241,6 +245,7 @@ async def test_detached_runner_envvars_rejects_newline_in_value(tmp_path: Path, 
     pb.write_text("- hosts: all\n  tasks: []\n")
     private_data_dir = tmp_path / "pdd"
     private_data_dir.mkdir()
+    (tmp_path / "inv").mkdir()
 
     class _FakeProc:
         pid = 12345
@@ -265,4 +270,107 @@ async def test_detached_runner_envvars_rejects_newline_in_value(tmp_path: Path, 
             private_data_dir=private_data_dir,
             extravars={"r42_playbook_path": str(pb), "r42_inventory_dir": str(tmp_path / "inv")},
             envvars={"BAD": "line1\nline2"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_writes_inventory_symlink(tmp_path: Path, monkeypatch):
+    """DetachedRunner must symlink inventory/ from r42_inventory_dir extravar.
+
+    The cmdline writes ``-i inventory`` (relative path) so ansible-runner
+    expects ``<private_data_dir>/inventory/`` to exist. Without this symlink
+    a real ansible-runner invocation fails with "inventory not found".
+    """
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "x").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "x" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+
+    inv_src = tmp_path / "ws" / "inventory"
+    inv_src.mkdir(parents=True)
+    (inv_src / "hosts.yml").write_text(
+        "all:\n  hosts:\n    fake:\n      ansible_host: 1.2.3.4\n"
+    )
+
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    await runner.start(
+        private_data_dir=private_data_dir,
+        extravars={
+            "r42_playbook_path": str(pb),
+            "r42_inventory_dir": str(inv_src),
+        },
+        envvars={},
+    )
+
+    inv_link = private_data_dir / "inventory"
+    assert inv_link.exists(), "inventory/ subdir not created"
+    assert inv_link.is_symlink() or inv_link.is_dir(), \
+        "inventory/ should be a symlink or directory"
+    # And ansible-runner's relative path -i inventory must find hosts.yml
+    assert (inv_link / "hosts.yml").is_file()
+
+
+@pytest.mark.asyncio
+async def test_detached_runner_raises_when_inventory_dir_missing(
+    tmp_path: Path, monkeypatch
+):
+    """Missing r42_inventory_dir should produce a typed error early,
+    not a confusing later failure when ansible-runner can't find inventory.
+    """
+    from app.core.errors import RunnerSetupError
+
+    playbook_root = tmp_path / "playbooks"
+    (playbook_root / "scenarios" / "x").mkdir(parents=True)
+    pb = playbook_root / "scenarios" / "x" / "main.yml"
+    pb.write_text("- hosts: all\n  tasks: []\n")
+
+    private_data_dir = tmp_path / "pdd"
+    private_data_dir.mkdir()
+
+    class _FakeProc:
+        pid = 12345
+        returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def _fake_spawn(*args, **kwargs):
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        runner_detached_module.asyncio,
+        "create_subprocess_exec",
+        _fake_spawn,
+    )
+
+    runner = DetachedRunner()
+
+    with pytest.raises(RunnerSetupError, match="r42_inventory_dir"):
+        await runner.start(
+            private_data_dir=private_data_dir,
+            extravars={
+                "r42_playbook_path": str(pb),
+                "r42_inventory_dir": str(tmp_path / "missing"),
+            },
+            envvars={},
         )
