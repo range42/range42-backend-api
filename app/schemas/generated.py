@@ -135,6 +135,34 @@ class Node(BaseModel):
     networks: list[NetworkAttachment] | None = None
     attachments: list[Attachment] | None = None
     children: list[Node] | None = None
+    cidr_template: Annotated[
+        str | None,
+        Field(
+            description="CIDR with {{ bridge_base + team_id }} placeholder (network kind only)"
+        ),
+    ] = None
+    bridge_template: Annotated[
+        str | None,
+        Field(
+            description="Bridge name template, e.g., vmbr{{ bridge_base + team_id }} (network kind only)"
+        ),
+    ] = None
+    vlan_tag: Annotated[
+        int | None,
+        Field(
+            description="Optional VLAN tag for the bridge (network kind only)",
+            ge=1,
+            le=4094,
+        ),
+    ] = None
+    template_vmid: Annotated[
+        int | None,
+        Field(
+            description="Range42-managed template VMID to clone from; v1 limitation: image must be a Proxmox template (vm/lxc kinds)",
+            ge=100,
+            le=999999999,
+        ),
+    ] = None
 
 
 class Execution(BaseModel):
@@ -165,6 +193,27 @@ class CatalogEntry(BaseModel):
     flags: list[Flag] | None = None
     defaults: dict[str, Any] | None = None
     execution: Execution | None = None
+    naming_prefix: Annotated[
+        str | None,
+        Field(
+            description="Hostname prefix; falls back to scenario_label when absent",
+            pattern="^[a-z0-9][a-z0-9-]{0,31}$",
+        ),
+    ] = None
+    bridge_base: Annotated[
+        int | None,
+        Field(
+            description="Per-team bridge index base; team N uses vmbr{bridge_base + N}",
+            ge=1,
+            le=4093,
+        ),
+    ] = 140
+    preflight_checks: Annotated[
+        list[str] | None,
+        Field(
+            description="Declarative list of named preflight checks (e.g., 'proxmox.connectivity', 'template.ubuntu-noble.available')"
+        ),
+    ] = None
 
 
 class NodesPatchedItem(BaseModel):
@@ -189,6 +238,27 @@ class ProjectOverlay(BaseModel):
     nodes_patched: list[NodesPatchedItem] | None = None
     attachments_added: list[Attachment] | None = None
     execution_override: Execution | None = None
+    naming_prefix: Annotated[
+        str | None,
+        Field(
+            description="Hostname prefix override; falls back to scenario_label or the catalog naming_prefix when absent",
+            pattern="^[a-z0-9][a-z0-9-]{0,31}$",
+        ),
+    ] = None
+    bridge_base: Annotated[
+        int | None,
+        Field(
+            description="Per-team bridge index base override; team N uses vmbr{bridge_base + N}",
+            ge=1,
+            le=4093,
+        ),
+    ] = 140
+    preflight_checks: Annotated[
+        list[str] | None,
+        Field(
+            description="Declarative list of named preflight checks; replaces the catalog list when present"
+        ),
+    ] = None
 
 
 class State(Enum):
