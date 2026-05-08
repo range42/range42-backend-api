@@ -8,6 +8,12 @@ async def test_start_attempt_writes_events(tmp_path, monkeypatch):
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+    # start_attempt() now resolves scenario_label -> playbook path; provide
+    # a fake playbook tree matching the Deployment.scenario_label below.
+    pb_root = tmp_path / "playbooks"
+    (pb_root / "scenarios" / "b").mkdir(parents=True)
+    (pb_root / "scenarios" / "b" / "main.yml").write_text("- hosts: all\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(pb_root))
     from importlib import reload
     from app.core import config as cfg, db as dbmod
     reload(cfg)

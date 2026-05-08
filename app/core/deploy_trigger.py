@@ -30,10 +30,28 @@ from app.core.redaction import (
 )
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
+from app.utils.checks_playbooks import resolve_scenarios_playbook
 
 logger = get_logger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
+    """Resolve a scenario_label to its playbook path.
+
+    Uses the existing checks_playbooks.resolve_scenarios_playbook() validator
+    (regex: ``^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$``) so ``_universal`` is
+    accepted and traversal attempts (e.g. ``../etc/passwd``) are rejected.
+
+    :param scenario_label: The Deployment.scenario_label value.
+    :type scenario_label: str
+    :returns: Absolute path to ``<playbooks_dir>/scenarios/<scenario_label>/main.yml``.
+    :rtype: Path
+    :raises HTTPException: 400 if the label format is invalid, the file is
+        missing, or a path traversal is detected.
+    """
+    return resolve_scenarios_playbook(scenario_label, playbooks_dir_type="www_app")
 
 
 async def start_attempt(session: AsyncSession, *, attempt: Attempt,
@@ -57,6 +75,10 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
                        owner=f"attempt-{attempt.id}", interval_s=30)
     await session.commit()
 
+    # Resolve scenario_label -> playbook path so the runner (DetachedRunner
+    # from T2-T4) can populate project/, env/cmdline, env/envvars from it.
+    playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
+
     writer = EventsWriter(events_jsonl)
     audit = RedactionAuditWriter(redactions_jsonl)
     writer.append({"event_type": "attempt_start",
@@ -79,7 +101,8 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         extravars={"r42_deployment_id": dep.id,
                    "r42_attempt_id": attempt.id,
                    "r42_scope": attempt.scope,
-                   "r42_team_id": attempt.team_id},
+                   "r42_team_id": attempt.team_id,
+                   "r42_playbook_path": str(playbook_path)},
         envvars=envvars,
     )
     (artifact_dir / "pid").write_text(str(handle.pid or 0))
