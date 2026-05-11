@@ -1,17 +1,17 @@
 services:
   api:
-    build: .
+    image: ${IMAGE_NAME:-ghcr.io/range42/range42-backend-api:latest}
+    build:
+      context: .
+      target: runtime
     ports:
       - "${PORT:-8000}:8000"
     volumes:
-      - ./app:/app/app:ro
-      - ./playbooks:/app/playbooks:ro
-      - ./inventory:/app/inventory:ro
       - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
     environment:
       - PROJECT_ROOT_DIR=/app
       - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
-      - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-/app/}
+      - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-}
       - API_BACKEND_INVENTORY_DIR=/app/inventory/
       - API_BACKEND_VAULT_FILE=${API_BACKEND_VAULT_FILE:-}
       - VAULT_PASSWORD_FILE=${VAULT_PASSWORD_FILE:-}

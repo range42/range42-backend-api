@@ -7,6 +7,7 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Docker: Build & Publish](#docker-build--publish)
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
 - [WebSocket API](#websocket-api)
@@ -23,17 +24,16 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 ### Option 1 -- Docker
 
 ```bash
-docker compose up
+# Build and start (uses the built image — no source bind-mounts)
+VAULT_PASSWORD=my-secret docker compose up
 ```
 
-Builds the image, installs dependencies and Ansible collections, and starts the API on port `8000`.
+Builds the image from the local source and starts the API on port `8000`. The application code, Ansible playbooks, and inventory are baked into the image at build time.
 
 **Environment variables:** Configured via the host environment or a `.env` file. Required: at least one of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` for vault-encrypted operations.
 
 **Volumes:**
-- `./app` -- Application source (read-only)
-- `./playbooks` -- Ansible playbooks (read-only)
-- `./inventory` -- Ansible inventory files (read-only)
+- `${SSH_KEY_PATH:-~/.ssh}` -- SSH private keys (read-only) — needed for Ansible over SSH
 
 **Health check:** The container pings `/docs/openapi.json` every 30s (5s timeout, 10s start period, 3 retries).
 
@@ -62,6 +62,66 @@ export VAULT_PASSWORD_FILE="/path/to/vault-pass.txt"
 
 # Start the dev server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+---
+
+## Docker: Build & Publish
+
+The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian Bookworm** (`python:3.13-bookworm` / `python:3.13-slim-bookworm`):
+
+- **Stage 1 `builder`** — installs Python dependencies into `/opt/venv` and Ansible collections into `/usr/share/ansible/collections`.
+- **Stage 2 `runtime`** — copies the virtualenv and collections from the builder; bakes in application code; runs uvicorn.
+
+### Build locally
+
+```bash
+docker compose build
+# or directly:
+docker build -t ghcr.io/range42/range42-backend-api:latest .
+```
+
+### Run locally (validate the image)
+
+```bash
+VAULT_PASSWORD=my-secret docker compose up
+# API reachable at http://localhost:8000/docs/swagger
+```
+
+### Publish to GHCR
+
+```bash
+# 1. Authenticate (one-time per machine)
+echo $GITHUB_TOKEN | docker login ghcr.io -u <github-username> --password-stdin
+
+# 2. Build and tag
+IMAGE=ghcr.io/range42/range42-backend-api
+VERSION=v0.1   # or $(git describe --tags --always)
+
+docker build -t ${IMAGE}:${VERSION} -t ${IMAGE}:latest .
+
+# 3. Push
+docker push ${IMAGE}:${VERSION}
+docker push ${IMAGE}:latest
+```
+
+Or with Compose (sets `IMAGE_NAME` for the service):
+
+```bash
+IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose build
+IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose push
+```
+
+### OpenAPI spec
+
+The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration. To regenerate it after adding or modifying routes:
+
+```bash
+PYTHONPATH=. python -c "
+import json
+from app.main import create_app
+print(json.dumps(create_app().openapi(), indent=2))
+" > openapi.json
 ```
 
 ---
