@@ -73,6 +73,18 @@ The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian 
 - **Stage 1 `builder`** — installs Python dependencies into `/opt/venv` and Ansible collections into `/usr/share/ansible/collections`.
 - **Stage 2 `runtime`** — copies the virtualenv and collections from the builder; bakes in application code; runs uvicorn.
 
+### Non-root user
+
+The runtime image runs as a non-root user (`range42`, UID/GID 1000 by default). If your SSH keys are owned by a different UID, pass matching build args so the container user can read the mounted keys:
+
+```bash
+docker compose build   # uses UID/GID 1000
+# or match your host user:
+UID=$(id -u) GID=$(id -g) docker compose build
+```
+
+SSH host key checking is enabled (`ANSIBLE_HOST_KEY_CHECKING=True`). Pre-populate `~/.ssh/known_hosts` on the host before mounting, or the first Ansible connection to an unknown host will fail.
+
 ### Build locally
 
 ```bash
@@ -110,6 +122,19 @@ Or with Compose (sets `IMAGE_NAME` for the service):
 ```bash
 IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose build
 IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose push
+```
+
+### Vault password in production
+
+`VAULT_PASSWORD` passed as an environment variable is visible via `docker inspect` and in `/proc/<pid>/environ` inside the container. For production use `VAULT_PASSWORD_FILE` pointed at a mounted secret file:
+
+```bash
+# Create a secret file (outside the repo)
+echo "my-vault-password" > /run/secrets/vault_pass
+chmod 600 /run/secrets/vault_pass
+
+# Pass the file path, not the password itself
+VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
 ```
 
 ### OpenAPI spec

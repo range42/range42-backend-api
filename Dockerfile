@@ -20,10 +20,17 @@ RUN /opt/venv/bin/ansible-galaxy collection install \
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.13-slim-bookworm AS runtime
 
+# Match host UID/GID at build time so SSH key volume permissions align.
+# Override with: docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
+ARG UID=1000
+ARG GID=1000
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g "${GID}" range42 \
+    && useradd -u "${UID}" -g "${GID}" -m -d /home/range42 --no-log-init range42
 
 WORKDIR /app
 
@@ -34,12 +41,17 @@ COPY app/ app/
 COPY playbooks/ playbooks/
 COPY inventory/ inventory/
 
+RUN chown -R range42:range42 /app
+
 ENV PATH="/opt/venv/bin:$PATH"
+ENV HOME=/home/range42
 ENV PYTHONPATH=/app
 ENV PROJECT_ROOT_DIR=/app
 ENV API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
 ENV API_BACKEND_INVENTORY_DIR=/app/inventory/
 ENV ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections
+
+USER range42
 
 EXPOSE 8000
 
