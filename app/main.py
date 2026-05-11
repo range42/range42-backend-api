@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
         openapi_url="/docs/openapi.json",
         version="v0.1",
         license_info={"name": "GPLv3"},
-        contact={"email": "info@digisquad.com"},
+        contact={"email": "info@nc3.lu"},
         middleware=middleware,
     )
 
