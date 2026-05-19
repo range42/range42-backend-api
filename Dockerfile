@@ -1,33 +1,57 @@
-FROM python:3.12-slim
+# ─── Stage 1: builder ─────────────────────────────────────────────────────────
+FROM python:3.13-bookworm AS builder
 
-# Install system deps for ansible and ssh
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /build
+
+COPY requirements.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+COPY requirements.yml .
+RUN /opt/venv/bin/ansible-galaxy collection install \
+    -r requirements.yml \
+    -p /usr/share/ansible/collections
+
+# ─── Stage 2: runtime ─────────────────────────────────────────────────────────
+FROM python:3.13-slim-bookworm AS runtime
+
+# Match host UID/GID at build time so SSH key volume permissions align.
+# Override with: docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-client \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g "${GID}" range42 \
+    && useradd -u "${UID}" -g "${GID}" -m -d /home/range42 --no-log-init range42
+
 WORKDIR /app
 
-# Install Python deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /usr/share/ansible/collections /usr/share/ansible/collections
 
-# Install Ansible collections
-COPY requirements.yml .
-RUN ansible-galaxy collection install -r requirements.yml -p /usr/share/ansible/collections
-
-# Copy application
 COPY app/ app/
 COPY playbooks/ playbooks/
 COPY inventory/ inventory/
 
-# Set env defaults
+RUN chown -R range42:range42 /app
+
+ENV PATH="/opt/venv/bin:$PATH"
+ENV HOME=/home/range42
+ENV PYTHONPATH=/app
 ENV PROJECT_ROOT_DIR=/app
 ENV API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
 ENV API_BACKEND_INVENTORY_DIR=/app/inventory/
-ENV HOST=0.0.0.0
-ENV PORT=8000
-ENV PYTHONPATH=/app
+ENV ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections
+
+USER range42
 
 EXPOSE 8000
 

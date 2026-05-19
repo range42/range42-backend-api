@@ -13,3 +13,4 @@ tests/
 *.md
 !requirements.txt
 !requirements.yml
+openapi.json

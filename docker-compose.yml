@@ -1,19 +1,29 @@
 services:
   api:
-    build: .
+    image: ${IMAGE_NAME:-ghcr.io/range42/range42-backend-api:latest}
+    build:
+      context: .
+      target: runtime
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     ports:
       - "${PORT:-8000}:8000"
     volumes:
-      - ./app:/app/app:ro
-      - ./playbooks:/app/playbooks:ro
-      - ./inventory:/app/inventory:ro
-      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
+      # SSH keys — must be readable by the container user (UID 1000 by default).
+      # Set SSH_KEY_PATH to override the source directory.
+      - ${SSH_KEY_PATH:-~/.ssh}:/home/range42/.ssh:ro
+      # Inventory contains per-deployment host credentials. Uncomment to
+      # override the baked-in inventory without rebuilding the image:
+      # - ${INVENTORY_PATH:-./inventory}:/app/inventory:ro
     environment:
       - PROJECT_ROOT_DIR=/app
       - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
       - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-/app/}
       - API_BACKEND_INVENTORY_DIR=/app/inventory/
       - API_BACKEND_VAULT_FILE=${API_BACKEND_VAULT_FILE:-}
+      # Production: use VAULT_PASSWORD_FILE pointing to a mounted secret file.
+      # VAULT_PASSWORD is visible via `docker inspect` — dev/testing only.
       - VAULT_PASSWORD_FILE=${VAULT_PASSWORD_FILE:-}
       - VAULT_PASSWORD=${VAULT_PASSWORD:-}
       - CORS_ORIGIN_REGEX=${CORS_ORIGIN_REGEX:-}
