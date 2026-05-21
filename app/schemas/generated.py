@@ -52,6 +52,7 @@ class AttachmentSource(BaseModel):
     sha: str | None = None
     url: AnyUrl | None = None
     content_ref: str | None = None
+    content_inline: str | None = None
 
 
 class Scope1(Enum):
