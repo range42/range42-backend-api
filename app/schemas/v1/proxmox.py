@@ -27,3 +27,23 @@ class HostHealth(BaseModel):
     rtt_ms: int | None = None
     sdn_available: bool | None = None
     at: datetime
+
+
+class VmSummary(BaseModel):
+    """A qemu VM or LXC container on a registered host's node."""
+
+    vmid: int
+    name: str | None = None
+    type: str  # "qemu" | "lxc"
+    status: str  # "running" | "stopped" | "paused" | ...
+    node: str
+    maxmem: int | None = None
+    maxcpu: float | None = None
+    uptime: int | None = None
+    template: bool = False
+    tags: str | None = None
+
+
+class VmActionResult(BaseModel):
+    status: str = "accepted"
+    upid: str | None = None
