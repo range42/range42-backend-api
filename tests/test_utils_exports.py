@@ -17,6 +17,9 @@ def test_utils_reexports_resolvers_used_by_routes():
         assert hasattr(utils, name), f"app.utils does not re-export {name}"
 
 
-def test_utils_exposes_vm_id_name_resolver_submodule():
-    # routes reference ``utils.vm_id_name_resolver`` directly
-    assert hasattr(utils, "vm_id_name_resolver")
+def test_importing_app_utils_has_no_circular_import():
+    # app.utils must not eagerly pull app.core.runner (vm_id_name_resolver),
+    # which is circular at app startup. Importing it fresh must succeed.
+    import importlib
+
+    importlib.reload(utils)
