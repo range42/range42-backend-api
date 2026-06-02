@@ -163,9 +163,12 @@ async def test_vm_action_guards_protected_vmids_on_destructive(tmp_path, monkeyp
             hid = await _create_host(c)
             # 100 (pmg01) / 101 (zbx01) are protected — destructive actions refused
             r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/100/status/stop")
-            assert r.status_code == 403
-            assert r.json()["code"] == "PROTECTED_VMID"
-            # no POST reached Proxmox
+            assert r.status_code == 409
+            assert r.json()["code"] == "VMID_PROTECTED"
+            # the canonical guard also protects e.g. the 9000-9999 template range
+            r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/9000/status/shutdown")
+            assert r.status_code == 409
+            # no destructive POST reached Proxmox
             assert [m for (m, _) in _FakeProxmox.calls if m == "POST"] == []
             # non-destructive start IS allowed on a protected vmid
             r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/101/status/start")

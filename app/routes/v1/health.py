@@ -52,7 +52,7 @@ async def readiness(session: AsyncSession = Depends(_session)):
         for h in hosts:
             try:
                 r = await cli.get(
-                    f"{h.api_url}/api2/json/version",
+                    f"{h.api_url.rstrip('/')}/api2/json/version",
                     headers={"Authorization": f"PVEAPIToken={h.token_ref}"},
                 )
                 host_results.append({"id": h.id, "ok": r.status_code < 500,

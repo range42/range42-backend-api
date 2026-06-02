@@ -6,15 +6,20 @@ VM listing and start/stop/pause/resume.
 """
 from __future__ import annotations
 
+import json
+from typing import Literal
+
 import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session_factory
-from app.core.errors import AuthFailedError, Range42Error
+from app.core.errors import AuthFailedError, Range42Error, VmidProtectedError
 from app.core.logging import get_logger
 from app.core.models import ProxmoxHost
+from app.core.vmid_guard import VmidProtectedError as GuardVmidProtected
+from app.core.vmid_guard import assert_vmid_safe
 from app.schemas.v1.common import Page
 from app.schemas.v1.proxmox import VmActionResult, VmSummary
 
@@ -25,8 +30,6 @@ log = get_logger(__name__)
 # the rest can disrupt a running guest.
 _ALLOWED_ACTIONS = {"start", "stop", "shutdown", "suspend", "resume", "reboot"}
 _DESTRUCTIVE_ACTIONS = {"stop", "shutdown", "suspend", "reboot"}
-# pmg01 (100) and zbx01 (101) must never be modified (range42-deployment rule).
-_PROTECTED_VMIDS = {100, 101}
 
 
 async def _session() -> AsyncSession:
@@ -60,34 +63,37 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
     base = row.api_url.rstrip("/")
     headers = _auth_headers(row)
     items: list[VmSummary] = []
-    async with httpx.AsyncClient(verify=False, timeout=10) as cli:
-        for vm_type in ("qemu", "lxc"):
-            r = await cli.get(
-                f"{base}/api2/json/nodes/{row.node_name}/{vm_type}", headers=headers
-            )
-            if r.status_code in (401, 403):
-                raise AuthFailedError(
-                    details=[{
-                        "field": "token_ref",
-                        "reason": f"Proxmox API rejected credentials ({r.status_code})",
-                    }]
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=10) as cli:
+            for vm_type in ("qemu", "lxc"):
+                r = await cli.get(
+                    f"{base}/api2/json/nodes/{row.node_name}/{vm_type}", headers=headers
                 )
-            if r.status_code != 200:
-                # A node may not have one guest type; skip rather than fail the list.
-                continue
-            for v in r.json().get("data", []):
-                items.append(VmSummary(
-                    vmid=v["vmid"],
-                    name=v.get("name"),
-                    type=vm_type,
-                    status=v.get("status", "unknown"),
-                    node=row.node_name,
-                    maxmem=v.get("maxmem"),
-                    maxcpu=v.get("maxcpu") or v.get("cpus"),
-                    uptime=v.get("uptime"),
-                    template=bool(v.get("template", 0)),
-                    tags=v.get("tags"),
-                ))
+                if r.status_code in (401, 403):
+                    raise AuthFailedError(
+                        details=[{
+                            "field": "token_ref",
+                            "reason": f"Proxmox API rejected credentials ({r.status_code})",
+                        }]
+                    )
+                if r.status_code != 200:
+                    # A node may not have one guest type; skip rather than fail.
+                    continue
+                for v in r.json().get("data", []):
+                    items.append(VmSummary(
+                        vmid=v["vmid"],
+                        name=v.get("name"),
+                        type=vm_type,
+                        status=v.get("status", "unknown"),
+                        node=row.node_name,
+                        maxmem=v.get("maxmem"),
+                        maxcpu=v.get("maxcpu") or v.get("cpus"),
+                        uptime=v.get("uptime"),
+                        template=bool(v.get("template", 0)),
+                        tags=v.get("tags"),
+                    ))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
     return Page[VmSummary](
         items=items, total=len(items), offset=0, limit=len(items)
     )
@@ -100,7 +106,7 @@ async def vm_status_action(
     host_id: str,
     vmid: int,
     action: str,
-    vmtype: str = "qemu",
+    vmtype: Literal["qemu", "lxc"] = "qemu",
     session: AsyncSession = Depends(_session),
 ):
     if action not in _ALLOWED_ACTIONS:
@@ -111,32 +117,53 @@ async def vm_status_action(
             message=f"Unsupported action '{action}'",
             details=[{"field": "action", "reason": f"one of {sorted(_ALLOWED_ACTIONS)}"}],
         )
-    if vmid in _PROTECTED_VMIDS and action in _DESTRUCTIVE_ACTIONS:
-        raise Range42Error(
-            error="forbidden",
-            code="PROTECTED_VMID",
-            status=403,
-            message=f"VMID {vmid} is protected; '{action}' is refused",
-        )
     row = await _get_host(host_id, session)
+    # Destructive actions must respect the canonical protected-VMID ranges plus
+    # any per-host overrides (single guard, shared with deploy preflight).
+    if action in _DESTRUCTIVE_ACTIONS:
+        overrides = (
+            json.loads(row.protected_vmids_override_json)
+            if row.protected_vmids_override_json
+            else None
+        )
+        try:
+            assert_vmid_safe(vmid, host_overrides=overrides)
+        except GuardVmidProtected as e:
+            raise VmidProtectedError(
+                message=f"VMID {vmid} is protected; '{action}' is refused",
+                details=e.details,
+            ) from e
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/{action}"
-    async with httpx.AsyncClient(verify=False, timeout=15) as cli:
-        r = await cli.post(url, headers=_auth_headers(row))
-        if r.status_code in (401, 403):
-            raise AuthFailedError(
-                details=[{
-                    "field": "token_ref",
-                    "reason": f"Proxmox API rejected credentials ({r.status_code})",
-                }]
-            )
-        if r.status_code != 200:
-            raise Range42Error(
-                error="upstream_error",
-                code="PROXMOX_ERROR",
-                status=502,
-                message=f"Proxmox returned {r.status_code} for {action}",
-                details=[{"field": "vmid", "reason": r.text[:300]}],
-            )
-        upid = r.json().get("data")
-    return VmActionResult(status="accepted", upid=upid)
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.post(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{
+                "field": "token_ref",
+                "reason": f"Proxmox API rejected credentials ({r.status_code})",
+            }]
+        )
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for {action}",
+            details=[{"field": "vmid", "reason": r.text[:300]}],
+        )
+    return VmActionResult(status="accepted", upid=r.json().get("data"))
+
+
+def _unreachable(row: ProxmoxHost, err: Exception) -> Range42Error:
+    log.warning("proxmox unreachable", host=row.id, err=str(err))
+    return Range42Error(
+        error="upstream_error",
+        code="PROXMOX_UNREACHABLE",
+        status=502,
+        message=f"Proxmox host {row.name} is unreachable",
+        details=[{"field": "api_url", "reason": str(err)[:200]}],
+    )
