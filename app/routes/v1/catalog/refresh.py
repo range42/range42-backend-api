@@ -69,6 +69,18 @@ async def refresh_source(
     )
 
 
+def _count_manifests(root: "Path") -> int:
+    """Count catalog entries under ``root`` using the shared walker.
+
+    Delegates to :func:`app.routes.v1.catalog.entries._discover` so the
+    refresh count always agrees with what ``/v1/catalog/entries`` surfaces
+    (range42.yaml, meta.json, and meta/main.yml — not just range42.yaml).
+    """
+    from app.routes.v1.catalog.entries import _discover
+
+    return len(_discover(root))
+
+
 def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
     import tempfile
     from pathlib import Path
@@ -90,10 +102,4 @@ def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
                           "reason": _redact_authed_url(
                               f"{repo.owner}/{repo.repo}: {e}")}]
             )
-        root = Path(td)
-        count = 0
-        for _p in root.rglob("range42.yaml"):
-            count += 1
-        for _p in root.rglob("catalog.yaml"):
-            count += 1
-        return count
+        return _count_manifests(Path(td))
