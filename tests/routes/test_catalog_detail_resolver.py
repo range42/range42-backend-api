@@ -66,3 +66,14 @@ def test_detail_resolves_meta_main_yml_role(tmp_path):
 def test_detail_missing_path_returns_none(tmp_path):
     _write(tmp_path / "sub_a" / "range42.yaml", "kind: lab\nname: x\n")
     assert _detail_at_path(tmp_path, "nope") is None
+
+
+def test_detail_non_dict_document_is_coerced_to_dict(tmp_path):
+    # A syntactically valid manifest whose top level is a (truthy) non-dict,
+    # e.g. a JSON array. The browse walker still synthesises a summary for it,
+    # so detail must return a CatalogEntryDetail-compatible document (a dict),
+    # not the raw list — otherwise response validation 500s on document: dict.
+    _write(tmp_path / "weird" / "meta.json", "[1, 2, 3]")
+    d = _detail_at_path(tmp_path, "weird")
+    assert d is not None
+    assert isinstance(d["document"], dict)
