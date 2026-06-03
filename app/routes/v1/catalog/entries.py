@@ -117,6 +117,31 @@ def _entry_from_meta_main_yml(p: Path, repo_dir: Path) -> dict | None:
     }
 
 
+def _detail_at_path(repo_dir: Path, path: str) -> dict | None:
+    """Resolve a single entry at ``path`` across the three manifest formats.
+
+    Mirrors :func:`_discover`'s recognition so the detail endpoint surfaces
+    every entry the browse endpoint lists — not just ``range42.yaml``.
+    Returns the summary dict plus a parsed ``document``, or ``None`` if no
+    recognised manifest exists at ``path``.
+    """
+    base = repo_dir / path
+    candidates = [
+        (base / "range42.yaml", _entry_from_range42_yaml, _yaml.load),
+        (base / "meta.json", _entry_from_meta_json, json.loads),
+        (base / "meta" / "main.yml", _entry_from_meta_main_yml, _yaml.load),
+    ]
+    for manifest, parse_entry, load_doc in candidates:
+        if not manifest.exists():
+            continue
+        entry = parse_entry(manifest, repo_dir)
+        if entry is None:
+            continue
+        doc = load_doc(manifest.read_text()) or {}
+        return {**entry, "document": doc}
+    return None
+
+
 def _discover(repo_dir: Path) -> list[dict]:
     """Walk ``repo_dir`` for the three known manifest types.
 
@@ -215,19 +240,18 @@ async def get_entry(
         workdir = Path(td)
         for repo in repos:
             dest = _clone_repo(src, repo, workdir)
-            manifest = dest / path / "range42.yaml"
-            if manifest.exists():
-                doc = _yaml.load(manifest.read_text()) or {}
+            entry = _detail_at_path(dest, path)
+            if entry is not None:
                 readme = dest / path / "README.md"
                 return CatalogEntryDetail(
                     source_id=src.id,
-                    path=path,
-                    kind=doc.get("kind", "unknown"),
-                    name=doc.get("name", path),
-                    description=doc.get("description"),
-                    tags=doc.get("tags", []),
+                    path=entry["path"],
+                    kind=entry["kind"],
+                    name=entry["name"],
+                    description=entry.get("description"),
+                    tags=entry.get("tags") or [],
                     sha=None,
-                    document=doc,
+                    document=entry["document"],
                     readme_md=readme.read_text() if readme.exists() else None,
                 )
     raise Range42Error(
