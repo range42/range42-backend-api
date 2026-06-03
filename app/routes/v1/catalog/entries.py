@@ -137,7 +137,12 @@ def _detail_at_path(repo_dir: Path, path: str) -> dict | None:
         entry = parse_entry(manifest, repo_dir)
         if entry is None:
             continue
-        doc = load_doc(manifest.read_text()) or {}
+        doc = load_doc(manifest.read_text())
+        # CatalogEntryDetail.document is typed dict; a syntactically valid but
+        # non-mapping top level (e.g. a YAML/JSON list) would otherwise fail
+        # response validation. Coerce it to {} — the entry still resolves.
+        if not isinstance(doc, dict):
+            doc = {}
         return {**entry, "document": doc}
     return None
 
