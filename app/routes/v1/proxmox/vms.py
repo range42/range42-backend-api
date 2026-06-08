@@ -200,22 +200,16 @@ async def vm_delete(
             details=[{"field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})"}]
         )
     if r.status_code != 200:
-        text = r.text or ""
-        if "running" in text.lower() or "stop it first" in text.lower():
-            raise Range42Error(
-                error="conflict",
-                code="VM_RUNNING",
-                status=409,
+        text = (r.text or "").lower()
+        # PVE phrasing varies by version/guest type; also honor an explicit 409.
+        running_markers = ("running", "stop it first", "qemu process", "container is running")
+        if r.status_code == 409 or any(m in text for m in running_markers):
+            raise Range42Error(error="conflict", code="VM_RUNNING", status=409,
                 message="Stop the VM before deleting",
-                details=[{"field": "vmid", "reason": text[:300]}],
-            )
-        raise Range42Error(
-            error="upstream_error",
-            code="PROXMOX_ERROR",
-            status=502,
+                details=[{"field": "vmid", "reason": (r.text or "")[:300]}])
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
             message=f"Proxmox returned {r.status_code} for delete",
-            details=[{"field": "vmid", "reason": text[:300]}],
-        )
+            details=[{"field": "vmid", "reason": (r.text or "")[:300]}])
     return VmActionResult(status="accepted", upid=r.json().get("data"))
 
 
@@ -243,9 +237,7 @@ async def task_status(host_id: str, upid: str, session: AsyncSession = Depends(_
             details=[{"field": "upid", "reason": (r.text or "")[:300]}],
         )
     data = r.json().get("data", {}) or {}
-    return TaskStatus(
-        upid=upid,
-        status=data.get("status", "running"),
-        exitstatus=data.get("exitstatus"),
-        node=row.node_name,
-    )
+    raw_status = data.get("status", "running")
+    status = raw_status if raw_status in ("running", "stopped") else "stopped"
+    return TaskStatus(upid=upid, status=status,
+        exitstatus=data.get("exitstatus"), node=row.node_name)

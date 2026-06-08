@@ -268,6 +268,61 @@ async def test_task_status_stopped_ok(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_vm_delete_running_guest_qemu_process_phrasing(tmp_path, monkeypatch):
+    """Proxmox sometimes emits 'qemu process is still running' instead of 'stop it first';
+    the route must still return 409 VM_RUNNING for this phrasing."""
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+
+    class _QemuProcessProxmox(_FakeProxmox):
+        async def delete(self, url, headers=None, params=None):
+            _FakeProxmox.calls.append(("DELETE", url, params))
+            return _FakeResp(500, "VM 2001 qemu process is still running")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _QemuProcessProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/2001?vmtype=qemu")
+            assert r.status_code == 409, r.text
+            assert r.json()["code"] == "VM_RUNNING"
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_task_status_unexpected_status_coerced_to_stopped(tmp_path, monkeypatch):
+    """An unknown Proxmox status value must not raise a Pydantic ValidationError;
+    it should be coerced to 'stopped' and return HTTP 200."""
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+
+    class _WeirdStatusProxmox(_FakeProxmox):
+        async def get(self, url, headers=None):
+            _FakeProxmox.calls.append(("GET", url, None))
+            if "/tasks/" in url and url.endswith("/status"):
+                return _FakeResp(200, {
+                    "upid": "UPID:pve01:0001:delete::",
+                    "status": "weird",
+                    "exitstatus": "OK",
+                    "pid": 1,
+                })
+            return await super().get(url, headers=headers)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _WeirdStatusProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(
+                f"/v1/proxmox/hosts/{hid}/tasks/UPID:pve01:0001:delete::/status"
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["status"] == "stopped"
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
 async def test_task_status_stopped_error(tmp_path, monkeypatch):
     app, dbmod = await _boot(tmp_path, monkeypatch)
 
