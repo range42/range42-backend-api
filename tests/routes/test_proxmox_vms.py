@@ -55,7 +55,7 @@ class _FakeProxmox:
         return False
 
     async def get(self, url, headers=None):
-        _FakeProxmox.calls.append(("GET", url))
+        _FakeProxmox.calls.append(("GET", url, None))
         if url.endswith("/qemu"):
             return _FakeResp(200, [
                 {"vmid": 4001, "name": "vuln-box-01", "status": "running",
@@ -68,11 +68,22 @@ class _FakeProxmox:
             return _FakeResp(200, [
                 {"vmid": 200, "name": "ct-1", "status": "stopped"},
             ])
+        if "/tasks/" in url and url.endswith("/status"):
+            return _FakeResp(200, {
+                "upid": "UPID:pve01:0001:delete::",
+                "status": "stopped",
+                "exitstatus": "OK",
+                "pid": 1,
+            })
         return _FakeResp(404, [])
 
     async def post(self, url, headers=None, json=None):
         _FakeProxmox.calls.append(("POST", url))
         return _FakeResp(200, "UPID:pve01:0000:start::")
+
+    async def delete(self, url, headers=None, params=None):
+        _FakeProxmox.calls.append(("DELETE", url, params))
+        return _FakeResp(200, "UPID:pve01:0001:delete::")
 
 
 async def _create_host(c):
@@ -102,7 +113,7 @@ async def test_list_host_vms_merges_qemu_and_lxc(tmp_path, monkeypatch):
             assert byid[200]["type"] == "lxc"
             # trailing slash in api_url must not produce a double slash
             assert any(u == "https://pve01:8006/api2/json/nodes/pve01/qemu"
-                       for (_, u) in _FakeProxmox.calls)
+                       for (_, u, *_) in _FakeProxmox.calls)
     finally:
         await dbmod.dispose_engine()
 
@@ -133,7 +144,7 @@ async def test_vm_action_start_posts_to_pve_status_endpoint(tmp_path, monkeypatc
             assert r.status_code == 200, r.text
             assert r.json()["status"] == "accepted"
             assert r.json()["upid"].startswith("UPID")
-            posts = [u for (m, u) in _FakeProxmox.calls if m == "POST"]
+            posts = [u for (m, u, *_) in _FakeProxmox.calls if m == "POST"]
             assert posts == [
                 "https://pve01:8006/api2/json/nodes/pve01/qemu/4001/status/start"
             ]
@@ -169,9 +180,117 @@ async def test_vm_action_guards_protected_vmids_on_destructive(tmp_path, monkeyp
             r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/9000/status/shutdown")
             assert r.status_code == 409
             # no destructive POST reached Proxmox
-            assert [m for (m, _) in _FakeProxmox.calls if m == "POST"] == []
+            assert [m for (m, *_) in _FakeProxmox.calls if m == "POST"] == []
             # non-destructive start IS allowed on a protected vmid
             r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/101/status/start")
             assert r.status_code == 200, r.text
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_vm_delete_happy_path(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/2001?vmtype=qemu&purge=true")
+            assert r.status_code == 200, r.text
+            assert r.json()["status"] == "accepted"
+            assert r.json()["upid"].startswith("UPID")
+            deletes = [(u, p) for (m, u, p) in _FakeProxmox.calls if m == "DELETE"]
+            assert deletes, "expected a DELETE to Proxmox"
+            url, params = deletes[0]
+            assert url == "https://pve01:8006/api2/json/nodes/pve01/qemu/2001"
+            assert params.get("purge") == 1
+            assert params.get("destroy-unreferenced-disks") == 1
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_vm_delete_refuses_protected_vmid(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/100?vmtype=qemu")
+            assert r.status_code == 409
+            assert r.json()["code"] == "VMID_PROTECTED"
+            assert [m for (m, *_) in _FakeProxmox.calls if m == "DELETE"] == []
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_vm_delete_running_guest_conflict(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+
+    class _RunningProxmox(_FakeProxmox):
+        async def delete(self, url, headers=None, params=None):
+            _FakeProxmox.calls.append(("DELETE", url, params))
+            return _FakeResp(500, "can't remove VM 4001 - running, stop it first")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _RunningProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/2001?vmtype=qemu")
+            assert r.status_code == 409, r.text
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_task_status_stopped_ok(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            upid = "UPID:pve01:0001:delete::"
+            r = await c.get(f"/v1/proxmox/hosts/{hid}/tasks/{upid}/status")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["status"] == "stopped"
+            assert body["exitstatus"] == "OK"
+            assert body["node"] == "pve01"
+            gets = [u for (m, u, *_) in _FakeProxmox.calls if m == "GET"]
+            assert any("/tasks/UPID%3Apve01%3A0001%3Adelete%3A%3A/status" in u for u in gets)
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_task_status_stopped_error(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+
+    class _FailedTaskProxmox(_FakeProxmox):
+        async def get(self, url, headers=None):
+            _FakeProxmox.calls.append(("GET", url, None))
+            if "/tasks/" in url and url.endswith("/status"):
+                return _FakeResp(200, {
+                    "upid": "UPID:pve01:0001:delete::",
+                    "status": "stopped",
+                    "exitstatus": "command failed",
+                    "pid": 1,
+                })
+            return _FakeResp(404, [])
+
+    monkeypatch.setattr(httpx, "AsyncClient", _FailedTaskProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(f"/v1/proxmox/hosts/{hid}/tasks/UPID:pve01:0001:delete::/status")
+            assert r.status_code == 200, r.text
+            assert r.json()["status"] == "stopped"
+            assert r.json()["exitstatus"] == "command failed"
     finally:
         await dbmod.dispose_engine()

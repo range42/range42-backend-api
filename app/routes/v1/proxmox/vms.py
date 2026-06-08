@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from typing import Literal
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -21,7 +22,7 @@ from app.core.models import ProxmoxHost
 from app.core.vmid_guard import VmidProtectedError as GuardVmidProtected
 from app.core.vmid_guard import assert_vmid_safe
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import VmActionResult, VmSummary
+from app.schemas.v1.proxmox import TaskStatus, VmActionResult, VmSummary
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -55,6 +56,23 @@ async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:
 
 def _auth_headers(row: ProxmoxHost) -> dict[str, str]:
     return {"Authorization": f"PVEAPIToken={row.token_ref}"}
+
+
+def _assert_vmid_safe(row: ProxmoxHost, vmid: int, action: str) -> None:
+    """Refuse destructive actions on protected VMIDs (canonical ranges + per-host
+    overrides). `action` only feeds the error message."""
+    overrides = (
+        json.loads(row.protected_vmids_override_json)
+        if row.protected_vmids_override_json
+        else None
+    )
+    try:
+        assert_vmid_safe(vmid, host_overrides=overrides)
+    except GuardVmidProtected as e:
+        raise VmidProtectedError(
+            message=f"VMID {vmid} is protected; '{action}' is refused",
+            details=e.details,
+        ) from e
 
 
 @router.get("/hosts/{host_id}/vms", response_model=Page[VmSummary])
@@ -118,21 +136,8 @@ async def vm_status_action(
             details=[{"field": "action", "reason": f"one of {sorted(_ALLOWED_ACTIONS)}"}],
         )
     row = await _get_host(host_id, session)
-    # Destructive actions must respect the canonical protected-VMID ranges plus
-    # any per-host overrides (single guard, shared with deploy preflight).
     if action in _DESTRUCTIVE_ACTIONS:
-        overrides = (
-            json.loads(row.protected_vmids_override_json)
-            if row.protected_vmids_override_json
-            else None
-        )
-        try:
-            assert_vmid_safe(vmid, host_overrides=overrides)
-        except GuardVmidProtected as e:
-            raise VmidProtectedError(
-                message=f"VMID {vmid} is protected; '{action}' is refused",
-                details=e.details,
-            ) from e
+        _assert_vmid_safe(row, vmid, action)
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/{action}"
     try:
@@ -166,4 +171,81 @@ def _unreachable(row: ProxmoxHost, err: Exception) -> Range42Error:
         status=502,
         message=f"Proxmox host {row.name} is unreachable",
         details=[{"field": "api_url", "reason": str(err)[:200]}],
+    )
+
+
+@router.delete("/hosts/{host_id}/vms/{vmid}", response_model=VmActionResult)
+async def vm_delete(
+    host_id: str,
+    vmid: int,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    purge: bool = True,
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    _assert_vmid_safe(row, vmid, "delete")
+    base = row.api_url.rstrip("/")
+    url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}"
+    params: dict[str, int] = {}
+    if purge:
+        params["purge"] = 1
+        params["destroy-unreferenced-disks"] = 1
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.delete(url, headers=_auth_headers(row), params=params)
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{"field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})"}]
+        )
+    if r.status_code != 200:
+        text = r.text or ""
+        if "running" in text.lower() or "stop it first" in text.lower():
+            raise Range42Error(
+                error="conflict",
+                code="VM_RUNNING",
+                status=409,
+                message="Stop the VM before deleting",
+                details=[{"field": "vmid", "reason": text[:300]}],
+            )
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for delete",
+            details=[{"field": "vmid", "reason": text[:300]}],
+        )
+    return VmActionResult(status="accepted", upid=r.json().get("data"))
+
+
+@router.get("/hosts/{host_id}/tasks/{upid:path}/status", response_model=TaskStatus)
+async def task_status(host_id: str, upid: str, session: AsyncSession = Depends(_session)):
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    enc = quote(upid, safe="")
+    url = f"{base}/api2/json/nodes/{row.node_name}/tasks/{enc}/status"
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.get(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{"field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})"}]
+        )
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for task status",
+            details=[{"field": "upid", "reason": (r.text or "")[:300]}],
+        )
+    data = r.json().get("data", {}) or {}
+    return TaskStatus(
+        upid=upid,
+        status=data.get("status", "running"),
+        exitstatus=data.get("exitstatus"),
+        node=row.node_name,
     )
