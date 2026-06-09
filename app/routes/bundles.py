@@ -23,7 +23,6 @@ Proxmox VM bundles (create/start/stop/pause/resume/delete/snapshot):
 All prefixed under ``/v0/admin/run/bundles``.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from fastapi.responses import JSONResponse
 
 from app import utils
 from app.core.extractor import extract_action_results
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 
 # --- Linux/Ubuntu bundle schemas ---
@@ -62,7 +62,7 @@ from app.schemas.snapshots import (
 )
 from app.schemas.vms import Reply_ProxmoxVmsVMID_StartStopPauseResume
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"

@@ -6,14 +6,15 @@ against a strict regex, resolves the file path under the project's
 the absolute path.
 """
 
-import logging
 import os
 import re
 from pathlib import Path
 
 from fastapi import HTTPException
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def resolve_inventory(inventory_name: str) -> Path:

@@ -6,7 +6,6 @@ Endpoints
 - ``POST /v0/admin/run/scenarios/{scenario_name}/run`` -- Run a named scenario.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -14,10 +13,11 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app import utils
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.debug import Request_DebugPing
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"

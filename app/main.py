@@ -5,7 +5,6 @@ lifecycle management, custom exception handlers, and route registration.
 The module-level ``app`` object is the ASGI entry point used by uvicorn.
 """
 
-import logging
 import os
 import shutil
 import stat
@@ -14,17 +13,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.exceptions import validation_exception_handler
+from app.core.errors import install_exception_handlers
+from app.core.logging import configure_logging, get_logger
+from app.core.middleware_trace import TraceIdMiddleware
 from app.core.runner import vault_manager
 from app.routes import router as api_router
 from app.routes.ws_status import router as ws_router
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -50,15 +50,39 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("No vault password provided")
 
+    # v1 state layer
+    from app.core.db import get_engine, dispose_engine
+    engine = get_engine()
+    logger.info("v1 state engine ready", db_url=settings.db_url)
+
+    # v1 orphan reconcile: run once synchronously at boot so the structured
+    # log captures any detached ansible-runner subprocesses inherited from
+    # a prior FastAPI process, then register the periodic apscheduler job.
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.core.orphans import reconcile_once
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(reconcile_once, "interval",
+                      seconds=settings.orphan_reconcile_interval_s,
+                      id="orphan_reconcile", max_instances=1, coalesce=True)
+    try:
+        await reconcile_once()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("orphan reconcile boot failed", error=str(exc))
+    scheduler.start()
+
     try:
         yield
     finally:
+        scheduler.shutdown(wait=False)
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
+        await dispose_engine()
 
 
 def create_app() -> FastAPI:
     """Application factory. Creates and configures the FastAPI application."""
+    configure_logging(json_output=True)
+
     middleware = [
         Middleware(
             CORSMiddleware,
@@ -67,7 +91,8 @@ def create_app() -> FastAPI:
             allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
             allow_headers=["Content-Type", "Accept", "Authorization"],
             max_age=600,
-        )
+        ),
+        Middleware(TraceIdMiddleware),
     ]
 
     _app = FastAPI(
@@ -82,9 +107,28 @@ def create_app() -> FastAPI:
         middleware=middleware,
     )
 
-    _app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    install_exception_handlers(_app)
     _app.include_router(api_router)
     _app.include_router(ws_router)
+
+    from app.routes.v1 import router as v1_router
+    _app.include_router(v1_router)
+
+    workers_env = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS")
+    if settings.uvicorn_workers_guard and workers_env:
+        try:
+            if int(workers_env) > 1:
+                get_logger(__name__).warning(
+                    "multi_worker_deploy_invariant_violated",
+                    workers=workers_env,
+                    remediation=(
+                        "Set WEB_CONCURRENCY=1 in deploy environments; SSE "
+                        "open_streams counter and live subscriber map are "
+                        "in-process. Set RANGE42_UVICORN_WORKERS_GUARD=0 to silence."
+                    ),
+                )
+        except ValueError:
+            pass
 
     return _app
 

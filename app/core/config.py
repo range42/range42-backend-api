@@ -81,6 +81,39 @@ class Settings:
         default_factory=lambda: os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
     )
 
+    # v1 workspace + state
+    workspace_root: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("RANGE42_WORKSPACE_ROOT", str(Path.home() / "range42.config"))
+        ).resolve()
+    )
+    db_url: str = field(
+        default_factory=lambda: os.getenv(
+            "RANGE42_DB_URL",
+            f"sqlite+aiosqlite:///{Path(os.getenv('RANGE42_WORKSPACE_ROOT', str(Path.home() / 'range42.config'))).resolve() / '.range42.db'}",
+        )
+    )
+
+    # v1 redaction
+    redaction_denylist: tuple = field(
+        default_factory=lambda: tuple(
+            (os.getenv("RANGE42_REDACTION_DENYLIST")
+             or "*_password,*_passwd,*_token,*_key,*_secret,admin_password,root_password").split(",")
+        )
+    )
+
+    # v1 runtime knobs
+    orphan_reconcile_interval_s: int = field(
+        default_factory=lambda: int(os.getenv("RANGE42_ORPHAN_RECONCILE_INTERVAL", "300"))
+    )
+    runner_bin: str = field(
+        default_factory=lambda: os.getenv("RANGE42_RUNNER_BIN", "ansible-runner")
+    )
+    uvicorn_workers_guard: bool = field(
+        default_factory=lambda: os.getenv("RANGE42_UVICORN_WORKERS_GUARD", "1").lower()
+        in ("1", "true", "yes")
+    )
+
     @property
     def playbook_path(self) -> Path:
         """Return the default generic playbook path.

@@ -8,7 +8,6 @@ Endpoints
 - ``POST /v0/admin/proxmox/vms/vm_id/snapshot/revert`` -- Revert to a snapshot.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app import utils
 from app.core.extractor import extract_action_results
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.snapshots import (
     Reply_ProxmoxVmsVMID_CreateSnapshot,
@@ -30,7 +30,7 @@ from app.schemas.snapshots import (
 )
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"

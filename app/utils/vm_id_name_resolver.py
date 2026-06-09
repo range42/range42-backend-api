@@ -7,16 +7,16 @@ and snapshot management.
 """
 
 import json
-import logging
 import os
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from app.core.extractor import extract_action_results
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def hack_same_vm_id(a, b) -> bool:

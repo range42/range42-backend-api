@@ -408,6 +408,46 @@ Curl scripts for every endpoint are available in `curl_utils/`.
 
 ---
 
+## v1 API surface
+
+See [docs/v1-routes.md](docs/v1-routes.md) for the full endpoint map.
+Highlights:
+
+- `/v1/catalog/sources` -- git source registration.
+- `/v1/catalog/entries` -- cross-source browse + manifest detail.
+- `/v1/projects` -- project CRUD + `compose` + `validate`.
+- `/v1/deployments` -- create/list/get + `attempts` + `preflight` + `events` (SSE) + `timings` + `cancel`.
+- `/v1/proxmox/hosts` -- host CRUD + `health`.
+- `/v1/health`, `/v1/health/ready`, `/v1/admin/stats`.
+
+Canonical error envelope per spec section 18.1 -- every /v1 error includes
+`{error, message, code, details[], trace_id, timestamp}`.
+
+## Detached runner
+
+See [docs/runner-migration.md](docs/runner-migration.md). The v1 runtime
+spawns `ansible-runner start <private_data_dir>` as a daemonised
+subprocess. FastAPI restarts do not kill the run; orphan reconcile scans
+`~/range42.config/*/runner/pid` every 5 minutes. Events land in
+`<artifact_dir>/job_events/*.json` and a separate `EventsWatcher`
+translates them into `events.jsonl` through the redaction pipeline.
+
+## Events + SSE
+
+Each deployment owns `~/range42.config/<CODENAME>-<SCENARIO>/events.jsonl`
+with `event_seq` as the cursor. SSE endpoint
+`GET /v1/deployments/:id/events` replays up to 5000 events then tails
+live writes. Deployments behind Kong/Nginx must set
+`proxy_buffering off` -- see [docs/sse-proxy.md](docs/sse-proxy.md).
+
+## Local-FS invariant
+
+Workspace root and SQLite DB must be on a local filesystem (ext4/xfs/
+btrfs/zfs/tmpfs). NFS/CIFS/FUSE is refused at deployment create with
+HTTP 409 and code `WORKSPACE_NON_LOCAL_FS`.
+
+---
+
 ## License
 
 [GPL-3.0](LICENSE)

@@ -6,14 +6,15 @@ file path, and checks for path traversal before returning the absolute
 path to the playbook YAML file.
 """
 
-import logging
 import os
 import re
 from pathlib import Path
 
 from fastapi import HTTPException
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _warmup_checks(playbooks_dir_type: str) -> Path:
