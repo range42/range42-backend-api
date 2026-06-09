@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, HttpUrl
 
@@ -47,3 +48,10 @@ class VmSummary(BaseModel):
 class VmActionResult(BaseModel):
     status: str = "accepted"
     upid: str | None = None
+
+
+class TaskStatus(BaseModel):
+    upid: str
+    status: Literal["running", "stopped"]
+    exitstatus: str | None = None
+    node: str
