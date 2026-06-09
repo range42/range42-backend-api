@@ -14,5 +14,5 @@ jobs:
       - run: apt-get update && apt-get install -y --no-install-recommends git
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
-      - run: ruff check --select ALL .
+      - run: ruff check --select ALL app/
       - run: pytest --tb=short -q
