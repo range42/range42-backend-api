@@ -173,6 +173,20 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         else:
             proxmox_address = api_url.split(":", 1)[0]
 
+        # Proxmox API creds for the _universal playbook's node-network tasks
+        # (the proxmox_controller role reads proxmox_api_* as plain vars; the
+        # generated inventory carries no token). token_ref: "user!tokenid=secret".
+        extravars["proxmox_api_host"] = api_url.split("://", 1)[-1].rstrip("/")
+        extravars["proxmox_node"] = target_host.node_name
+        _tok = target_host.token_ref or ""
+        if "!" in _tok and "=" in _tok:
+            _userpart, _secret = _tok.split("=", 1)
+            _user, _tokid = _userpart.split("!", 1)
+            extravars["proxmox_api_user"] = _user
+            extravars["proxmox_api_token_id"] = _tokid
+            extravars["proxmox_api_token_secret"] = _secret
+            tainted.add(_secret)
+
         inventory_dir = ws / "inventory"
         inventory_dir.mkdir(parents=True, exist_ok=True)
         write_inventory(
