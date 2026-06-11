@@ -20,10 +20,15 @@ side effects — safe to call from ``start_attempt()`` (T8).
 """
 from __future__ import annotations
 
+import ipaddress
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Reuse the canonical per-team template renderer so inventory CIDR resolution
+# never drifts from the playbook/compose expansion (see #84).
+from app.overlay.expand_replication import _render_template
 
 
 # Node kinds that become Ansible hosts (others are infra primitives)
@@ -94,6 +99,53 @@ def _ip_for_node(bridge_base: int, team_id: int | None, seq: int) -> str:
     return f"192.168.{octet}.{200 + seq}"
 
 
+def _resolve_network_cidr(
+    net_node: dict, team_id: int | None, bridge_base: int
+) -> str | None:
+    """Resolve a network node's CIDR, rendering a node-level ``cidr_template``
+    (canonical schema form) for the given team if needed."""
+    if net_node.get("cidr"):
+        return net_node["cidr"]
+    tpl = net_node.get("cidr_template")
+    if tpl:
+        return _render_template(tpl, team_id or 0, bridge_base)
+    return None
+
+
+def _host_ip_from_cidr(cidr: str, seq: int) -> str | None:
+    """Derive a host address inside ``cidr`` following the existing host-octet
+    convention (network address + 200 + seq). Returns None on a malformed CIDR."""
+    try:
+        net = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return None
+    return str(net.network_address + (200 + seq))
+
+
+def _ansible_host_ip(
+    node: dict, team_id: int | None, seq: int, bridge_base: int,
+    networks_by_id: dict[str, dict],
+) -> str:
+    """Determine a host's ansible_host. Precedence: explicit NIC ip >
+    node_ref-bound network CIDR derivation > hardcoded 192.168.{bridge_base}
+    fallback (backward-compatible with topologies that omit networks[])."""
+    nics = node.get("networks") or []
+    primary = nics[0] if nics else None
+    if primary:
+        explicit = primary.get("ip")
+        if explicit:
+            return explicit
+        ref = primary.get("node_ref")
+        net = networks_by_id.get(ref) if ref else None
+        if net is not None:
+            cidr = _resolve_network_cidr(net, team_id, bridge_base)
+            if cidr:
+                derived = _host_ip_from_cidr(cidr, seq)
+                if derived:
+                    return derived
+    return _ip_for_node(bridge_base, team_id, seq)
+
+
 def write_inventory(
     *,
     topology: dict[str, Any],
@@ -124,6 +176,13 @@ def write_inventory(
 
     # Filter nodes: only vm/lxc/docker become Ansible hosts
     host_nodes = [n for n in topology.get("nodes", []) if n.get("kind") in _HOST_KINDS]
+
+    # Network nodes, keyed by id, for NIC node_ref -> CIDR resolution.
+    networks_by_id = {
+        n.get("id"): n
+        for n in topology.get("nodes", [])
+        if n.get("kind") == "network" and n.get("id")
+    }
 
     children: dict[str, dict[str, Any]] = {
         "r42_admin": {"hosts": {}},
@@ -157,7 +216,7 @@ def write_inventory(
 
         host = _hostname(prefix, team_id, node_id)
         user = ssh_user_for_role.get(role, _DEFAULT_SSH_USER.get(role, "alice"))
-        ip = _ip_for_node(bridge_base, team_id, seq)
+        ip = _ansible_host_ip(node, team_id, seq, bridge_base, networks_by_id)
 
         children[group]["hosts"][host] = {
             "ansible_host": ip,

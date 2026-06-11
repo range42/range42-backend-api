@@ -101,6 +101,79 @@ def test_skips_non_host_node_kinds(tmp_path):
         "Network nodes must not appear as inventory hosts"
 
 
+def _write(topology, tmp_path, **kw):
+    out = tmp_path / "hosts.yml"
+    write_inventory(
+        topology=topology, codename="X", proxmox_address="10.0.0.1",
+        ssh_keys_dir=tmp_path, dest=out, **kw,
+    )
+    return yaml.safe_load(out.read_text())
+
+
+def test_ansible_host_derives_from_bound_static_network_cidr(tmp_path):
+    """A host NIC's node_ref points to a network node with a static cidr;
+    ansible_host is derived from that cidr (network addr + 200 + seq), not the
+    hardcoded 192.168.{bridge_base} scheme."""
+    topology = {
+        "schema_version": "1.0", "kind": "gamenet", "bridge_base": 140,
+        "nodes": [
+            {"id": "net-custom", "kind": "network",
+             "replication": {"scope": "shared"}, "cidr": "10.50.0.0/24"},
+            {"id": "host-01", "kind": "vm", "role": "admin",
+             "replication": {"scope": "shared"}, "template_vmid": 9001,
+             "config": {}, "networks": [{"node_ref": "net-custom"}],
+             "attachments": []},
+        ],
+    }
+    inv = _write(topology, tmp_path, team_count=1)
+    admin = inv["all"]["children"]["r42_admin"]["hosts"]
+    host = next(h for h in admin if "host-01" in h)
+    assert admin[host]["ansible_host"] == "10.50.0.200"
+
+
+def test_explicit_nic_ip_overrides_network_derivation(tmp_path):
+    """An explicit NIC ip takes precedence over node_ref cidr derivation."""
+    topology = {
+        "schema_version": "1.0", "kind": "gamenet", "bridge_base": 140,
+        "nodes": [
+            {"id": "net-custom", "kind": "network",
+             "replication": {"scope": "shared"}, "cidr": "10.50.0.0/24"},
+            {"id": "host-01", "kind": "vm", "role": "admin",
+             "replication": {"scope": "shared"}, "template_vmid": 9001,
+             "config": {}, "networks": [{"node_ref": "net-custom", "ip": "10.50.0.42"}],
+             "attachments": []},
+        ],
+    }
+    inv = _write(topology, tmp_path, team_count=1)
+    admin = inv["all"]["children"]["r42_admin"]["hosts"]
+    host = next(h for h in admin if "host-01" in h)
+    assert admin[host]["ansible_host"] == "10.50.0.42"
+
+
+def test_ansible_host_derives_from_per_team_cidr_template(tmp_path):
+    """A per-team host bound to a per-team network with a node-level
+    cidr_template resolves the cidr per team id and derives the host ip."""
+    topology = {
+        "schema_version": "1.0", "kind": "gamenet", "bridge_base": 140,
+        "nodes": [
+            {"id": "team-net", "kind": "network",
+             "replication": {"scope": "per_team"},
+             "cidr_template": "10.{{ bridge_base + team_id }}.0.0/16"},
+            {"id": "box", "kind": "vm", "role": "team",
+             "replication": {"scope": "per_team"}, "template_vmid": 9020,
+             "config": {}, "networks": [{"node_ref": "team-net"}],
+             "attachments": []},
+        ],
+    }
+    inv = _write(topology, tmp_path, team_count=2)
+    blank = inv["all"]["children"]["r42_blank_group"]["hosts"]
+    t1 = next(h for h in blank if "1-box" in h)
+    t2 = next(h for h in blank if "2-box" in h)
+    # team1 -> 10.141.0.0/16 + 200 -> 10.141.0.200 ; team2 -> 10.142.0.200
+    assert blank[t1]["ansible_host"] == "10.141.0.200"
+    assert blank[t2]["ansible_host"] == "10.142.0.200"
+
+
 def test_rejects_node_without_role(tmp_path):
     """VM/LXC nodes MUST have a role; preflight catches this but inventory_writer
     is also a defense layer."""
