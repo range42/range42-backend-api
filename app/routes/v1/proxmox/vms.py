@@ -23,7 +23,12 @@ from app.routes.v1.proxmox._helpers import (
     _unreachable,
 )
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import TaskStatus, VmActionResult, VmSummary
+from app.schemas.v1.proxmox import (
+    TaskStatus,
+    VmActionResult,
+    VmConfigResult,
+    VmSummary,
+)
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -73,6 +78,45 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
         raise _unreachable(row, e) from e
     return Page[VmSummary](
         items=items, total=len(items), offset=0, limit=len(items)
+    )
+
+
+@router.get(
+    "/hosts/{host_id}/vms/{vmid}/config", response_model=VmConfigResult
+)
+async def vm_config(
+    host_id: str,
+    vmid: int,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    """Return the raw PVE guest config (net0/net1/ipconfig*, etc.). The UI import
+    flow parses net* to rebuild per-NIC bridge/network edges (#79); the v1 VM
+    list deliberately omits per-NIC detail."""
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/config"
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.get(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(details=[{
+            "field": "token_ref",
+            "reason": f"Proxmox API rejected credentials ({r.status_code})",
+        }])
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for vm config",
+            details=[{"field": "vmid", "reason": (r.text or "")[:300]}],
+        )
+    return VmConfigResult(
+        vmid=vmid, node=row.node_name, type=vmtype,
+        config=r.json().get("data", {}) or {},
     )
 
 

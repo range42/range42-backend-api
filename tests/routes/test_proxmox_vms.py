@@ -68,6 +68,13 @@ class _FakeProxmox:
             return _FakeResp(200, [
                 {"vmid": 200, "name": "ct-1", "status": "stopped"},
             ])
+        if url.endswith("/config"):
+            return _FakeResp(200, {
+                "net0": "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr142,firewall=1",
+                "net1": "virtio=11:22:33:44:55:66,bridge=vmbr140",
+                "ipconfig0": "ip=192.168.142.50/24,gw=192.168.142.1",
+                "cores": 2, "memory": 2048,
+            })
         if "/tasks/" in url and url.endswith("/status"):
             return _FakeResp(200, {
                 "upid": "UPID:pve01:0001:delete::",
@@ -113,6 +120,28 @@ async def test_list_host_vms_merges_qemu_and_lxc(tmp_path, monkeypatch):
             assert byid[200]["type"] == "lxc"
             # trailing slash in api_url must not produce a double slash
             assert any(u == "https://pve01:8006/api2/json/nodes/pve01/qemu"
+                       for (_, u, *_) in _FakeProxmox.calls)
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_vm_config_returns_nic_bridges(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(f"/v1/proxmox/hosts/{hid}/vms/4001/config")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["vmid"] == 4001
+            assert body["node"] == "pve01"
+            assert body["type"] == "qemu"
+            assert "bridge=vmbr142" in body["config"]["net0"]
+            assert "bridge=vmbr140" in body["config"]["net1"]
+            assert any(u.endswith("/qemu/4001/config")
                        for (_, u, *_) in _FakeProxmox.calls)
     finally:
         await dbmod.dispose_engine()
