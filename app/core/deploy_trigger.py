@@ -108,6 +108,9 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         "r42_scope": attempt.scope,
         "r42_team_id": attempt.team_id,
         "r42_playbook_path": str(playbook_path),
+        # team_count is a per-team multiplier the playbook needs on every host
+        # (set_fact on localhost is not visible to the proxmox-cli plays).
+        "team_count": dep.team_count or 1,
     }
 
     # Build the tainted-string set for substring redaction. Always includes
