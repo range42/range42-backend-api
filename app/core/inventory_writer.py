@@ -122,6 +122,70 @@ def _host_ip_from_cidr(cidr: str, seq: int) -> str | None:
     return str(net.network_address + (200 + seq))
 
 
+def _resolve_network(
+    net_node: dict, team_id: int | None, bridge_base: int
+) -> dict[str, str | None]:
+    """Resolve a network node's ``{bridge, cidr, gateway}`` for a team,
+    rendering node-level templates via the canonical renderer."""
+    tid = team_id or 0
+    bridge = net_node.get("bridge")
+    if not bridge and net_node.get("bridge_template"):
+        bridge = _render_template(net_node["bridge_template"], tid, bridge_base)
+    gateway = net_node.get("gateway")
+    if not gateway and net_node.get("gateway_template"):
+        gateway = _render_template(net_node["gateway_template"], tid, bridge_base)
+    return {
+        "bridge": bridge,
+        "cidr": _resolve_network_cidr(net_node, team_id, bridge_base),
+        "gateway": gateway,
+    }
+
+
+def _host_ci_net(
+    node: dict, team_id: int | None, bridge_base: int,
+    networks_by_id: dict[str, dict],
+) -> tuple[int, str, str]:
+    """Per-host cloud-init network triple (netmask, gateway, bridge). Derived
+    from the bound network, else the legacy 192.168.{bridge_base+team} scheme."""
+    octet = bridge_base + (team_id or 0)
+    netmask, gateway, bridge = 24, f"192.168.{octet}.1", f"vmbr{octet}"
+    nics = node.get("networks") or []
+    primary = nics[0] if nics else None
+    ref = primary.get("node_ref") if primary else None
+    if ref and ref in networks_by_id:
+        r = _resolve_network(networks_by_id[ref], team_id, bridge_base)
+        if r["cidr"] and "/" in r["cidr"]:
+            try:
+                netmask = int(r["cidr"].split("/")[1])
+            except ValueError:
+                pass
+        if r["gateway"]:
+            gateway = r["gateway"]
+        if r["bridge"]:
+            bridge = r["bridge"]
+    return netmask, gateway, bridge
+
+
+def _build_network_map(
+    topology: dict, team_count: int, bridge_base: int
+) -> dict[str, dict[str, dict]]:
+    """Per network id, the resolved {bridge, cidr, gateway} keyed by team id
+    (or 'shared') — the single source the playbook reads to create bridges."""
+    out: dict[str, dict[str, dict]] = {}
+    for net in topology.get("nodes", []):
+        if net.get("kind") != "network" or not net.get("id"):
+            continue
+        scope = (net.get("replication") or {}).get("scope", "shared")
+        entry: dict[str, dict] = {}
+        if scope == "per_team":
+            for tid in range(1, team_count + 1):
+                entry[str(tid)] = _resolve_network(net, tid, bridge_base)
+        else:
+            entry["shared"] = _resolve_network(net, None, bridge_base)
+        out[net["id"]] = entry
+    return out
+
+
 def _ansible_host_ip(
     node: dict, team_id: int | None, seq: int, bridge_base: int,
     networks_by_id: dict[str, dict],
@@ -217,6 +281,9 @@ def write_inventory(
         host = _hostname(prefix, team_id, node_id)
         user = ssh_user_for_role.get(role, _DEFAULT_SSH_USER.get(role, "alice"))
         ip = _ansible_host_ip(node, team_id, seq, bridge_base, networks_by_id)
+        ci_netmask, ci_gateway, net_bridge = _host_ci_net(
+            node, team_id, bridge_base, networks_by_id
+        )
 
         children[group]["hosts"][host] = {
             "ansible_host": ip,
@@ -229,6 +296,10 @@ def write_inventory(
             "r42_team_id": team_id,
             "r42_node_name": node_id,
             "r42_template_vmid": node.get("template_vmid"),
+            # Cloud-init network triple — single source for the playbook (#73).
+            "r42_ci_netmask": ci_netmask,
+            "r42_ci_gateway": ci_gateway,
+            "r42_net_bridge": net_bridge,
         }
 
         # If this node has a wazuh-agent attachment, also list under
@@ -241,7 +312,8 @@ def write_inventory(
             if "wazuh" in ref.lower() and "agent" in ref.lower():
                 children["r42_admin_wazuh_clients"]["hosts"][host] = {}
 
-    inv = {"all": {"children": children}}
+    network_map = _build_network_map(topology, team_count, bridge_base)
+    inv = {"all": {"vars": {"r42_network_map": network_map}, "children": children}}
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(yaml.safe_dump(inv, sort_keys=False))
     return dest

@@ -174,6 +174,62 @@ def test_ansible_host_derives_from_per_team_cidr_template(tmp_path):
     assert blank[t2]["ansible_host"] == "10.142.0.200"
 
 
+def test_host_gets_cloudinit_network_vars_from_bound_network(tmp_path):
+    """A host bound to a network exposes r42_ci_netmask/r42_ci_gateway/
+    r42_net_bridge (resolved from that network) for the playbook's cloud-init —
+    single source of truth, no playbook-side recompute."""
+    topology = {
+        "schema_version": "1.0", "kind": "gamenet", "bridge_base": 140,
+        "nodes": [
+            {"id": "net-a", "kind": "network", "replication": {"scope": "shared"},
+             "cidr": "10.20.0.0/24", "gateway": "10.20.0.254", "bridge": "vmbr80"},
+            {"id": "host-01", "kind": "vm", "role": "admin",
+             "replication": {"scope": "shared"}, "template_vmid": 9001,
+             "config": {}, "networks": [{"node_ref": "net-a"}], "attachments": []},
+        ],
+    }
+    inv = _write(topology, tmp_path, team_count=1)
+    admin = inv["all"]["children"]["r42_admin"]["hosts"]
+    host = admin[next(h for h in admin if "host-01" in h)]
+    assert host["ansible_host"] == "10.20.0.200"
+    assert host["r42_ci_netmask"] == 24
+    assert host["r42_ci_gateway"] == "10.20.0.254"
+    assert host["r42_net_bridge"] == "vmbr80"
+
+
+def test_inventory_exposes_network_map(tmp_path):
+    """inventory carries all.vars.r42_network_map: per network id + team, the
+    resolved {bridge, cidr, gateway} the playbook needs to create bridges."""
+    topology = {
+        "schema_version": "1.0", "kind": "gamenet", "bridge_base": 140,
+        "nodes": [
+            {"id": "team-net", "kind": "network", "replication": {"scope": "per_team"},
+             "cidr_template": "10.{{ bridge_base + team_id }}.0.0/16",
+             "bridge_template": "vmbr{{ bridge_base + team_id }}",
+             "gateway_template": "10.{{ bridge_base + team_id }}.0.1"},
+        ],
+    }
+    inv = _write(topology, tmp_path, team_count=2)
+    nmap = inv["all"]["vars"]["r42_network_map"]
+    assert nmap["team-net"]["1"] == {
+        "bridge": "vmbr141", "cidr": "10.141.0.0/16", "gateway": "10.141.0.1"}
+    assert nmap["team-net"]["2"] == {
+        "bridge": "vmbr142", "cidr": "10.142.0.0/16", "gateway": "10.142.0.1"}
+
+
+def test_host_without_network_keeps_legacy_cloudinit_vars(tmp_path):
+    """Backward-compat: a host with no networks[] falls back to the existing
+    192.168.{bridge_base+team} scheme for ci vars."""
+    topology = json.loads((FIXTURES / "02-multi-team.json").read_text())
+    inv = _write(topology, tmp_path, team_count=2)
+    blank = inv["all"]["children"]["r42_blank_group"]["hosts"]
+    h = blank[next(host for host in blank if "1-trainee" in host)]
+    assert h["ansible_host"] == "192.168.141.200"
+    assert h["r42_ci_netmask"] == 24
+    assert h["r42_ci_gateway"] == "192.168.141.1"
+    assert h["r42_net_bridge"] == "vmbr141"
+
+
 def test_rejects_node_without_role(tmp_path):
     """VM/LXC nodes MUST have a role; preflight catches this but inventory_writer
     is also a defense layer."""
