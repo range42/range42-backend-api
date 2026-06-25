@@ -220,3 +220,28 @@ async def test_snapshot_rollback_rejects_bad_name(tmp_path, monkeypatch):
             assert r.status_code == 422
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_create_lxc_snapshot_omits_vmstate(tmp_path, monkeypatch):
+    # vmstate is a qemu-only PVE option; forwarding it to /lxc/.../snapshot makes
+    # PVE reject the call (502). The create route must drop vmstate for vmtype=lxc.
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/vms/200/snapshots?vmtype=lxc",
+                json={"snapname": "s1", "vmstate": True},
+            )
+            assert r.status_code == 200, r.text
+            posts = [(u, d) for (m, u, d) in _FakeProxmox.calls if m == "POST"]
+            assert posts, "expected a POST to Proxmox"
+            url, data = posts[0]
+            assert "/lxc/200/snapshot" in url
+            assert "vmstate" not in data
+            assert data["snapname"] == "s1"
+    finally:
+        await dbmod.dispose_engine()

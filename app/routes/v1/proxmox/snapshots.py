@@ -70,7 +70,9 @@ async def create_snapshot(
     form: dict[str, str | int] = {"snapname": body.snapname}
     if body.description is not None:
         form["description"] = body.description
-    if body.vmstate is not None:
+    # vmstate (save running RAM state) is a qemu-only PVE option; PVE rejects it
+    # on /lxc/.../snapshot, so omit it for LXC (matches community.proxmox).
+    if vmtype == "qemu" and body.vmstate is not None:
         form["vmstate"] = 1 if body.vmstate else 0
     try:
         async with httpx.AsyncClient(verify=False, timeout=15) as cli:
