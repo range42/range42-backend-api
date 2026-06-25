@@ -55,3 +55,13 @@ class TaskStatus(BaseModel):
     status: Literal["running", "stopped"]
     exitstatus: str | None = None
     node: str
+
+
+class StoragePool(BaseModel):
+    storage: str
+    type: str
+    content: str | None = None
+    total: int | None = None
+    used: int | None = None
+    avail: int | None = None
+    active: bool | None = None
