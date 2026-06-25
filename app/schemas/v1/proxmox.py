@@ -76,3 +76,11 @@ class StorageContent(BaseModel):
     size: int | None = None
     format: str | None = None
     vmid: int | None = None
+
+
+class DownloadUrlIn(BaseModel):
+    content: Literal["iso", "vztmpl"]
+    filename: str
+    url: str
+    checksum: str | None = None
+    checksum_algorithm: str | None = None

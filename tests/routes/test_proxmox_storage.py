@@ -146,3 +146,56 @@ async def test_list_storage_content_invalid_type_422(tmp_path, monkeypatch):
             assert r.status_code == 422
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_download_url_returns_upid(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/storage/local/download-url",
+                json={"content": "iso", "filename": "x.iso",
+                      "url": "https://h/x.iso"},
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["status"] == "accepted"
+            assert r.json()["upid"].startswith("UPID")
+            posts = [(u, d) for (m, u, d) in _FakeProxmox.calls if m == "POST"]
+            assert posts, "expected a POST to Proxmox"
+            url, data = posts[0]
+            assert url == ("https://pve01:8006/api2/json/nodes/pve01"
+                           "/storage/local/download-url")
+            assert data["content"] == "iso"
+            assert data["filename"] == "x.iso"
+            assert data["url"] == "https://h/x.iso"
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_download_url_auth_failure_maps_502(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+
+    class _AuthFailProxmox(_FakeProxmox):
+        async def post(self, url, headers=None, data=None):
+            _FakeProxmox.calls.append(("POST", url, data))
+            return _FakeResp(401, "invalid token")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _AuthFailProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/storage/local/download-url",
+                json={"content": "iso", "filename": "x.iso",
+                      "url": "https://h/x.iso"},
+            )
+            assert r.status_code == 502
+            assert r.json()["code"] == "AUTH_FAILED"
+    finally:
+        await dbmod.dispose_engine()

@@ -14,7 +14,7 @@ from app.routes.v1.proxmox._helpers import (
     _auth_headers, _get_host, _raise_for_pve, _session, _unreachable,
 )
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import StorageContent, StoragePool
+from app.schemas.v1.proxmox import DownloadUrlIn, StorageContent, StoragePool, VmActionResult
 
 router = APIRouter()
 
@@ -80,3 +80,34 @@ async def list_storage(host_id: str, session: AsyncSession = Depends(_session)):
         for d in data
     ]
     return Page(items=items, total=len(items))
+
+
+@router.post(
+    "/hosts/{host_id}/storage/{store}/download-url",
+    response_model=VmActionResult,
+)
+async def storage_download_url(
+    host_id: str,
+    store: str,
+    body: DownloadUrlIn,
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    url = (
+        f"{row.api_url.rstrip('/')}/api2/json/nodes/{row.node_name}"
+        f"/storage/{store}/download-url"
+    )
+    form: dict[str, str] = {
+        "content": body.content, "filename": body.filename, "url": body.url,
+    }
+    if body.checksum:
+        form["checksum"] = body.checksum
+    if body.checksum_algorithm:
+        form["checksum-algorithm"] = body.checksum_algorithm
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.post(url, headers=_auth_headers(row), data=form)
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    _raise_for_pve(row, r, "download-url")
+    return VmActionResult(status="accepted", upid=r.json().get("data"))
