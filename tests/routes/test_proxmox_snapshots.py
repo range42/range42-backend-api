@@ -156,3 +156,43 @@ async def test_delete_snapshot_returns_upid(tmp_path, monkeypatch):
             ]
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_rollback_returns_upid(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/vms/200/snapshots/s1/rollback"
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["upid"].startswith("UPID")
+            posts = [u for (m, u, *_) in _FakeProxmox.calls if m == "POST"]
+            assert posts == [
+                "https://pve01:8006/api2/json/nodes/pve01/qemu/200/snapshot/s1/rollback"
+            ]
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_rollback_protected_vmid_refused(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            # 100 (pmg01) is canonically protected — rollback must refuse before any PVE call.
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/vms/100/snapshots/s1/rollback"
+            )
+            assert r.status_code == 409
+            assert r.json()["code"] == "VMID_PROTECTED"
+            assert [m for (m, *_) in _FakeProxmox.calls if m == "POST"] == []
+    finally:
+        await dbmod.dispose_engine()
