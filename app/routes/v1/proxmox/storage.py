@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.routes.v1.proxmox._helpers import (
@@ -32,8 +32,8 @@ def _volid_name(volid: str) -> str:
 )
 async def list_storage_content(
     host_id: str,
-    store: str,
     content: Literal["iso", "vztmpl"] = "iso",
+    store: str = Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
@@ -88,8 +88,8 @@ async def list_storage(host_id: str, session: AsyncSession = Depends(_session)):
 )
 async def storage_download_url(
     host_id: str,
-    store: str,
     body: DownloadUrlIn,
+    store: str = Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
@@ -100,9 +100,9 @@ async def storage_download_url(
     form: dict[str, str] = {
         "content": body.content, "filename": body.filename, "url": body.url,
     }
-    if body.checksum:
+    if body.checksum is not None:
         form["checksum"] = body.checksum
-    if body.checksum_algorithm:
+    if body.checksum_algorithm is not None:
         form["checksum-algorithm"] = body.checksum_algorithm
     try:
         async with httpx.AsyncClient(verify=False, timeout=15) as cli:

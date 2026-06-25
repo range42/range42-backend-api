@@ -199,3 +199,47 @@ async def test_download_url_auth_failure_maps_502(tmp_path, monkeypatch):
             assert r.json()["code"] == "AUTH_FAILED"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_storage_content_rejects_bad_store(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(f"/v1/proxmox/hosts/{hid}/storage/e!vil/content?content=iso")
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_download_url_rejects_non_http_scheme(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/storage/local/download-url",
+                json={"content": "iso", "filename": "x.iso",
+                      "url": "file:///etc/passwd"},
+            )
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_download_url_rejects_path_filename(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/storage/local/download-url",
+                json={"content": "iso", "filename": "../../etc/cron",
+                      "url": "https://h/x.iso"},
+            )
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()

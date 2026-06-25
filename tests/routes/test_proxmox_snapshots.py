@@ -196,3 +196,27 @@ async def test_rollback_protected_vmid_refused(tmp_path, monkeypatch):
             assert [m for (m, *_) in _FakeProxmox.calls if m == "POST"] == []
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_delete_rejects_bad_name(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/200/snapshots/e!vil")
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_rollback_rejects_bad_name(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(f"/v1/proxmox/hosts/{hid}/vms/200/snapshots/e!vil/rollback")
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()

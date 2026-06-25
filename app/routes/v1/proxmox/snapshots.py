@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.routes.v1.proxmox._helpers import (
@@ -68,7 +68,7 @@ async def create_snapshot(
 ):
     row = await _get_host(host_id, session)
     form: dict[str, str | int] = {"snapname": body.snapname}
-    if body.description:
+    if body.description is not None:
         form["description"] = body.description
     if body.vmstate is not None:
         form["vmstate"] = 1 if body.vmstate else 0
@@ -88,8 +88,8 @@ async def create_snapshot(
 async def delete_snapshot(
     host_id: str,
     vmid: int,
-    name: str,
     vmtype: Literal["qemu", "lxc"] = "qemu",
+    name: str = Path(pattern=r"^[A-Za-z0-9_][A-Za-z0-9._-]*$"),
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
@@ -110,8 +110,8 @@ async def delete_snapshot(
 async def rollback_snapshot(
     host_id: str,
     vmid: int,
-    name: str,
     vmtype: Literal["qemu", "lxc"] = "qemu",
+    name: str = Path(pattern=r"^[A-Za-z0-9_][A-Za-z0-9._-]*$"),
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
