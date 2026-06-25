@@ -16,7 +16,7 @@ from app.routes.v1.proxmox._helpers import (
     _unreachable,
 )
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import SnapshotItem, VmActionResult
+from app.schemas.v1.proxmox import SnapshotItem, SnapshotCreateIn, VmActionResult
 
 router = APIRouter()
 
@@ -56,3 +56,27 @@ async def list_snapshots(
         if d.get("name") and d["name"] != "current"
     ]
     return Page(items=items, total=len(items))
+
+
+@router.post("/hosts/{host_id}/vms/{vmid}/snapshots", response_model=VmActionResult)
+async def create_snapshot(
+    host_id: str,
+    vmid: int,
+    body: SnapshotCreateIn,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    form: dict[str, str | int] = {"snapname": body.snapname}
+    if body.description:
+        form["description"] = body.description
+    if body.vmstate is not None:
+        form["vmstate"] = 1 if body.vmstate else 0
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.post(_snap_base(row, vmtype, vmid),
+                               headers=_auth_headers(row), data=form)
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    _raise_for_pve(row, r, "snapshot create")
+    return VmActionResult(status="accepted", upid=r.json().get("data"))

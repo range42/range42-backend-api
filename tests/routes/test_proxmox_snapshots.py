@@ -113,3 +113,27 @@ async def test_list_snapshots_pve_error_maps_502(tmp_path, monkeypatch):
             assert r.json()["code"] == "PROXMOX_ERROR"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_create_snapshot_returns_upid(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.post(
+                f"/v1/proxmox/hosts/{hid}/vms/200/snapshots",
+                json={"snapname": "s1", "description": "d", "vmstate": True},
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["upid"].startswith("UPID")
+            posts = [(u, d) for (m, u, d) in _FakeProxmox.calls if m == "POST"]
+            assert posts, "expected a POST to Proxmox"
+            url, data = posts[0]
+            assert url == "https://pve01:8006/api2/json/nodes/pve01/qemu/200/snapshot"
+            assert data["snapname"] == "s1"
+            assert data["vmstate"] == 1
+    finally:
+        await dbmod.dispose_engine()

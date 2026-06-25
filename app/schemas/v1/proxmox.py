@@ -92,3 +92,9 @@ class SnapshotItem(BaseModel):
     snaptime: int | None = None
     vmstate: bool | None = None
     parent: str | None = None
+
+
+class SnapshotCreateIn(BaseModel):
+    snapname: str
+    description: str | None = None
+    vmstate: bool | None = None
