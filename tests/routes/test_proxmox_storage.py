@@ -109,3 +109,40 @@ async def test_list_storage_unknown_host_404(tmp_path, monkeypatch):
             assert r.json()["code"] == "NOT_FOUND"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_list_storage_content_iso_derives_name(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(
+                f"/v1/proxmox/hosts/{hid}/storage/local/content?content=iso"
+            )
+            assert r.status_code == 200, r.text
+            item = r.json()["items"][0]
+            assert item["name"] == "ubuntu-22.04.iso"
+            assert item["volid"] == "local:iso/ubuntu-22.04.iso"
+            assert item["size"] == 1234
+            # content type forwarded to PVE as a query param
+            assert any(p == {"content": "iso"} for (_, _u, p) in _FakeProxmox.calls
+                       if p is not None)
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_list_storage_content_invalid_type_422(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.get(
+                f"/v1/proxmox/hosts/{hid}/storage/local/content?content=bogus"
+            )
+            assert r.status_code == 422
+    finally:
+        await dbmod.dispose_engine()

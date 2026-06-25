@@ -14,9 +14,50 @@ from app.routes.v1.proxmox._helpers import (
     _auth_headers, _get_host, _raise_for_pve, _session, _unreachable,
 )
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import StoragePool
+from app.schemas.v1.proxmox import StorageContent, StoragePool
 
 router = APIRouter()
+
+
+def _volid_name(volid: str) -> str:
+    """'local:iso/ubuntu.iso' -> 'ubuntu.iso'; 'local:vztmpl/x.tar.zst' -> 'x.tar.zst'."""
+    if "/" in volid:
+        return volid.rsplit("/", 1)[-1]
+    return volid.rsplit(":", 1)[-1]
+
+
+@router.get(
+    "/hosts/{host_id}/storage/{store}/content",
+    response_model=Page[StorageContent],
+)
+async def list_storage_content(
+    host_id: str,
+    store: str,
+    content: Literal["iso", "vztmpl"] = "iso",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    url = (
+        f"{row.api_url.rstrip('/')}/api2/json/nodes/{row.node_name}"
+        f"/storage/{store}/content"
+    )
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.get(url, headers=_auth_headers(row),
+                              params={"content": content})
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    _raise_for_pve(row, r, "storage content")
+    data = r.json().get("data", []) or []
+    items = [
+        StorageContent(
+            volid=d["volid"], name=_volid_name(d["volid"]),
+            content=d.get("content", content), size=d.get("size"),
+            format=d.get("format"), vmid=d.get("vmid"),
+        )
+        for d in data
+    ]
+    return Page(items=items, total=len(items))
 
 
 @router.get("/hosts/{host_id}/storage", response_model=Page[StoragePool])

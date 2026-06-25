@@ -65,3 +65,14 @@ class StoragePool(BaseModel):
     used: int | None = None
     avail: int | None = None
     active: bool | None = None
+
+
+class StorageContent(BaseModel):
+    """A volume in a storage pool. ``name`` is derived from ``volid`` (PVE does
+    not return it) and is load-bearing for the UI's TemplateBrowser."""
+    volid: str
+    name: str
+    content: str
+    size: int | None = None
+    format: str | None = None
+    vmid: int | None = None
