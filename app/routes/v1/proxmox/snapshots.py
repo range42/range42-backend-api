@@ -80,3 +80,24 @@ async def create_snapshot(
         raise _unreachable(row, e) from e
     _raise_for_pve(row, r, "snapshot create")
     return VmActionResult(status="accepted", upid=r.json().get("data"))
+
+
+@router.delete(
+    "/hosts/{host_id}/vms/{vmid}/snapshots/{name}", response_model=VmActionResult
+)
+async def delete_snapshot(
+    host_id: str,
+    vmid: int,
+    name: str,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    url = f"{_snap_base(row, vmtype, vmid)}/{name}"
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+            r = await cli.delete(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    _raise_for_pve(row, r, "snapshot delete")
+    return VmActionResult(status="accepted", upid=r.json().get("data"))

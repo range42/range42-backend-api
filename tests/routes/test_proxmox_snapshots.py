@@ -137,3 +137,22 @@ async def test_create_snapshot_returns_upid(tmp_path, monkeypatch):
             assert data["vmstate"] == 1
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_delete_snapshot_returns_upid(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeProxmox)
+    _FakeProxmox.calls = []
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            hid = await _create_host(c)
+            r = await c.delete(f"/v1/proxmox/hosts/{hid}/vms/200/snapshots/s1")
+            assert r.status_code == 200, r.text
+            assert r.json()["upid"].startswith("UPID")
+            deletes = [u for (m, u, *_) in _FakeProxmox.calls if m == "DELETE"]
+            assert deletes == [
+                "https://pve01:8006/api2/json/nodes/pve01/qemu/200/snapshot/s1"
+            ]
+    finally:
+        await dbmod.dispose_engine()
