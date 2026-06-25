@@ -84,3 +84,11 @@ class DownloadUrlIn(BaseModel):
     url: str
     checksum: str | None = None
     checksum_algorithm: str | None = None
+
+
+class SnapshotItem(BaseModel):
+    name: str
+    description: str | None = None
+    snaptime: int | None = None
+    vmstate: bool | None = None
+    parent: str | None = None
