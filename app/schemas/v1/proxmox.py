@@ -1,10 +1,11 @@
 """Proxmox host CRUD + health DTOs."""
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, field_validator
 
 
 class HostIn(BaseModel):
@@ -55,3 +56,60 @@ class TaskStatus(BaseModel):
     status: Literal["running", "stopped"]
     exitstatus: str | None = None
     node: str
+
+
+class StoragePool(BaseModel):
+    storage: str
+    type: str
+    content: str | None = None
+    total: int | None = None
+    used: int | None = None
+    avail: int | None = None
+    active: bool | None = None
+
+
+class StorageContent(BaseModel):
+    """A volume in a storage pool. ``name`` is derived from ``volid`` (PVE does
+    not return it) and is load-bearing for the UI's TemplateBrowser."""
+    volid: str
+    name: str
+    content: str
+    size: int | None = None
+    format: str | None = None
+    vmid: int | None = None
+
+
+class DownloadUrlIn(BaseModel):
+    content: Literal["iso", "vztmpl"]
+    filename: str
+    url: str
+    checksum: str | None = None
+    checksum_algorithm: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _url_scheme(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("url must be an http(s) URL")
+        return v
+
+    @field_validator("filename")
+    @classmethod
+    def _filename_bare(cls, v: str) -> str:
+        if ".." in v or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", v):
+            raise ValueError("filename must be a bare filename")
+        return v
+
+
+class SnapshotItem(BaseModel):
+    name: str
+    description: str | None = None
+    snaptime: int | None = None
+    vmstate: bool | None = None
+    parent: str | None = None
+
+
+class SnapshotCreateIn(BaseModel):
+    snapname: str
+    description: str | None = None
+    vmstate: bool | None = None

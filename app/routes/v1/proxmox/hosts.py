@@ -11,20 +11,15 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_session_factory
 from app.core.errors import AuthFailedError, Range42Error
 from app.core.logging import get_logger
 from app.core.models import ProxmoxHost
+from app.routes.v1.proxmox._helpers import _session
 from app.schemas.v1.common import Page
 from app.schemas.v1.proxmox import HostHealth, HostIn, HostOut
 
 router = APIRouter()
 log = get_logger(__name__)
-
-
-async def _session() -> AsyncSession:
-    async with get_session_factory()() as session:
-        yield session
 
 
 def _row_to_out(row: ProxmoxHost) -> HostOut:

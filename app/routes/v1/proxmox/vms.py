@@ -6,21 +6,22 @@ VM listing and start/stop/pause/resume.
 """
 from __future__ import annotations
 
-import json
 from typing import Literal
 from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_session_factory
-from app.core.errors import AuthFailedError, Range42Error, VmidProtectedError
+from app.core.errors import AuthFailedError, Range42Error
 from app.core.logging import get_logger
-from app.core.models import ProxmoxHost
-from app.core.vmid_guard import VmidProtectedError as GuardVmidProtected
-from app.core.vmid_guard import assert_vmid_safe
+from app.routes.v1.proxmox._helpers import (
+    _assert_vmid_safe,
+    _auth_headers,
+    _get_host,
+    _session,
+    _unreachable,
+)
 from app.schemas.v1.common import Page
 from app.schemas.v1.proxmox import TaskStatus, VmActionResult, VmSummary
 
@@ -31,48 +32,6 @@ log = get_logger(__name__)
 # the rest can disrupt a running guest.
 _ALLOWED_ACTIONS = {"start", "stop", "shutdown", "suspend", "resume", "reboot"}
 _DESTRUCTIVE_ACTIONS = {"stop", "shutdown", "suspend", "reboot"}
-
-
-async def _session() -> AsyncSession:
-    async with get_session_factory()() as session:
-        yield session
-
-
-async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:
-    row = (
-        await session.execute(
-            select(ProxmoxHost).where(ProxmoxHost.id == host_id)
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        raise Range42Error(
-            error="not_found",
-            code="NOT_FOUND",
-            status=404,
-            message=f"Host {host_id} not found",
-        )
-    return row
-
-
-def _auth_headers(row: ProxmoxHost) -> dict[str, str]:
-    return {"Authorization": f"PVEAPIToken={row.token_ref}"}
-
-
-def _assert_vmid_safe(row: ProxmoxHost, vmid: int, action: str) -> None:
-    """Refuse destructive actions on protected VMIDs (canonical ranges + per-host
-    overrides). `action` only feeds the error message."""
-    overrides = (
-        json.loads(row.protected_vmids_override_json)
-        if row.protected_vmids_override_json
-        else None
-    )
-    try:
-        assert_vmid_safe(vmid, host_overrides=overrides)
-    except GuardVmidProtected as e:
-        raise VmidProtectedError(
-            message=f"VMID {vmid} is protected; '{action}' is refused",
-            details=e.details,
-        ) from e
 
 
 @router.get("/hosts/{host_id}/vms", response_model=Page[VmSummary])
@@ -161,17 +120,6 @@ async def vm_status_action(
             details=[{"field": "vmid", "reason": r.text[:300]}],
         )
     return VmActionResult(status="accepted", upid=r.json().get("data"))
-
-
-def _unreachable(row: ProxmoxHost, err: Exception) -> Range42Error:
-    log.warning("proxmox unreachable", host=row.id, err=str(err))
-    return Range42Error(
-        error="upstream_error",
-        code="PROXMOX_UNREACHABLE",
-        status=502,
-        message=f"Proxmox host {row.name} is unreachable",
-        details=[{"field": "api_url", "reason": str(err)[:200]}],
-    )
 
 
 @router.delete("/hosts/{host_id}/vms/{vmid}", response_model=VmActionResult)
