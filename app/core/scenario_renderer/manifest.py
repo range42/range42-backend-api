@@ -50,6 +50,10 @@ def _validate(vms: list[VmSpec], templates: list[TemplateSpec], scenario: str) -
     Only the intra-scenario half is knowable here; the cross-scenario half stays the
     ledger's job. Raising early keeps a UI-authored scenario from poisoning it.
     """
+    dupe_names = _duplicates([vm.vm_name for vm in vms])
+    if dupe_names:
+        raise ValueError(f"{scenario}: duplicate vm_name between VMs: {sorted(dupe_names)}")
+
     dupe_ids = _duplicates([vm.vm_id for vm in vms])
     if dupe_ids:
         raise ValueError(f"{scenario}: duplicate vm_id between VMs: {sorted(dupe_ids)}")

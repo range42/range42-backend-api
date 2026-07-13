@@ -34,6 +34,9 @@ class BundleRef:
     ports: tuple[int, ...] = ()
 
 
+VM_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
 @dataclass(frozen=True)
 class VmSpec:
     """One VM, resolved from a canvas host node."""
@@ -51,6 +54,18 @@ class VmSpec:
     bundles: tuple[BundleRef, ...] = ()  # stage_01 software bundles on this VM
     netmask: str = "24"
     dns: str = "1.1.1.1"
+
+    def __post_init__(self) -> None:
+        # vm_name becomes an ssh Host token, an inventory host, the manifest key,
+        # and the stage_01 <vm_name>.yml filename. A space splits the ssh pattern
+        # in two; a slash or ".." escapes the scenario dir when the tree is written.
+        if not VM_NAME_RE.match(self.vm_name):
+            raise ValueError(
+                f"invalid vm_name {self.vm_name!r}: must match {VM_NAME_RE.pattern} "
+                "(lowercase, starts alphanumeric, hyphens only). It becomes an ssh "
+                "host token and a filename, so spaces, slashes, dots and uppercase "
+                "are unsafe."
+            )
 
     @property
     def ssh_name(self) -> str:

@@ -119,7 +119,10 @@ class TestRenderMain:
 
     def test_every_tier_contributes_a_stage_00_then_a_stage_01_in_tier_order(self):
         # mirrors demo_lab: 02_admin + 04_ctf, both stages, tier order preserved
-        spec = ScenarioSpec(name="demo_lab", tiers=(_admin_tier(), _ctf_tier()))
+        spec = ScenarioSpec(name="demo_lab", tiers=(
+            _admin_tier(_vm("admin-wazuh")),
+            _ctf_tier(_vm("vuln-box-00", vm_id=1170, ip="192.168.144.170", role="ctf")),
+        ))
 
         assert _imports(render_main(spec)) == [
             "./02_admin_infrastructure/_main_stage_00.yml",
@@ -147,6 +150,7 @@ class TestRenderMain:
                     number="03",
                     group_id="r42_student_box_group",
                     active_group="r42_student_box_active",
+                    vms=(_vm("student-box-01", vm_id=1160, ip="192.168.143.160", role="student"),),
                 ),
             ),
         )
@@ -166,7 +170,7 @@ class TestRenderMain:
 
     def test_scenario_without_templates_does_not_import_the_bootstrap_tier(self):
         # a scenario reusing templates another scenario built has no 01_ directory
-        spec = ScenarioSpec(name="reuse_lab", tiers=(_admin_tier(),))
+        spec = ScenarioSpec(name="reuse_lab", tiers=(_admin_tier(_vm("admin-wazuh")),))
 
         assert _imports(render_main(spec)) == [
             "./02_admin_infrastructure/_main_stage_00.yml",

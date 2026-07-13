@@ -18,7 +18,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app.core.scenario_renderer.registry import _BUNDLES_ROOT, BundleKind
+from app.core.scenario_renderer._common import BUNDLES_ROOT
+from app.core.scenario_renderer.registry import BundleKind
 
 GRAMMAR = "<tier>/<subject>.<verb>[.<object>]"
 
@@ -211,7 +212,7 @@ def parse_bundle_name(name: str) -> BundleName:
 def _playbook_path(name: BundleName) -> str:
     """Where the call-site imports this bundle from -- env-anchored, so a rendered
     scenario finds it from a project repo, not only from range42-playbooks."""
-    return f"{_BUNDLES_ROOT}/{name}/main.yml"
+    return f"{BUNDLES_ROOT}/{name}/main.yml"
 
 
 def _example_vars(kind: BundleKind) -> dict[str, str]:

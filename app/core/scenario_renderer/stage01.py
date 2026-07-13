@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import yaml
 
+from app.core.scenario_renderer._common import gate_expr
 from app.core.scenario_renderer.registry import (
     bundle_kind,
     is_vm_level,
@@ -39,11 +40,6 @@ _FIREWALL_ROLE = "software.configure.firewalls"
 
 #: Always kept open so the deployer can still reach the VM over SSH.
 _SSH_PORT = 22
-
-
-def _gate_expr(flag: str, default: str) -> str:
-    """One ``INSTALL_<FLAG>``-style truthiness test, as Ansible reads it."""
-    return f'INSTALL_{flag} | default("{default}") | upper == "YES"'
 
 
 def _software_block(vm: VmSpec, ref: BundleRef) -> dict:
@@ -64,11 +60,12 @@ def _software_block(vm: VmSpec, ref: BundleRef) -> dict:
     block: dict = {"import_playbook": resolve_bundle_playbook(ref.name)}
     gates = []
     if vm.install_flag:  # the VM's gate rides every bundle so nothing targets a gated-off VM
-        gates.append(_gate_expr(vm.install_flag, vm.install_default))
+        gates.append(gate_expr(vm.install_flag, vm.install_default))
     if ref.install_flag:
-        gates.append(_gate_expr(ref.install_flag, ref.install_default))
+        gates.append(gate_expr(ref.install_flag, ref.install_default))
     if gates:
-        block["when"] = " and ".join(gates)
+        # a VM and its bundle often share a flag -- collapse `X and X` to `X`
+        block["when"] = " and ".join(dict.fromkeys(gates))
     block["vars"] = {
         "global_vm_ssh_name": vm.ssh_name,
         "global_vm_ci_ip": vm.ip,
@@ -91,7 +88,7 @@ def _firewall_play(vm: VmSpec, ports: list[int]) -> dict:
     }
     if vm.install_flag:
         play["gather_facts"] = False
-        play["roles"] = [{"role": _FIREWALL_ROLE, "when": _gate_expr(vm.install_flag, vm.install_default)}]
+        play["roles"] = [{"role": _FIREWALL_ROLE, "when": gate_expr(vm.install_flag, vm.install_default)}]
     else:
         play["roles"] = [_FIREWALL_ROLE]
     play["vars"] = {
@@ -109,7 +106,7 @@ def render_vm_software(vm: VmSpec) -> str:
     write no file and emit no ``import_playbook`` for this VM.
 
     Raises ``ValueError`` if a non-VM-level bundle is attached or a bundle tries
-    to override a VM-owned var, and propagates the registry's ``KeyError`` for an
+    to override a VM-owned var, and propagates the registry's ``ValueError`` for an
     unknown bundle name.
     """
     if not vm.bundles:

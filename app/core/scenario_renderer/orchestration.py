@@ -23,6 +23,12 @@ from __future__ import annotations
 
 import yaml
 
+from app.core.scenario_renderer._common import (
+    ADD_HOST_RUNNER,
+    PLAYBOOKS_ROOT,
+    SCENARIOS_ROOT,
+    gate_expr,
+)
 from app.core.scenario_renderer.registry import resolve_bundle_playbook
 from app.core.scenario_renderer.types import (
     CrossTierGroup,
@@ -35,16 +41,14 @@ _TEMPLATES_BOOTSTRAP = "./01_templates-bootstrap/_main.yml"
 
 # add_host mutates the in-memory inventory rather than the host it runs on, but it
 # still needs a play host: proxmox is the one group every scenario always has.
-_ADD_HOST_RUNNER = "proxmox"
 
 # Bundles and the scenario manifest are env-anchored (not relative): that is what
 # lets a rendered scenario live in a project repo yet still find the playbooks repo.
 # The env-anchoring here is confined to 01_templates-bootstrap/_main.yml, which
 # imports bundles -- the top-level main.yml stays purely relative.
-_ENV_ROOT = "{{ lookup('env', 'RANGE42_GITDIR__ROOT_DIR') }}/range42-playbooks"
-_SCENARIOS_ROOT = f"{_ENV_ROOT}/scenarios"
+
 _CLOUDINIT_DOWNLOAD = (
-    f"{_ENV_ROOT}/bundles/core/proxmox/configure/templates/"
+    f"{PLAYBOOKS_ROOT}/bundles/core/proxmox/configure/templates/"
     "_main_download_cloudinit_files.yml"
 )
 
@@ -59,10 +63,6 @@ def _dump(imports: list[str]) -> str:
 
 def _dump_plays(plays: list[dict]) -> str:
     return yaml.safe_dump(plays, sort_keys=False, default_flow_style=False)
-
-
-def _install_gate(install_flag: str, install_default: str) -> str:
-    return f'INSTALL_{install_flag} | default("{install_default}") | upper == "YES"'
 
 
 def _tier_dir(tier: TierSpec) -> str:
@@ -95,7 +95,7 @@ def render_templates_bootstrap(spec: ScenarioSpec) -> str:
     templates; a scenario reusing another's templates has no bootstrap step.
     """
     plays: list[dict] = [{"import_playbook": _CLOUDINIT_DOWNLOAD}]
-    manifest_path = f"{_SCENARIOS_ROOT}/{spec.name}/manifest/scenario_vms.json"
+    manifest_path = f"{SCENARIOS_ROOT}/{spec.name}/manifest/scenario_vms.json"
     for family in _distinct_template_families(spec):
         bundle_main = resolve_bundle_playbook(f"core/template.build.{family}")
         plays.append(
@@ -124,8 +124,9 @@ def render_main(spec: ScenarioSpec, *, include_templates: bool = True) -> str:
     imports: list[str] = []
     if spec.templates and include_templates:
         imports.append(_TEMPLATES_BOOTSTRAP)
-    imports += [f"{_tier_dir(t)}/_main_stage_00.yml" for t in spec.tiers]
-    imports += [f"{_tier_dir(t)}/_main_stage_01.yml" for t in spec.tiers]
+    tiers = [t for t in spec.tiers if t.vms]  # a VM-less tier emits no stage files
+    imports += [f"{_tier_dir(t)}/_main_stage_00.yml" for t in tiers]
+    imports += [f"{_tier_dir(t)}/_main_stage_01.yml" for t in tiers]
     for group in spec.finalize:
         imports.append(f"./{finalize_group_build_filename(group)}")
         imports.append(f"./{finalize_import_filename(group)}")
@@ -177,7 +178,7 @@ def _add_host_task(vm: VmSpec, group_id: str) -> dict:
     }
     if vm.install_flag:
         task["name"] += f" when INSTALL_{vm.install_flag}=YES"
-        task["when"] = _install_gate(vm.install_flag, vm.install_default)
+        task["when"] = gate_expr(vm.install_flag, vm.install_default)
     task["changed_when"] = False
     return task
 
@@ -217,7 +218,7 @@ def render_finalize_group(group: CrossTierGroup) -> str:
     """
     play = {
         "name": f"build {group.group_id} dynamic group from INSTALL flags",
-        "hosts": _ADD_HOST_RUNNER,
+        "hosts": ADD_HOST_RUNNER,
         "gather_facts": False,
         "tasks": [_add_host_task(member, group.group_id) for member in group.members],
     }
@@ -234,7 +235,7 @@ def render_finalize(group: CrossTierGroup) -> str:
     """
     block: dict = {"import_playbook": resolve_bundle_playbook(group.bundle.name)}
     if group.bundle.install_flag:
-        block["when"] = _install_gate(
+        block["when"] = gate_expr(
             group.bundle.install_flag, group.bundle.install_default
         )
     block["vars"] = {group.group_var: group.group_id, **group.bundle.vars}

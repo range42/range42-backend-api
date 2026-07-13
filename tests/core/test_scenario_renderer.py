@@ -41,7 +41,7 @@ class TestBundleRegistry:
         )
 
     def test_unknown_bundle_is_rejected_rather_than_silently_rendered(self):
-        with pytest.raises(KeyError, match="admin/software.install.nope"):
+        with pytest.raises(ValueError, match="admin/software.install.nope"):
             resolve_bundle_playbook("admin/software.install.nope")
 
     def test_ctf_bundles_are_addressable_by_their_taxonomy_path(self):

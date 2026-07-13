@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-_BUNDLES_ROOT = "{{ lookup('env', 'RANGE42_GITDIR__ROOT_DIR') }}/range42-playbooks/bundles"
+from app.core.scenario_renderer._common import BUNDLES_ROOT
 
 
 class BundleKind(Enum):
@@ -97,10 +97,12 @@ _BUNDLES: dict[str, tuple[str | None, BundleKind]] = {**_CORE, **_ADMIN, **_CTF}
 
 
 def _lookup(name: str) -> tuple[str | None, BundleKind]:
+    # ValueError (not KeyError) so it joins every other author-time failure a
+    # deploy route maps to a 400, rather than surfacing as an unhandled 500.
     try:
         return _BUNDLES[name]
     except KeyError:
-        raise KeyError(f"unknown bundle: {name}") from None
+        raise ValueError(f"unknown bundle: {name}") from None
 
 
 def resolve_bundle_playbook(name: str) -> str:
@@ -110,7 +112,7 @@ def resolve_bundle_playbook(name: str) -> str:
     live in a project repo instead of the playbooks repo and still find its bundles.
     """
     path, _ = _lookup(name)
-    return f"{_BUNDLES_ROOT}/{path or name}/main.yml"
+    return f"{BUNDLES_ROOT}/{path or name}/main.yml"
 
 
 def bundle_kind(name: str) -> BundleKind:

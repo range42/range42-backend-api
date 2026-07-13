@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import yaml
 
+from app.core.scenario_renderer._common import gate_expr
 from app.core.scenario_renderer.registry import resolve_bundle_playbook
 from app.core.scenario_renderer.types import VmSpec
 
@@ -16,7 +17,7 @@ def _bootstrap_block(vm: VmSpec) -> dict:
     block: dict = {"import_playbook": resolve_bundle_playbook("core/vm.bootstrap")}
     if vm.install_flag:
         block["when"] = (
-            f'INSTALL_{vm.install_flag} | default("{vm.install_default}") | upper == "YES"'
+            gate_expr(vm.install_flag, vm.install_default)
         )
     block["vars"] = {
         "global_vm_name": vm.vm_name,

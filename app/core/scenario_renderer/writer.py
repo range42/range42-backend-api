@@ -75,7 +75,10 @@ def render_scenario(spec: ScenarioSpec) -> dict[str, str]:
         files["01_templates-bootstrap/_main.yml"] = render_templates_bootstrap(spec)
 
     for tier in spec.tiers:
-        _add_tier(files, tier)
+        # a tier with no VMs contributes nothing; emitting its stage files would
+        # produce `[]` wrappers that main.yml then imports (fatal at parse).
+        if tier.vms:
+            _add_tier(files, tier)
 
     for group in spec.finalize:
         files[finalize_group_build_filename(group)] = render_finalize_group(group)

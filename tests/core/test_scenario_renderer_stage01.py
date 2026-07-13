@@ -152,7 +152,7 @@ def test_vm_with_no_bundles_renders_nothing_so_the_caller_can_skip_the_file():
 
 
 def test_unknown_bundle_fails_the_render_rather_than_emitting_a_dangling_import():
-    with pytest.raises(KeyError, match="admin/software.install.nope"):
+    with pytest.raises(ValueError, match="admin/software.install.nope"):
         render_vm_software(_admin_box(BundleRef(name="admin/software.install.nope")))
 
 
@@ -183,10 +183,10 @@ def _gated_vm(*bundles: BundleRef, flag: str | None, default: str = "NO") -> VmS
 
 
 def test_vm_gate_and_bundle_gate_are_combined_with_and():
-    # Both gates present: a bundle on a gated-off VM must never fire, so the
-    # guard is the conjunction -- VM gate first, then the bundle's own gate.
+    # Distinct gates: a bundle on a gated-off VM must never fire, so the guard is
+    # the conjunction -- VM gate first, then the bundle's own (different) gate.
     vm = _gated_vm(
-        BundleRef(name="admin/software.install.deployer-ui", install_flag="DEPLOYER_UI", install_default="NO"),
+        BundleRef(name="admin/software.install.gitea", install_flag="GITEA", install_default="NO"),
         flag="DEPLOYER_UI",
         default="NO",
     )
@@ -195,7 +195,7 @@ def test_vm_gate_and_bundle_gate_are_combined_with_and():
 
     assert block["when"] == (
         'INSTALL_DEPLOYER_UI | default("NO") | upper == "YES" '
-        'and INSTALL_DEPLOYER_UI | default("NO") | upper == "YES"'
+        'and INSTALL_GITEA | default("NO") | upper == "YES"'
     )
 
 

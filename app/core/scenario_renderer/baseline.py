@@ -10,16 +10,12 @@ from __future__ import annotations
 
 import yaml
 
+from app.core.scenario_renderer._common import ADD_HOST_RUNNER, gate_expr
 from app.core.scenario_renderer.registry import is_vm_level, resolve_bundle_playbook
 from app.core.scenario_renderer.types import BundleRef, TierSpec, VmSpec
 
 # add_host mutates the in-memory inventory rather than the host it runs on, but it
 # still needs a play host: proxmox is the one group every scenario always has.
-_ADD_HOST_RUNNER = "proxmox"
-
-
-def _install_gate(install_flag: str, install_default: str) -> str:
-    return f'INSTALL_{install_flag} | default("{install_default}") | upper == "YES"'
 
 
 def _add_host_task(vm: VmSpec, active_group: str) -> dict:
@@ -29,7 +25,7 @@ def _add_host_task(vm: VmSpec, active_group: str) -> dict:
     }
     if vm.install_flag:
         task["name"] += f" when INSTALL_{vm.install_flag}=YES"
-        task["when"] = _install_gate(vm.install_flag, vm.install_default)
+        task["when"] = gate_expr(vm.install_flag, vm.install_default)
     task["changed_when"] = False
     return task
 
@@ -38,7 +34,7 @@ def render_active_group(tier: TierSpec) -> str:
     """Render a tier's ``_build_<tier.key>_active_group.yml``."""
     play = {
         "name": f"build {tier.active_group} dynamic group from INSTALL flags",
-        "hosts": _ADD_HOST_RUNNER,
+        "hosts": ADD_HOST_RUNNER,
         "gather_facts": False,
         "tasks": [_add_host_task(vm, tier.active_group) for vm in tier.vms],
     }
@@ -54,7 +50,7 @@ def _baseline_block(bundle: BundleRef, active_group: str) -> dict:
         )
     block: dict = {"import_playbook": resolve_bundle_playbook(bundle.name)}
     if bundle.install_flag:
-        block["when"] = _install_gate(bundle.install_flag, bundle.install_default)
+        block["when"] = gate_expr(bundle.install_flag, bundle.install_default)
     block["vars"] = {"target_group": active_group, **bundle.vars}
     return block
 
