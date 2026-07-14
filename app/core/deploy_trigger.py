@@ -35,6 +35,7 @@ from app.core.redaction import (
 )
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
+from app.core.ssh_agent import unlock_workspace_keys
 from app.core.workspace import shred_envvars
 from app.utils.checks_playbooks import resolve_scenarios_playbook
 
@@ -100,6 +101,16 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     vault_pass = ws / "secrets" / "vault_pass.txt"
     if vault_pass.exists():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault_pass)
+
+    # Unlock the workspace's passphrase-protected SSH keys into a dedicated
+    # ssh-agent (there is none in the container) so ansible-runner can reach the
+    # Proxmox jump + VMs. Returns None when there is no vault/keys, in which case
+    # the deploy falls back to the ambient ~/.ssh. Closed in _run()'s finally.
+    ssh_agent = None
+    if vault_pass.exists():
+        ssh_agent = unlock_workspace_keys(ws, vault_pass)
+        if ssh_agent is not None:
+            envvars.update(ssh_agent.env)
 
     extravars: dict[str, Any] = {
         "r42_deployment_id": dep.id,
@@ -217,6 +228,10 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
                           attempt_id=attempt.id, deployment_id=dep.id)
             logger.info("attempt finished", attempt_id=attempt.id, rc=rc)
         finally:
+            # Kill the ssh-agent started for this attempt (if any) so it does
+            # not outlive the deploy.
+            if ssh_agent is not None:
+                ssh_agent.close()
             # Shred secrets-bearing files in the runner's private_data_dir.
             # Defense-in-depth: prevents the snapshotted PAT / vault pass from
             # sitting on disk after the attempt completes. Runs on both success

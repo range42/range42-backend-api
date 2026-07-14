@@ -134,6 +134,101 @@ async def test_start_attempt_passes_playbook_path_in_extravars(tmp_path, monkeyp
     assert captured["extravars"]["r42_attempt_id"] == "att-x"
 
 
+@pytest.mark.asyncio
+async def test_start_attempt_injects_ssh_auth_sock_when_workspace_has_vault_keys(
+    tmp_path, monkeypatch,
+):
+    """When the workspace ships a vault + passphrase-protected keys, start_attempt
+    unlocks them into an ssh-agent and forwards SSH_AUTH_SOCK to the runner env,
+    so ansible-runner can authenticate to the VMs from inside the container."""
+    import subprocess as sp
+
+    import yaml as _yaml
+
+    monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+
+    pb_root = tmp_path / "playbooks"
+    (pb_root / "scenarios" / "demo_lab").mkdir(parents=True)
+    (pb_root / "scenarios" / "demo_lab" / "main.yml").write_text(
+        "- hosts: all\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(pb_root))
+
+    from importlib import reload
+    from app.core import config as cfg, db as dbmod
+    reload(cfg)
+    reload(dbmod)
+    from app.core.models import (
+        Base, Source, ProxmoxHost, Project, Deployment, Attempt,
+    )
+    engine = dbmod.get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    ws = tmp_path / "WS-demo_lab"
+    (ws / "runner").mkdir(parents=True)
+    (ws / "secrets").mkdir()
+    key_dir = ws / "ssh_keys" / "backend_keys"
+    key_dir.mkdir(parents=True)
+    vp = ws / "secrets" / "vault_pass.txt"
+    vp.write_text("vaultpw")
+    sp.run(["ssh-keygen", "-t", "ed25519", "-N", "kp", "-C", "k", "-f",
+            str(key_dir / "r42.WS-demo_lab-deployer-key_alice")],
+           check=True, capture_output=True, text=True)
+    vfile = ws / "secrets" / "default_vault.yml"
+    vfile.write_text(_yaml.safe_dump({"ssh_passphrase_deployer_admin": "kp"}))
+    sp.run(["ansible-vault", "encrypt", "--vault-password-file", str(vp),
+            str(vfile)], check=True, capture_output=True, text=True)
+
+    async with dbmod.get_session_factory()() as s:
+        s.add(Source(id="s", provider="github", base_url="u", auth_kind="none"))
+        s.add(ProxmoxHost(id="h", name="n", api_url="u", node_name="n", token_ref="t"))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Project(id="p", name="p", source_id="s",
+                      branch_strategy="shared_repo_subdir"))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Deployment(id="dep-k", codename="WS", scenario_label="demo_lab",
+                         project_id="p", target_host_id="h", team_count=1,
+                         state="pending", workspace_path=str(ws)))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Attempt(id="att-k", deployment_id="dep-k", scope="full",
+                      state="pending"))
+        await s.commit()
+
+    captured: dict = {}
+
+    class _CaptureHandle:
+        pid = 4242
+        async def wait(self) -> int:
+            return 0
+        async def kill(self) -> None:
+            pass
+
+    class _CaptureRunner:
+        async def start(self, *, private_data_dir, extravars, envvars):
+            captured["envvars"] = dict(envvars)
+            private_data_dir.mkdir(parents=True, exist_ok=True)
+            return _CaptureHandle()
+
+    from app.core.deploy_trigger import start_attempt
+    from sqlalchemy import select
+
+    async with dbmod.get_session_factory()() as s:
+        att = (await s.execute(
+            select(Attempt).where(Attempt.id == "att-k"))).scalar_one()
+        await start_attempt(s, attempt=att, runner=_CaptureRunner())
+
+    import asyncio
+    await asyncio.sleep(0.1)  # let the background _run() close the agent
+
+    assert "SSH_AUTH_SOCK" in captured["envvars"]
+    assert captured["envvars"]["SSH_AUTH_SOCK"]
+
+
 # ---------------------------------------------------------------------------
 # T8: Universal scenario path — project checkout + inventory generation
 # ---------------------------------------------------------------------------
