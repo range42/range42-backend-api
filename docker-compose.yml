@@ -16,11 +16,22 @@ services:
       # Inventory contains per-deployment host credentials. Uncomment to
       # override the baked-in inventory without rebuilding the image:
       # - ${INVENTORY_PATH:-./inventory}:/app/inventory:ro
+    # A deploy bundle renders a .env in the compose project dir; load it as the
+    # runtime source of truth. required:false keeps plain `docker compose up`
+    # working with no .env. Only vars actually present in .env are set — so
+    # unset RANGE42_* fall back to the app defaults instead of being forced to
+    # an empty string (which the app would treat as a real, broken value).
+    env_file:
+      - path: .env
+        required: false
     environment:
       - PROJECT_ROOT_DIR=/app
-      - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=/app/
+      # Overridable via .env so a deploy bundle can point the backend at a
+      # bind-mounted playbooks tree (e.g. /home/range42/range42-playbooks).
+      # The baked-in /app/ has no scenarios/, so real deploys MUST override this.
+      - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=${API_BACKEND_WWWAPP_PLAYBOOKS_DIR:-/app/}
       - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-/app/}
-      - API_BACKEND_INVENTORY_DIR=/app/inventory/
+      - API_BACKEND_INVENTORY_DIR=${API_BACKEND_INVENTORY_DIR:-/app/inventory/}
       - API_BACKEND_VAULT_FILE=${API_BACKEND_VAULT_FILE:-}
       # Production: use VAULT_PASSWORD_FILE pointing to a mounted secret file.
       # VAULT_PASSWORD is visible via `docker inspect` — dev/testing only.
