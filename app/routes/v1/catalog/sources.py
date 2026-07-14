@@ -22,6 +22,18 @@ async def _session() -> AsyncSession:
         yield session
 
 
+def _to_out(row: Source) -> SourceOut:
+    """Serialise a Source without ever exposing the raw token; has_token only."""
+    return SourceOut(
+        id=row.id,
+        provider=row.provider,
+        base_url=row.base_url,
+        auth_kind=row.auth_kind,
+        has_token=bool(row.token_ref),
+        created_at=row.created_at,
+    )
+
+
 @router.get("/sources", response_model=Page[SourceOut])
 async def list_sources(
     session: AsyncSession = Depends(_session),
@@ -32,7 +44,7 @@ async def list_sources(
     rows = (
         await session.execute(select(Source).offset(offset).limit(limit))
     ).scalars().all()
-    items = [SourceOut.model_validate(r, from_attributes=True) for r in rows]
+    items = [_to_out(r) for r in rows]
     return Page[SourceOut](items=items, total=total, offset=offset, limit=limit)
 
 
@@ -50,7 +62,7 @@ async def create_source(
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return SourceOut.model_validate(row, from_attributes=True)
+    return _to_out(row)
 
 
 @router.delete("/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)

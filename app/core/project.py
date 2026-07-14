@@ -20,6 +20,17 @@ def _redact_authed_url(s: str) -> str:
     return _AUTHED_URL_RE.sub('https://[REDACTED]@', s)
 
 
+def authed_url(url: str, token: str | None) -> str:
+    """Embed a Git PAT into an https clone URL as x-access-token.
+
+    Returns the URL unchanged when there is no token or it is not an https URL.
+    Callers MUST redact any error containing the result via ``_redact_authed_url``.
+    """
+    if token and url.startswith("https://"):
+        return url.replace("https://", f"https://x-access-token:{token}@", 1)
+    return url
+
+
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
     """Run a git command, raising ProjectCheckoutError with redacted stderr on failure."""
     try:
@@ -72,9 +83,7 @@ def checkout_project(
         return dest / "topology.json"
 
     # Build URL with token if present (stripped from logs by existing redaction)
-    url = repo_url
-    if token and url.startswith("https://"):
-        url = url.replace("https://", f"https://x-access-token:{token}@", 1)
+    url = authed_url(repo_url, token)
 
     if dest.exists() and (dest / ".git").exists():
         # Existing repo, fetch the SHA and reset
@@ -86,10 +95,11 @@ def checkout_project(
             import shutil
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        # Initial clone — fetch a single SHA depth-1
+        # Initial clone — fetch a single SHA depth-1. Fetch the URL ad-hoc
+        # rather than `git remote add origin <url>`: a named remote would
+        # persist the authed URL (Git PAT) in .git/config on the workspace disk.
         _run_git("init", "-q", str(dest))
-        _run_git("remote", "add", "origin", url, cwd=dest)
-        _run_git("fetch", "--depth", "1", "origin", sha, cwd=dest)
+        _run_git("fetch", "--depth", "1", url, sha, cwd=dest)
         _run_git("checkout", "FETCH_HEAD", cwd=dest)
 
     topology = dest / "topology.json"

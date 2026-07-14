@@ -26,6 +26,7 @@ import git  # type: ignore
 
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
+from app.core.project import _redact_authed_url, authed_url
 from app.core.models import Source, SourceRepo
 from app.schemas.v1.catalog import CatalogEntryDetail, CatalogEntrySummary
 from app.schemas.v1.common import Page
@@ -41,7 +42,10 @@ async def _session() -> AsyncSession:
 
 
 def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
-    url = f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"
+    url = authed_url(
+        f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git",
+        src.token_ref,
+    )
     dest = workdir / f"{src.id}-{repo.owner}-{repo.repo}"
     if not dest.exists():
         try:
@@ -51,7 +55,8 @@ def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
                 details=[
                     {
                         "field": "source_id",
-                        "reason": f"{repo.owner}/{repo.repo}: {e}",
+                        "reason": _redact_authed_url(
+                            f"{repo.owner}/{repo.repo}: {e}"),
                     }
                 ]
             )
