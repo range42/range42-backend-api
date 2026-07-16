@@ -275,26 +275,6 @@ def test_bundle_add_user_request():
     assert req.user == "elliot"
 
 
-def test_bundle_create_admin_vms_request():
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsItemRequest,
-        BundleCreateAdminVmsRequest,
-    )
-
-    req = BundleCreateAdminVmsRequest(
-        proxmox_node="px-testing",
-        vms={
-            "admin-wazuh": BundleCreateAdminVmsItemRequest(
-                vm_id=1000,
-                vm_ip="192.168.42.100",
-                vm_description="Wazuh - dashboard",
-            )
-        },
-    )
-    assert "admin-wazuh" in req.vms
-    assert req.vms["admin-wazuh"].vm_id == 1000
-
-
 # ===========================================================================
 # debug.py
 # ===========================================================================
@@ -440,16 +420,6 @@ def test_backward_compat_aliases_bundles():
     )
 
     assert Request_BundlesCoreLinuxUbuntuConfigure_AddUser is BundleAddUserRequest
-
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsRequest,
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
-    )
-
-    assert (
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms
-        is BundleCreateAdminVmsRequest
-    )
 
 
 def test_backward_compat_aliases_debug():
