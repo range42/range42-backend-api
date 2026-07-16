@@ -128,24 +128,6 @@
   "/v0/admin/proxmox/vms/vm_id/stop_force": [
     "POST"
   ],
-  "/v0/admin/proxmox/vms/vm_ids/delete": [
-    "DELETE"
-  ],
-  "/v0/admin/proxmox/vms/vm_ids/pause": [
-    "POST"
-  ],
-  "/v0/admin/proxmox/vms/vm_ids/resume": [
-    "POST"
-  ],
-  "/v0/admin/proxmox/vms/vm_ids/start": [
-    "POST"
-  ],
-  "/v0/admin/proxmox/vms/vm_ids/stop": [
-    "POST"
-  ],
-  "/v0/admin/proxmox/vms/vm_ids/stop_force": [
-    "POST"
-  ],
   "/v0/admin/run/bundles/core/linux/ubuntu/configure/add-user": [
     "POST"
   ],

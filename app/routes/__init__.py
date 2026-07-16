@@ -8,7 +8,7 @@ from app.routes.runner import run_bundle, run_scenario
 from app.routes.snapshots import router as snapshots_router
 from app.routes.storage import storage_name_router, storage_router
 from app.routes.vm_config import router as vm_config_router
-from app.routes.vms import vm_id_router, vm_ids_router, vms_router
+from app.routes.vms import vm_id_router, vms_router
 
 router = APIRouter()
 
@@ -47,9 +47,6 @@ router.include_router(vms_router, prefix="/v0/admin/proxmox/vms")
 
 # /v0/admin/proxmox/vms/vm_id
 router.include_router(vm_id_router, prefix="/v0/admin/proxmox/vms/vm_id")
-
-# /v0/admin/proxmox/vms/vm_ids
-router.include_router(vm_ids_router, prefix="/v0/admin/proxmox/vms/vm_ids")
 
 # /v0/admin/proxmox/vms/vm_id/config
 router.include_router(vm_config_router, prefix="/v0/admin/proxmox/vms/vm_id/config")
