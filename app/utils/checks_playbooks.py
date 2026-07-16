@@ -16,6 +16,13 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Playbook name grammar. Segments are slash-separated and may contain the
+# dotted ``<subject>.<verb>.<object>`` form used by the bundle naming grammar
+# (range42-playbooks#133), e.g. ``generic/software.install.docker``. A "." or
+# ".." segment is rejected here (and traversal is caught again downstream by the
+# is_relative_to check in _resolve_file).
+_PLAYBOOK_NAME_REGEX = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
+
 
 def _warmup_checks(playbooks_dir_type: str) -> Path:
     """Validate and resolve the playbooks base directory.
@@ -81,12 +88,13 @@ def resolve_actions_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     # - /vm/clone-template        # start  with  /
     # - vm/clone-template /       # ending with  /
     # - vm//clone-template        # double slash
-    # - linux/ubuntu/install.dot  # dot not allowed
     # - ubuntu/ins tall           # space
+    # - ../../etc/passwd          # "." / ".." segments (traversal)
+    #
+    # Dots WITHIN a segment are allowed (e.g. software.install.docker).
     #
 
-    actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
-    main_filepath = _resolve_file(actions_dir, actions_regex_pattern, action_name)
+    main_filepath = _resolve_file(actions_dir, _PLAYBOOK_NAME_REGEX, action_name)
 
     return main_filepath
 
@@ -97,7 +105,7 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     Looks for ``<playbooks_dir>/bundles/<action_name>/main.yml`` after
     validating the action name format.
 
-    :param action_name: Slash-separated bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param action_name: Slash-separated bundle path (e.g. ``"generic/software.install.docker"``).
     :type action_name: str
     :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
     :type playbooks_dir_type: str
@@ -110,10 +118,7 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     actions_dir = (playbooks_dir / "bundles").resolve()
 
-    # print (actions_dir)
-
-    actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
-    main_filepath = _resolve_file(actions_dir, actions_regex_pattern, action_name)
+    main_filepath = _resolve_file(actions_dir, _PLAYBOOK_NAME_REGEX, action_name)
 
     return main_filepath
 
@@ -140,11 +145,8 @@ def resolve_bundles_playbook_init_file(
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     actions_dir = (playbooks_dir / "bundles").resolve()
 
-    # print (actions_dir)
-
-    actions_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
     main_filepath = _resolve_file(
-        actions_dir, actions_regex_pattern, action_name, is_init_yaml=True
+        actions_dir, _PLAYBOOK_NAME_REGEX, action_name, is_init_yaml=True
     )
 
     return main_filepath
@@ -169,8 +171,7 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     scenarios_dir = (playbooks_dir / "scenarios").resolve()
 
-    scenarios_regex_pattern = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$")
-    main_filepath = _resolve_file(scenarios_dir, scenarios_regex_pattern, action_name)
+    main_filepath = _resolve_file(scenarios_dir, _PLAYBOOK_NAME_REGEX, action_name)
 
     return main_filepath
 
@@ -194,7 +195,7 @@ def _resolve_file(
     :type actions_dir: Path
     :param actions_regex_pattern: Compiled regex pattern for name validation.
     :type actions_regex_pattern: re.Pattern[str]
-    :param action_name: The action name to resolve (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param action_name: The action name to resolve (e.g. ``"generic/software.install.docker"``).
     :type action_name: str
     :param is_init_yaml: If ``True``, resolve ``init.yml`` instead of ``main.yml``.
     :type is_init_yaml: bool
@@ -209,6 +210,13 @@ def _resolve_file(
 
     if not actions_regex_pattern.fullmatch(action_name):
         err = f":: err - INVALID ACTION NAME FORMAT {action_name!r}"
+        logger.error(err)
+        raise HTTPException(status_code=400, detail=err)
+
+    # The regex allows dots inside a segment, so a "." / ".." segment slips
+    # through the format check -- reject it explicitly before resolving.
+    if any(segment in (".", "..") for segment in action_name.split("/")):
+        err = f":: err - INVALID ACTION NAME SEGMENT {action_name!r}"
         logger.error(err)
         raise HTTPException(status_code=400, detail=err)
 
