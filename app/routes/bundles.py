@@ -248,7 +248,7 @@ def bundles_core_linux_ubuntu_install_docker(
     if req.packages_cleaning is not None:
         extravars["SPECIFIC_PACKAGES_CLEANING"] = req.packages_cleaning
     return _run_bundle_simple(
-        req, "core/linux/ubuntu/install/docker", extravars or None
+        req, "generic/software.install.docker", extravars or None
     )
 
 
@@ -283,7 +283,7 @@ def bundles_core_linux_ubuntu_install_docker_compose(
     if req.packages_cleaning is not None:
         extravars["SPECIFIC_PACKAGES_CLEANING"] = req.packages_cleaning
     return _run_bundle_simple(
-        req, "core/linux/ubuntu/install/docker", extravars or None
+        req, "generic/software.install.docker_compose", extravars or None
     )
 
 
@@ -319,7 +319,7 @@ def bundles_core_linux_ubuntu_install_basic_packages(
         if val is not None:
             extravars[key] = val
     return _run_bundle_simple(
-        req, "core/linux/ubuntu/install/basic-packages", extravars or None
+        req, "generic/software.install.basic_packages", extravars or None
     )
 
 
@@ -352,7 +352,7 @@ def bundles_core_linux_ubuntu_install_dotfiles(
     if req.apply_for_root is not None:
         extravars["APPLY_FOR_ROOT"] = req.apply_for_root
     return _run_bundle_simple(
-        req, "core/linux/ubuntu/install/dot-files", extravars or None
+        req, "generic/software.install.dotfiles", extravars or None
     )
 
 
@@ -388,7 +388,7 @@ def bundles_core_linux_ubuntu_configure_add_user(
     if req.change_pwd_at_logon is not None:
         extravars["CHANGE_PWD_AT_LOGON"] = req.change_pwd_at_logon
     return _run_bundle_simple(
-        req, "core/linux/ubuntu/configure/add-user", extravars or None
+        req, "generic/credentials.create.user", extravars or None
     )
 
 

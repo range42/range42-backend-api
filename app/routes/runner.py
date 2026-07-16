@@ -55,7 +55,7 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
 def run_bundle(bundles_name: str, req: Request_DebugPing):
     """Run a named bundle playbook from the external playbooks repository.
 
-    :param bundles_name: Bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param bundles_name: Bundle path (e.g. ``"generic/software.install.docker"``).
     :param req: Request body with ``hosts`` and optional ``proxmox_node``.
     :returns: JSON with ``rc`` and ``log_multiline``.
     """
