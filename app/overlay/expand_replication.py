@@ -31,6 +31,12 @@ _JINJA_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
 # Legacy single-brace numeric form: `{140+team_id}` (still accepted).
 _TEMPLATE_RE = re.compile(r"\{(\d*)\s*([+\-*])?\s*team_id\s*\}")
 _TOKEN_RE = re.compile(r"\d+|team_id|bridge_base|[+\-*]")
+# Only expressions built solely from the supported grammar are rendered;
+# anything else (`{{ inventory_hostname }}`, `{{ custom_id + 1 }}`) is a
+# plain Ansible template and must survive expansion untouched.
+_TERM = r"(?:\d+|team_id|bridge_base)"
+_SUPPORTED_EXPR_RE = re.compile(
+    rf"^\s*{_TERM}(?:\s*[+\-*]\s*{_TERM})*\s*$")
 
 DEFAULT_BRIDGE_BASE = 140
 
@@ -75,7 +81,10 @@ def _eval_expr(expr: str, team_id: int, bridge_base: int) -> str:
 def _render_template(tpl: str, team_id: int,
                      bridge_base: int = DEFAULT_BRIDGE_BASE) -> str:
     def jinja(m: re.Match[str]) -> str:
-        return _eval_expr(m.group(1), team_id, bridge_base)
+        inner = m.group(1)
+        if not _SUPPORTED_EXPR_RE.match(inner):
+            return m.group(0)
+        return _eval_expr(inner, team_id, bridge_base)
 
     def legacy(m: re.Match[str]) -> str:
         base = int(m.group(1) or 0)
