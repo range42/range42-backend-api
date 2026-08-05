@@ -63,8 +63,13 @@ class TestResolvePlaybooks:
 
     def test_accepts_dotted_segment_format(self):
         """Dotted <subject>.<verb>.<object> names pass format validation
-        (range42-playbooks#133) and fail only on the missing file."""
-        with pytest.raises((HTTPException, FileNotFoundError)):
+        (range42-playbooks#133) and fail only on the missing file.
+
+        Asserting FileNotFoundError specifically is what makes this test
+        meaningful: the old regex rejected dots with HTTPException(400), so
+        a `raises((HTTPException, FileNotFoundError))` would pass either way.
+        """
+        with pytest.raises(FileNotFoundError):
             resolve_bundles_playbook(
                 "generic/systems.baseline.docker_host", "www_app")
 

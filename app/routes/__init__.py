@@ -20,7 +20,7 @@ router.include_router(debug_router, prefix="/v0/admin/debug")
 # them with composed BASELINE_* profiles. Use the generic runner below.
 _bundles_runner = APIRouter()
 _bundles_runner.add_api_route(
-    "/{bundles_name}/run",
+    "/{bundles_name:path}/run",
     run_bundle,
     methods=["POST"],
     summary="Run bundles",
@@ -32,7 +32,7 @@ router.include_router(_bundles_runner, prefix="/v0/admin/run/bundles")
 # /v0/admin/run/scenarios/{name}/run
 _scenarios_runner = APIRouter()
 _scenarios_runner.add_api_route(
-    "/{scenario_name}/run",
+    "/{scenario_name:path}/run",
     run_scenario,
     methods=["POST"],
     summary="Run scenario",
