@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from app.routes.bundles import router as bundles_router
 from app.routes.debug import router as debug_router
 from app.routes.firewall import router as firewall_router
 from app.routes.network import router as network_router
@@ -15,10 +14,10 @@ router = APIRouter()
 # /v0/admin/debug/*
 router.include_router(debug_router, prefix="/v0/admin/debug")
 
-# /v0/admin/run/bundles/core/*  (bundle-specific routes: ubuntu install, proxmox create, etc.)
-router.include_router(bundles_router, prefix="/v0/admin/run/bundles")
-
 # /v0/admin/run/bundles/{name}/run
+# The former hardcoded /core/* bundle routes are gone: their bundles are
+# retired to decom/ in range42-playbooks#137 and the generic/ tier replaced
+# them with composed BASELINE_* profiles. Use the generic runner below.
 _bundles_runner = APIRouter()
 _bundles_runner.add_api_route(
     "/{bundles_name}/run",

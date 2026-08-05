@@ -278,7 +278,6 @@ range42-backend-api/
 |   |   |-- firewall.py          # Firewall (aliases, rules, enable/disable)
 |   |   |-- network.py           # Network interfaces (VM and node level)
 |   |   |-- storage.py           # Storage (list, download ISO, templates)
-|   |   |-- bundles.py           # Predefined bundles (Ubuntu setup, Proxmox VMs)
 |   |   |-- runner.py            # Generic bundle/scenario runner
 |   |   |-- debug.py             # Debug endpoints (ping, test functions)
 |   |   |-- ws_status.py         # WebSocket real-time VM status
@@ -290,7 +289,6 @@ range42-backend-api/
 |   |   |-- firewall.py          # Firewall schemas
 |   |   |-- network.py           # Network schemas
 |   |   |-- storage.py           # Storage schemas
-|   |   |-- bundles/             # Bundle-specific schemas
 |   |   |-- debug/               # Debug endpoint schemas
 |   |-- utils/
 |   |   |-- checks_playbooks.py  # Playbook path validation and resolution
@@ -342,13 +340,12 @@ HTTP Request
 | --------------------------------------- | ------------------------- | --------------------- |
 | `/v0/admin/proxmox/vms/`                | `vms.py`                  | VM list and lifecycle |
 | `/v0/admin/proxmox/vms/vm_id/`          | `vms.py`                  | Single VM operations  |
-| `/v0/admin/proxmox/vms/vm_ids/`         | `vms.py`                  | Mass VM operations    |
 | `/v0/admin/proxmox/vms/vm_id/config/`   | `vm_config.py`            | VM configuration      |
 | `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py`            | VM snapshots          |
 | `/v0/admin/proxmox/firewall/`           | `firewall.py`             | Firewall management   |
 | `/v0/admin/proxmox/network/`            | `network.py`              | Network interfaces    |
 | `/v0/admin/proxmox/storage/`            | `storage.py`              | Storage and ISOs      |
-| `/v0/admin/run/bundles/`                | `bundles.py`, `runner.py` | Bundle execution      |
+| `/v0/admin/run/bundles/`                | `runner.py`               | Bundle execution      |
 | `/v0/admin/run/scenarios/`              | `runner.py`               | Scenario execution    |
 | `/v0/admin/debug/`                      | `debug.py`                | Debug/test endpoints  |
 | `/ws/vm-status`                         | `ws_status.py`            | WebSocket VM status   |

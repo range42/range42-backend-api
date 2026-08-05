@@ -128,21 +128,6 @@
   "/v0/admin/proxmox/vms/vm_id/stop_force": [
     "POST"
   ],
-  "/v0/admin/run/bundles/core/linux/ubuntu/configure/add-user": [
-    "POST"
-  ],
-  "/v0/admin/run/bundles/core/linux/ubuntu/install/basic-packages": [
-    "POST"
-  ],
-  "/v0/admin/run/bundles/core/linux/ubuntu/install/docker": [
-    "POST"
-  ],
-  "/v0/admin/run/bundles/core/linux/ubuntu/install/docker-compose": [
-    "POST"
-  ],
-  "/v0/admin/run/bundles/core/linux/ubuntu/install/dot-files": [
-    "POST"
-  ],
   "/v0/admin/run/bundles/{bundles_name}/run": [
     "POST"
   ],
