@@ -47,7 +47,7 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
 
 
 @router.post(
-    path="/{bundles_name}/run",
+    path="/{bundles_name:path}/run",
     summary="Run bundles",
     description="Run generic bundles with default (and static) extras_vars ",
     tags=["runner"],
@@ -55,7 +55,7 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
 def run_bundle(bundles_name: str, req: Request_DebugPing):
     """Run a named bundle playbook from the external playbooks repository.
 
-    :param bundles_name: Bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param bundles_name: Bundle path (e.g. ``"generic/systems.baseline.docker_host"``).
     :param req: Request body with ``hosts`` and optional ``proxmox_node``.
     :returns: JSON with ``rc`` and ``log_multiline``.
     """
@@ -63,7 +63,7 @@ def run_bundle(bundles_name: str, req: Request_DebugPing):
 
 
 @router.post(
-    path="/{scenario_name}/run",
+    path="/{scenario_name:path}/run",
     summary="Run scenario",
     description="Run generic scenario with default (and static) extras_vars ",
     tags=["runner"],

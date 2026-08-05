@@ -61,9 +61,21 @@ class TestResolvePlaybooks:
             resolve_actions_playbook("my action", "www_app")
         assert exc_info.value.status_code == 400
 
-    def test_rejects_name_with_dots(self):
+    def test_accepts_dotted_segment_format(self):
+        """Dotted <subject>.<verb>.<object> names pass format validation
+        (range42-playbooks#133) and fail only on the missing file.
+
+        Asserting FileNotFoundError specifically is what makes this test
+        meaningful: the old regex rejected dots with HTTPException(400), so
+        a `raises((HTTPException, FileNotFoundError))` would pass either way.
+        """
+        with pytest.raises(FileNotFoundError):
+            resolve_bundles_playbook(
+                "generic/systems.baseline.docker_host", "www_app")
+
+    def test_rejects_dot_segment(self):
         with pytest.raises(HTTPException) as exc_info:
-            resolve_actions_playbook("install.docker", "www_app")
+            resolve_actions_playbook("foo/../bar", "www_app")
         assert exc_info.value.status_code == 400
 
     def test_rejects_leading_slash(self):

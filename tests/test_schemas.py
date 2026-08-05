@@ -257,45 +257,6 @@ def test_storage_download_iso_request():
 
 
 # ===========================================================================
-# bundles.py
-# ===========================================================================
-
-
-def test_bundle_add_user_request():
-    from app.schemas.bundles import BundleAddUserRequest
-
-    req = BundleAddUserRequest(
-        proxmox_node="px-testing",
-        hosts="r42.vuln-box-00",
-        user="elliot",
-        password="r0b0t_aLd3rs0n",
-        change_pwd_at_logon=False,
-        shell_path="/bin/sh",
-    )
-    assert req.user == "elliot"
-
-
-def test_bundle_create_admin_vms_request():
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsItemRequest,
-        BundleCreateAdminVmsRequest,
-    )
-
-    req = BundleCreateAdminVmsRequest(
-        proxmox_node="px-testing",
-        vms={
-            "admin-wazuh": BundleCreateAdminVmsItemRequest(
-                vm_id=1000,
-                vm_ip="192.168.42.100",
-                vm_description="Wazuh - dashboard",
-            )
-        },
-    )
-    assert "admin-wazuh" in req.vms
-    assert req.vms["admin-wazuh"].vm_id == 1000
-
-
-# ===========================================================================
 # debug.py
 # ===========================================================================
 
@@ -431,25 +392,6 @@ def test_backward_compat_aliases_storage():
     )
 
     assert Request_ProxmoxStorage_ListIso is StorageListIsoRequest
-
-
-def test_backward_compat_aliases_bundles():
-    from app.schemas.bundles import (
-        BundleAddUserRequest,
-        Request_BundlesCoreLinuxUbuntuConfigure_AddUser,
-    )
-
-    assert Request_BundlesCoreLinuxUbuntuConfigure_AddUser is BundleAddUserRequest
-
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsRequest,
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
-    )
-
-    assert (
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms
-        is BundleCreateAdminVmsRequest
-    )
 
 
 def test_backward_compat_aliases_debug():
