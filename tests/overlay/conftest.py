@@ -1,5 +1,6 @@
 """Vector loader for the shared TS/Python parity harness."""
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,14 @@ VECTORS_ROOT = REPO_ROOT / "range42-deployer-ui" / "schema" / "test-vectors"
 def _load_vectors(subdir: str) -> list[dict]:
     root = VECTORS_ROOT / subdir
     if not root.exists():
-        pytest.skip(f"vectors dir missing: {root}")
+        # In CI the sibling checkout is guaranteed, so a missing vectors dir
+        # means the parity harness silently verified nothing — the exact
+        # failure mode the workflow's checkout fallback exists to prevent.
+        # Locally (partial clone, no sibling repo) skipping is still right.
+        msg = f"vectors dir missing: {root}"
+        if os.getenv("CI"):
+            pytest.fail(msg)
+        pytest.skip(msg)
     out = []
     for p in sorted(root.glob("*.json")):
         with p.open() as f:

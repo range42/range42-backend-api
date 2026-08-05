@@ -26,17 +26,23 @@ class ExpandResult(TypedDict):
     document: dict[str, Any]
 
 
+# Character classes are spelled out rather than using \d and \s: Python
+# matches all Unicode digits and extra separators where JS matches [0-9]
+# and its own whitespace set, which would silently break TS/Python parity.
+_WS = r"[ \t\n\r\f\v]"
+_DIGIT = r"[0-9]"
 # Canonical schema form: Jinja-ish `{{ bridge_base + team_id }}`.
-_JINJA_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+_JINJA_RE = re.compile(rf"\{{\{{{_WS}*([^{{}}]+?){_WS}*\}}\}}")
 # Legacy single-brace numeric form: `{140+team_id}` (still accepted).
-_TEMPLATE_RE = re.compile(r"\{(\d*)\s*([+\-*])?\s*team_id\s*\}")
-_TOKEN_RE = re.compile(r"\d+|team_id|bridge_base|[+\-*]")
+_TEMPLATE_RE = re.compile(
+    rf"\{{({_DIGIT}*){_WS}*([+\-*])?{_WS}*team_id{_WS}*\}}")
+_TOKEN_RE = re.compile(rf"{_DIGIT}+|team_id|bridge_base|[+\-*]")
 # Only expressions built solely from the supported grammar are rendered;
 # anything else (`{{ inventory_hostname }}`, `{{ custom_id + 1 }}`) is a
 # plain Ansible template and must survive expansion untouched.
-_TERM = r"(?:\d+|team_id|bridge_base)"
+_TERM = rf"(?:{_DIGIT}+|team_id|bridge_base)"
 _SUPPORTED_EXPR_RE = re.compile(
-    rf"^\s*{_TERM}(?:\s*[+\-*]\s*{_TERM})*\s*$")
+    rf"^{_WS}*{_TERM}(?:{_WS}*[+\-*]{_WS}*{_TERM})*{_WS}*$")
 
 DEFAULT_BRIDGE_BASE = 140
 
@@ -49,8 +55,15 @@ _NODE_TEMPLATES = (
 )
 
 
-def _eval_expr(expr: str, team_id: int, bridge_base: int) -> str:
-    """Left-to-right integer expression over team_id/bridge_base with + - *.
+def _num_to_str(value: float) -> str:
+    """Stringify like JS ``String(n)``: integral floats lose the ``.0``."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _eval_expr(expr: str, team_id: int, bridge_base: float) -> str:
+    """Left-to-right numeric expression over team_id/bridge_base with + - *.
 
     No operator precedence — kept simple for TS parity.
     """
@@ -58,7 +71,7 @@ def _eval_expr(expr: str, team_id: int, bridge_base: int) -> str:
     if not tokens:
         return expr
 
-    def val(tok: str) -> int:
+    def val(tok: str) -> float:
         if tok == "team_id":
             return team_id
         if tok == "bridge_base":
@@ -75,11 +88,11 @@ def _eval_expr(expr: str, team_id: int, bridge_base: int) -> str:
             acc -= operand
         elif op == "*":
             acc *= operand
-    return str(acc)
+    return _num_to_str(acc)
 
 
 def _render_template(tpl: str, team_id: int,
-                     bridge_base: int = DEFAULT_BRIDGE_BASE) -> str:
+                     bridge_base: float = DEFAULT_BRIDGE_BASE) -> str:
     def jinja(m: re.Match[str]) -> str:
         inner = m.group(1)
         if not _SUPPORTED_EXPR_RE.match(inner):
@@ -177,8 +190,11 @@ def expand_replication(doc: dict, team_count: int) -> ExpandResult:
         raise ValueError(f"invalid team_count: {team_count}")
     out = deepcopy(doc)
     namespace_sink: list[str] = []
+    # Mirrors TS `typeof x === "number"`: any non-bool number wins, so a
+    # schema-valid float (200.0 IS an integer in JSON Schema) renders the
+    # same on both sides instead of silently falling back to the default.
     raw_base = doc.get("bridge_base")
-    bridge_base = raw_base if isinstance(raw_base, int) and not isinstance(
+    bridge_base = raw_base if isinstance(raw_base, (int, float)) and not isinstance(
         raw_base, bool) else DEFAULT_BRIDGE_BASE
     out["nodes"] = _walk_and_expand(
         doc.get("nodes", []), team_count, namespace_sink, bridge_base)
