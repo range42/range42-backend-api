@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 # Playbook name grammar. Segments are slash-separated and may contain the
 # dotted ``<subject>.<verb>.<object>`` form used by the bundle naming grammar
-# (range42-playbooks#133), e.g. ``generic/software.install.docker``. A "." or
+# (range42-playbooks#133), e.g. ``generic/systems.baseline.docker_host``. A "." or
 # ".." segment is rejected here (and traversal is caught again downstream by the
 # is_relative_to check in _resolve_file).
 _PLAYBOOK_NAME_REGEX = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
@@ -105,7 +105,7 @@ def resolve_bundles_playbook(action_name: str, playbooks_dir_type: str) -> Path:
     Looks for ``<playbooks_dir>/bundles/<action_name>/main.yml`` after
     validating the action name format.
 
-    :param action_name: Slash-separated bundle path (e.g. ``"generic/software.install.docker"``).
+    :param action_name: Slash-separated bundle path (e.g. ``"generic/systems.baseline.docker_host"``).
     :type action_name: str
     :param playbooks_dir_type: Either ``"www_app"`` or ``"public_github"``.
     :type playbooks_dir_type: str
@@ -195,7 +195,7 @@ def _resolve_file(
     :type actions_dir: Path
     :param actions_regex_pattern: Compiled regex pattern for name validation.
     :type actions_regex_pattern: re.Pattern[str]
-    :param action_name: The action name to resolve (e.g. ``"generic/software.install.docker"``).
+    :param action_name: The action name to resolve (e.g. ``"generic/systems.baseline.docker_host"``).
     :type action_name: str
     :param is_init_yaml: If ``True``, resolve ``init.yml`` instead of ``main.yml``.
     :type is_init_yaml: bool

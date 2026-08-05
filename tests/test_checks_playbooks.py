@@ -65,7 +65,8 @@ class TestResolvePlaybooks:
         """Dotted <subject>.<verb>.<object> names pass format validation
         (range42-playbooks#133) and fail only on the missing file."""
         with pytest.raises((HTTPException, FileNotFoundError)):
-            resolve_bundles_playbook("generic/software.install.docker", "www_app")
+            resolve_bundles_playbook(
+                "generic/systems.baseline.docker_host", "www_app")
 
     def test_rejects_dot_segment(self):
         with pytest.raises(HTTPException) as exc_info:
