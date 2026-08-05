@@ -15,7 +15,12 @@ jobs:
         with:
           path: range42-backend-api
 
+      # Prefer a same-named branch in deployer-ui (paired cross-repo work),
+      # otherwise fall back to dev. The fallback must NOT be skippable: a
+      # missing checkout used to silently disable every schema step below,
+      # so push-event runs on feature/** passed without checking anything.
       - name: Checkout deployer-ui (schema + vectors)
+        id: checkout_ui
         uses: actions/checkout@v4
         with:
           repository: range42/range42-deployer-ui
@@ -23,13 +28,20 @@ jobs:
           ref: ${{ github.base_ref || github.ref_name }}
         continue-on-error: true
 
+      - name: Checkout deployer-ui (dev fallback)
+        if: steps.checkout_ui.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: range42/range42-deployer-ui
+          path: range42-deployer-ui
+          ref: dev
+
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Bundle schema
-        if: hashFiles('range42-deployer-ui/package.json') != ''
         working-directory: range42-deployer-ui
         run: |
           npm ci
@@ -50,7 +62,6 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Regenerate Pydantic + drift check
-        if: hashFiles('range42-deployer-ui/schema/bundled.json') != ''
         working-directory: range42-backend-api
         run: |
           . .venv/bin/activate

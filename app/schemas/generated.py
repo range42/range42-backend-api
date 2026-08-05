@@ -165,6 +165,26 @@ class Node(BaseModel):
             description="Bridge name template, e.g., vmbr{{ bridge_base + team_id }} (network kind only)"
         ),
     ] = None
+    gateway_template: Annotated[
+        str | None,
+        Field(
+            description="Gateway IP template, e.g., 192.168.{{ bridge_base + team_id }}.1 (network kind only)"
+        ),
+    ] = None
+    cidr: Annotated[
+        str | None,
+        Field(
+            description="Rendered CIDR (by expand_replication) or static custom CIDR (network kind only)"
+        ),
+    ] = None
+    bridge: Annotated[
+        str | None,
+        Field(description="Rendered bridge name or static bridge (network kind only)"),
+    ] = None
+    gateway: Annotated[
+        str | None,
+        Field(description="Rendered gateway IP or static gateway (network kind only)"),
+    ] = None
     vlan_tag: Annotated[
         int | None,
         Field(

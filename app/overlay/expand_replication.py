@@ -26,11 +26,80 @@ class ExpandResult(TypedDict):
     document: dict[str, Any]
 
 
-_TEMPLATE_RE = re.compile(r"\{(\d*)\s*([+\-*])?\s*team_id\s*\}")
+# Character classes are spelled out rather than using \d and \s: Python
+# matches all Unicode digits and extra separators where JS matches [0-9]
+# and its own whitespace set, which would silently break TS/Python parity.
+_WS = r"[ \t\n\r\f\v]"
+_DIGIT = r"[0-9]"
+# Canonical schema form: Jinja-ish `{{ bridge_base + team_id }}`.
+_JINJA_RE = re.compile(rf"\{{\{{{_WS}*([^{{}}]+?){_WS}*\}}\}}")
+# Legacy single-brace numeric form: `{140+team_id}` (still accepted).
+_TEMPLATE_RE = re.compile(
+    rf"\{{({_DIGIT}*){_WS}*([+\-*])?{_WS}*team_id{_WS}*\}}")
+_TOKEN_RE = re.compile(rf"{_DIGIT}+|team_id|bridge_base|[+\-*]")
+# Only expressions built solely from the supported grammar are rendered;
+# anything else (`{{ inventory_hostname }}`, `{{ custom_id + 1 }}`) is a
+# plain Ansible template and must survive expansion untouched.
+_TERM = rf"(?:{_DIGIT}+|team_id|bridge_base)"
+_SUPPORTED_EXPR_RE = re.compile(
+    rf"^{_WS}*{_TERM}(?:{_WS}*[+\-*]{_WS}*{_TERM})*{_WS}*$")
+
+DEFAULT_BRIDGE_BASE = 140
+
+# Network templates live at node level per the canonical schema
+# (network kind only).
+_NODE_TEMPLATES = (
+    ("cidr_template", "cidr"),
+    ("bridge_template", "bridge"),
+    ("gateway_template", "gateway"),
+)
 
 
-def _render_template(tpl: str, team_id: int) -> str:
-    def sub(m: re.Match[str]) -> str:
+def _num_to_str(value: float) -> str:
+    """Stringify like JS ``String(n)``: integral floats lose the ``.0``."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _eval_expr(expr: str, team_id: int, bridge_base: float) -> str:
+    """Left-to-right numeric expression over team_id/bridge_base with + - *.
+
+    No operator precedence — kept simple for TS parity.
+    """
+    tokens = _TOKEN_RE.findall(expr)
+    if not tokens:
+        return expr
+
+    def val(tok: str) -> float:
+        if tok == "team_id":
+            return team_id
+        if tok == "bridge_base":
+            return bridge_base
+        return int(tok)
+
+    acc = val(tokens[0])
+    for i in range(1, len(tokens) - 1, 2):
+        op = tokens[i]
+        operand = val(tokens[i + 1])
+        if op == "+":
+            acc += operand
+        elif op == "-":
+            acc -= operand
+        elif op == "*":
+            acc *= operand
+    return _num_to_str(acc)
+
+
+def _render_template(tpl: str, team_id: int,
+                     bridge_base: float = DEFAULT_BRIDGE_BASE) -> str:
+    def jinja(m: re.Match[str]) -> str:
+        inner = m.group(1)
+        if not _SUPPORTED_EXPR_RE.match(inner):
+            return m.group(0)
+        return _eval_expr(inner, team_id, bridge_base)
+
+    def legacy(m: re.Match[str]) -> str:
         base = int(m.group(1) or 0)
         op = m.group(2) or "+"
         if op == "+":
@@ -38,30 +107,34 @@ def _render_template(tpl: str, team_id: int) -> str:
         if op == "-":
             return str(base - team_id)
         return str(base * team_id)
-    return _TEMPLATE_RE.sub(sub, tpl)
+
+    return _TEMPLATE_RE.sub(legacy, _JINJA_RE.sub(jinja, tpl))
 
 
 def _apply_offsets(node: dict, team_id: int,
                    id_offset: dict | None,
-                   namespace_sink: list[str]) -> dict:
+                   namespace_sink: list[str],
+                   bridge_base: int) -> dict:
     out = deepcopy(node)
     out["id"] = f"{node['id']}__team_{team_id}"
     cfg = out.get("config") or {}
     if "name_template" in cfg:
-        cfg["name"] = _render_template(cfg.pop("name_template"), team_id)
-    if "bridge_template" in cfg:
-        cfg["bridge"] = _render_template(cfg.pop("bridge_template"), team_id)
+        cfg["name"] = _render_template(
+            cfg.pop("name_template"), team_id, bridge_base)
     if "vlan_template" in cfg:
-        cfg["vlan"] = int(_render_template(cfg.pop("vlan_template"), team_id))
-    if "cidr_template" in cfg:
-        cfg["cidr"] = _render_template(cfg.pop("cidr_template"), team_id)
+        cfg["vlan"] = int(_render_template(
+            cfg.pop("vlan_template"), team_id, bridge_base))
     if id_offset and "vmid" in id_offset and "vm_id" in cfg:
         cfg["vm_id"] = int(cfg["vm_id"]) + id_offset["vmid"] * team_id
     out["config"] = cfg
+    for tkey, okey in _NODE_TEMPLATES:
+        if isinstance(out.get(tkey), str):
+            out[okey] = _render_template(out.pop(tkey), team_id, bridge_base)
     if isinstance(out.get("networks"), list):
         for nw in out["networks"]:
             if "ip_template" in nw:
-                nw["ip"] = _render_template(nw.pop("ip_template"), team_id)
+                nw["ip"] = _render_template(
+                    nw.pop("ip_template"), team_id, bridge_base)
     # Rewrite play-level notify targets inside attachments.
     for att in out.get("attachments") or []:
         if isinstance(att.get("notify"), list):
@@ -77,7 +150,8 @@ def _apply_offsets(node: dict, team_id: int,
 
 
 def _walk_and_expand(nodes: list[dict], team_count: int,
-                     namespace_sink: list[str]) -> list[dict]:
+                     namespace_sink: list[str],
+                     bridge_base: int) -> list[dict]:
     result: list[dict] = []
     for n in nodes:
         rep = n.get("replication") or {}
@@ -86,7 +160,7 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
             if n.get("kind") == "group" and isinstance(n.get("children"), list):
                 nn = deepcopy(n)
                 nn["children"] = _walk_and_expand(
-                    n["children"], team_count, namespace_sink)
+                    n["children"], team_count, namespace_sink, bridge_base)
                 result.append(nn)
             else:
                 result.append(deepcopy(n))
@@ -96,7 +170,8 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
         for tid in range(1, team_count + 1):
             if n.get("kind") == "group" and isinstance(n.get("children"), list):
                 expanded_children = [
-                    _apply_offsets(c, tid, id_offset, namespace_sink)
+                    _apply_offsets(c, tid, id_offset, namespace_sink,
+                                   bridge_base)
                     for c in n["children"]
                 ]
                 grp = deepcopy(n)
@@ -105,7 +180,8 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
                 grp["replication"] = {"scope": "shared"}
                 result.append(grp)
             else:
-                result.append(_apply_offsets(n, tid, id_offset, namespace_sink))
+                result.append(_apply_offsets(n, tid, id_offset,
+                                             namespace_sink, bridge_base))
     return result
 
 
@@ -114,8 +190,14 @@ def expand_replication(doc: dict, team_count: int) -> ExpandResult:
         raise ValueError(f"invalid team_count: {team_count}")
     out = deepcopy(doc)
     namespace_sink: list[str] = []
+    # Mirrors TS `typeof x === "number"`: any non-bool number wins, so a
+    # schema-valid float (200.0 IS an integer in JSON Schema) renders the
+    # same on both sides instead of silently falling back to the default.
+    raw_base = doc.get("bridge_base")
+    bridge_base = raw_base if isinstance(raw_base, (int, float)) and not isinstance(
+        raw_base, bool) else DEFAULT_BRIDGE_BASE
     out["nodes"] = _walk_and_expand(
-        doc.get("nodes", []), team_count, namespace_sink)
+        doc.get("nodes", []), team_count, namespace_sink, bridge_base)
     return {
         "plays_per_team": team_count,
         "handler_namespaces": namespace_sink,
