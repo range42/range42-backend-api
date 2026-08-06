@@ -18,7 +18,8 @@ class SourceOut(BaseModel):
     provider: str
     base_url: HttpUrl
     auth_kind: str
-    token_ref: str | None = None
+    # The PAT itself is never returned; expose only whether one is stored.
+    has_token: bool = False
     created_at: datetime
 
 

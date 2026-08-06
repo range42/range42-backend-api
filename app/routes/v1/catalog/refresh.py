@@ -75,9 +75,21 @@ def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
 
     import git  # type: ignore
 
-    url = f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"
+    from app.core.project import _redact_authed_url, authed_url
+
+    url = authed_url(
+        f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git",
+        src.token_ref,
+    )
     with tempfile.TemporaryDirectory() as td:
-        git.Repo.clone_from(url, td, depth=1, branch=repo.branch)
+        try:
+            git.Repo.clone_from(url, td, depth=1, branch=repo.branch)
+        except Exception as e:
+            raise SourceUnreachableError(
+                details=[{"field": "source_id",
+                          "reason": _redact_authed_url(
+                              f"{repo.owner}/{repo.repo}: {e}")}]
+            )
         root = Path(td)
         count = 0
         for _p in root.rglob("range42.yaml"):

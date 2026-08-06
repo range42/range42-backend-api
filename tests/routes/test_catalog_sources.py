@@ -55,6 +55,39 @@ async def test_source_crud_roundtrip(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_source_responses_never_leak_the_token(tmp_path, monkeypatch):
+    """POST and GET /v1/catalog/sources must not echo the Git PAT back; they
+    expose only a has_token boolean."""
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as c:
+            r = await c.post(
+                "/v1/catalog/sources",
+                json={
+                    "provider": "github",
+                    "base_url": "https://github.com",
+                    "auth_kind": "pat",
+                    "token_ref": "ghp_SUPERSECRET",
+                },
+            )
+            assert r.status_code == 201, r.text
+            assert "ghp_SUPERSECRET" not in r.text
+            assert "token_ref" not in r.json()
+            assert r.json()["has_token"] is True
+
+            r = await c.get("/v1/catalog/sources")
+            assert r.status_code == 200
+            assert "ghp_SUPERSECRET" not in r.text
+            item = r.json()["items"][0]
+            assert "token_ref" not in item
+            assert item["has_token"] is True
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
 async def test_delete_unknown_source_returns_canonical_envelope(tmp_path, monkeypatch):
     app, dbmod = await _boot(tmp_path, monkeypatch)
     try:

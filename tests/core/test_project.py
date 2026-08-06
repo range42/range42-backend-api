@@ -46,6 +46,25 @@ def test_checkout_project_idempotent_same_sha(tmp_path):
     assert mtime1 == mtime2, "Re-checkout at same SHA should be idempotent"
 
 
+def test_checkout_project_does_not_persist_remote_credentials(tmp_path):
+    """The clone must not leave a named remote in .git/config: for an https repo
+    that would embed the Git PAT (x-access-token) on disk in the persistent
+    workspace. We fetch the URL ad-hoc instead of `git remote add origin`."""
+    src = tmp_path / "src"
+    sha = _make_test_repo(src)
+    dst = tmp_path / "ws" / "project"
+
+    checkout_project(repo_url=f"file://{src}", sha=sha, dest=dst, token="ghp_SECRET")
+
+    cfg = (dst / ".git" / "config").read_text()
+    assert "ghp_SECRET" not in cfg
+    r = subprocess.run(
+        ["git", "config", "--get", "remote.origin.url"],
+        cwd=dst, capture_output=True, text=True,
+    )
+    assert r.returncode != 0, "no origin remote should be persisted after checkout"
+
+
 def test_checkout_project_fails_typed(tmp_path):
     dst = tmp_path / "ws" / "project"
     with pytest.raises(ProjectCheckoutError) as exc:
