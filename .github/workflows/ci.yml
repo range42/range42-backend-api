@@ -26,3 +26,23 @@ jobs:
       # since tests/overlay/conftest.py deliberately fails rather than skips
       # when the vectors are missing and CI is set.
       - run: pytest --tb=short -q --ignore=tests/overlay
+
+      # The committed spec bootstraps the Kong gateway config, but nothing
+      # regenerated or verified it — it had rotted back to the pre-v1 API
+      # (84 paths, zero /v1) before #115. Generation is deterministic and
+      # independent of these paths; they only satisfy import-time reads.
+      - name: OpenAPI drift check
+        env:
+          PROJECT_ROOT_DIR: ${{ github.workspace }}
+          API_BACKEND_WWWAPP_PLAYBOOKS_DIR: ${{ github.workspace }}
+          API_BACKEND_PUBLIC_PLAYBOOKS_DIR: ${{ github.workspace }}
+          API_BACKEND_INVENTORY_DIR: ${{ github.workspace }}/inventory
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -c "
+          import json
+          from app.main import create_app
+          print(json.dumps(create_app().openapi(), indent=2))
+          " > /tmp/openapi.check.json
+          diff -u openapi.json /tmp/openapi.check.json \
+            || { echo "::error::openapi.json is out of date — regenerate it (see README) and commit"; exit 1; }
