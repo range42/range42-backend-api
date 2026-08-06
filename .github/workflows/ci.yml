@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, dev, 'feat/**', 'fix/**']
+    branches: [main, dev, 'feat/**', 'fix/**', 'feature/**', 'chore/**']
   pull_request:
     branches: [main, dev]
 jobs:
@@ -9,10 +9,20 @@ jobs:
     name: Ruff + Pytest
     runs-on: ubuntu-latest
     container:
+      # Matches the runtime stage of the production image (Dockerfile).
       image: python:3.13-slim
     steps:
-      - run: apt-get update && apt-get install -y --no-install-recommends git
+      # git: the suite builds throwaway repos to exercise the project checkout.
+      # openssh-client: ssh-keygen/ssh-agent/ssh-add back the ssh_agent tests.
+      - run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            git openssh-client
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
-      - run: ruff check --select ALL app/
-      - run: pytest --tb=short -q
+      - run: ruff check app/ tests/
+      # tests/overlay runs the TS/Python parity vectors, which live in the
+      # sibling range42-deployer-ui checkout — schema-and-operators.yml owns
+      # that job and guarantees the checkout. Collecting them here would fail,
+      # since tests/overlay/conftest.py deliberately fails rather than skips
+      # when the vectors are missing and CI is set.
+      - run: pytest --tb=short -q --ignore=tests/overlay
