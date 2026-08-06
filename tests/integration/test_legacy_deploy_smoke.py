@@ -51,7 +51,6 @@ async def _build_legacy_demo_lab_attempt(tmp_path: Path, ws: Path,
     reload(cfg)
     reload(dbmod)
 
-    from sqlalchemy import select
     from app.core.models import (
         Attempt, Base, Deployment, Project, ProxmoxHost, Source,
     )

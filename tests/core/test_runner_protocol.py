@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from tests.fixtures.fake_runner import FakeRunner
 from app.core.runner_protocol import RunnerHandle

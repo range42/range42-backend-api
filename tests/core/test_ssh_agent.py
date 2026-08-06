@@ -5,7 +5,6 @@ SSH_ASKPASS mechanism so the backend's ansible-runner can reach the VMs.
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
 from app.core.ssh_agent import unlock_workspace_keys

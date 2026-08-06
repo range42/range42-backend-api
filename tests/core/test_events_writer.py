@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from app.core.events import EventsWriter, SENTINEL
 
 

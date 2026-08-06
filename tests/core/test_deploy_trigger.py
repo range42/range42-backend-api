@@ -4,6 +4,8 @@ Tests the _resolve_playbook_for_scenario() helper added to deploy_trigger
 in support of Task 5: wire the resolver into start_attempt() so the
 DetachedRunner sees r42_playbook_path in extravars.
 """
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -232,8 +234,6 @@ async def test_start_attempt_injects_ssh_auth_sock_when_workspace_has_vault_keys
 # ---------------------------------------------------------------------------
 # T8: Universal scenario path — project checkout + inventory generation
 # ---------------------------------------------------------------------------
-import json
-import subprocess
 
 
 def _make_project_repo(path: Path, topology_data: dict) -> str:
