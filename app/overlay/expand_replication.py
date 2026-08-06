@@ -188,8 +188,11 @@ def _apply_offsets(node: dict, team_id: int,
             and "vm_id" in cfg):
         base_vmid = _js_number(cfg["vm_id"])
         if base_vmid is not None:
+            # Multiply by the raw offset, not int(): TS does plain number
+            # arithmetic, so a fractional vmid offset must stay fractional.
+            # Truncating gave every team the same id — duplicate VMIDs.
             cfg["vm_id"] = _num_to_str_value(
-                base_vmid + int(id_offset["vmid"]) * team_id)
+                base_vmid + id_offset["vmid"] * team_id)
     out["config"] = cfg
     for tkey, okey in _NODE_TEMPLATES:
         if isinstance(out.get(tkey), str):
@@ -227,8 +230,11 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
         rep = raw_rep if isinstance(raw_rep, dict) else {}
         # `scope:` with no value is a present key holding None — .get(k, default)
         # would return None and fall through to the per_team branch, expanding
-        # a node the author marked shared. TS coalesces with ??; mirror that.
-        scope = rep.get("scope") or "shared"
+        # a node the author marked shared. TS coalesces with ??, which is
+        # nullish and NOT truthiness: false / 0 / "" keep their value and fall
+        # through to per_team. `or` would swallow them into "shared".
+        raw_scope = rep.get("scope")
+        scope = "shared" if raw_scope is None else raw_scope
         if scope == "shared":
             if n.get("kind") == "group" and isinstance(n.get("children"), list):
                 nn = deepcopy(n)
