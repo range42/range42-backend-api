@@ -126,3 +126,36 @@ async def test_vault_password_is_not_echoed_in_the_response(tmp_path, monkeypatc
         r = await c.post("/v1/deployments/",
                          json=_payload(secrets={"vault_password": VAULT_PW}))
     assert VAULT_PW not in r.text
+
+
+@pytest.mark.asyncio
+async def test_duplicate_codename_is_rejected_without_touching_the_workspace(
+    tmp_path, monkeypatch,
+):
+    """A second deploy with the same codename must not clobber the first.
+
+    (codename, scenario_label) is unique AND names the workspace directory,
+    so Workspace.create reuses the existing one. Writing the vault password
+    before the commit meant the duplicate overwrote a live deployment's
+    password, then failed with an opaque 500 — leaving the original unable to
+    decrypt its vault or unlock its SSH keys.
+    """
+    app = await _boot(tmp_path, monkeypatch)
+    vault_pass = tmp_path / "ws" / "ALPHA-demo_lab" / "secrets" / "vault_pass.txt"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://t"
+    ) as c:
+        first = await c.post("/v1/deployments/",
+                             json=_payload(secrets={"vault_password": VAULT_PW}))
+        assert first.status_code == 201, first.text
+        assert vault_pass.read_text() == VAULT_PW
+
+        second = await c.post("/v1/deployments/",
+                              json=_payload(secrets={"vault_password": "OTHER"}))
+
+    assert second.status_code == 409, second.text
+    body = second.json()
+    assert body["code"] == "DEPLOYMENT_EXISTS"
+    assert first.json()["id"] in str(body["details"])
+    assert vault_pass.read_text() == VAULT_PW, "the live deployment was clobbered"
