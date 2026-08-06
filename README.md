@@ -139,15 +139,21 @@ VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
 
 ### OpenAPI spec
 
-The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration. To regenerate it after adding or modifying routes:
+The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration, and **CI fails if it is out of date** — regenerate and commit it whenever you add or modify a route:
 
 ```bash
+PROJECT_ROOT_DIR=$PWD \
+API_BACKEND_WWWAPP_PLAYBOOKS_DIR=$PWD \
+API_BACKEND_PUBLIC_PLAYBOOKS_DIR=$PWD \
+API_BACKEND_INVENTORY_DIR=$PWD/inventory \
 PYTHONPATH=. python -c "
 import json
 from app.main import create_app
 print(json.dumps(create_app().openapi(), indent=2))
 " > openapi.json
 ```
+
+The environment variables are only there to satisfy import-time reads — several route modules resolve paths at module scope, so the command dies without them. The generated document does not depend on their values.
 
 ---
 
