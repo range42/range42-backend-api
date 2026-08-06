@@ -56,6 +56,19 @@ async def create_deployment(payload: DeploymentCreate,
             message=e.message,
             details=[{"field": "workspace_root", "reason": e.message}],
         ) from e
+    # Seed the workspace vault password. deploy_trigger reads
+    # <ws>/secrets/vault_pass.txt to set ANSIBLE_VAULT_PASSWORD_FILE and to
+    # unlock the SSH keys for the run; nothing else writes that file, so a
+    # deploy created purely through the API had no way to decrypt anything.
+    # The UI collects this on the deploy form.
+    if payload.secrets and payload.secrets.get("vault_password"):
+        vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
+        vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
+        # Written before the content so the secret is never briefly world-readable.
+        vault_pass_file.touch(mode=0o600, exist_ok=True)
+        vault_pass_file.chmod(0o600)
+        vault_pass_file.write_text(payload.secrets["vault_password"])
+
     # Best-effort proxmox token provisioning: requires an app-level vault
     # password file and a proxmox_token secret in the payload. Missing
     # pieces fall through silently — preflight catches the failure mode.
