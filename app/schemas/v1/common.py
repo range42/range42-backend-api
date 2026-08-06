@@ -19,3 +19,20 @@ class ErrorDetail(BaseModel):
     field: str
     reason: str
     hint: str | None = None
+
+
+class ErrorEnvelope(BaseModel):
+    """What every v1 error actually returns.
+
+    Mirrors ``app.core.errors._envelope``. Declared so the generated spec
+    stops advertising FastAPI's default ``{"detail": [...]}`` for 422s —
+    clients built from the committed spec were deserialising the wrong
+    shape for every validation failure.
+    """
+
+    error: str
+    message: str
+    code: str
+    details: list[ErrorDetail] = []
+    trace_id: str
+    timestamp: str

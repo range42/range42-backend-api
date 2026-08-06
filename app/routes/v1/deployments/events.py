@@ -44,7 +44,16 @@ def _filter_event(ev: dict, *, team: int | None, stage: str | None,
     return True
 
 
-@router.get("/{deployment_id}/events")
+@router.get(
+    "/{deployment_id}/events",
+    response_class=EventSourceResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream of deployment events",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        },
+    },
+)
 async def events_stream(deployment_id: str,
                         team: int | None = Query(None),
                         stage: str | None = Query(None),
