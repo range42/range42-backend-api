@@ -18,8 +18,22 @@ class HostIn(BaseModel):
     protected_vmids_override: list[list[int]] | None = None
 
 
-class HostOut(HostIn):
+class HostOut(BaseModel):
+    """Response shape for a registered host.
+
+    Deliberately does NOT inherit from ``HostIn``: that would carry
+    ``token_ref`` — the live ``PVEAPIToken`` secret — into every response
+    (#100). Only whether a token is stored is exposed.
+    """
+
     id: str
+    name: str
+    api_url: HttpUrl
+    node_name: str
+    has_token: bool = False
+    token_scope: str | None = None
+    default_bridge: str = "vmbr0"
+    protected_vmids_override: list[list[int]] | None = None
     added_at: datetime
     last_health_check: dict | None = None
 
