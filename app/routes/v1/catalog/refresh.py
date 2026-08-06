@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -69,7 +70,7 @@ async def refresh_source(
     )
 
 
-def _count_manifests(root: "Path") -> int:
+def _count_manifests(root: Path) -> int:
     """Count catalog entries under ``root`` using the shared walker.
 
     Delegates to :func:`app.routes.v1.catalog.entries._discover` so the
@@ -83,7 +84,6 @@ def _count_manifests(root: "Path") -> int:
 
 def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
     import tempfile
-    from pathlib import Path
 
     import git  # type: ignore
 
