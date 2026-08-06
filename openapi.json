@@ -8659,16 +8659,10 @@
             "type": "string",
             "title": "Auth Kind"
           },
-          "token_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Token Ref"
+          "has_token": {
+            "type": "boolean",
+            "title": "Has Token",
+            "default": false
           },
           "created_at": {
             "type": "string",

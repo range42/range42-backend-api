@@ -645,3 +645,143 @@ async def test_start_attempt_universal_requires_repo_owner_and_name(
         with pytest.raises(ProjectCheckoutError) as exc:
             await start_attempt(s, attempt=att, runner=_NoOpRunner())
         assert "repo_owner" in str(exc.value.message) or "repo_name" in str(exc.value.message)
+
+
+# ---------------------------------------------------------------------------
+# ssh-agent lifetime: an agent holding unlocked private keys must never
+# outlive the attempt that started it.
+# ---------------------------------------------------------------------------
+
+
+class _FakeAgent:
+    """Stand-in for SshAgentHandle that records close()."""
+
+    def __init__(self) -> None:
+        self.env = {"SSH_AUTH_SOCK": "/tmp/fake.sock"}
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+async def _seed_deploy(tmp_path, monkeypatch, *, scenario, dep_id, att_id,
+                       with_sha=True):
+    """Minimal DB + workspace fixture; returns the workspace path."""
+    monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+
+    pb_root = tmp_path / "playbooks"
+    (pb_root / "scenarios" / scenario).mkdir(parents=True, exist_ok=True)
+    (pb_root / "scenarios" / scenario / "main.yml").write_text(
+        "- hosts: all\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(pb_root))
+
+    from importlib import reload
+    from app.core import config as cfg, db as dbmod
+    reload(cfg)
+    reload(dbmod)
+    from app.core.models import (
+        Base, Source, ProxmoxHost, Project, Deployment, Attempt,
+    )
+    engine = dbmod.get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    ws = tmp_path / f"WS-{scenario}"
+    for sub in ("runner", "secrets", "ssh_keys", "inventory"):
+        (ws / sub).mkdir(parents=True, exist_ok=True)
+    # vault_pass.txt present => start_attempt takes the unlock branch
+    (ws / "secrets" / "vault_pass.txt").write_text("vaultpw")
+
+    async with dbmod.get_session_factory()() as s:
+        s.add(Source(id="s", provider="github", base_url="u", auth_kind="none"))
+        s.add(ProxmoxHost(id="h", name="n", api_url="u", node_name="n",
+                          token_ref="t"))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Project(id="p", name="p", source_id="s",
+                      branch_strategy="shared_repo_subdir",
+                      repo_owner="me", repo_name="proj"))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Deployment(
+            id=dep_id, codename="WS", scenario_label=scenario, project_id="p",
+            target_host_id="h", team_count=1, state="pending",
+            workspace_path=str(ws),
+            **({"project_sha": "deadbeef"} if with_sha else {}),
+        ))
+        await s.commit()
+    async with dbmod.get_session_factory()() as s:
+        s.add(Attempt(id=att_id, deployment_id=dep_id, scope="full",
+                      state="pending"))
+        await s.commit()
+    return dbmod
+
+
+@pytest.mark.asyncio
+async def test_start_attempt_does_not_unlock_keys_before_it_can_fail(
+    tmp_path, monkeypatch,
+):
+    """The unlock must happen after every raise site.
+
+    An agent started earlier would survive a failed attempt holding unlocked
+    private keys, with nothing to reap it — and a bad project_sha is an
+    ordinary user error, so failures repeat.
+    """
+    dbmod = await _seed_deploy(tmp_path, monkeypatch, scenario="_universal",
+                               dep_id="dep-leak", att_id="att-leak",
+                               with_sha=False)
+
+    called = []
+    monkeypatch.setattr(
+        "app.core.deploy_trigger.unlock_workspace_keys",
+        lambda ws, vp: called.append(ws) or _FakeAgent(),
+    )
+
+    class _NoOpRunner:
+        async def start(self, *, private_data_dir, extravars, envvars):
+            raise AssertionError("should not reach the runner")
+
+    from app.core.deploy_trigger import start_attempt
+    from app.core.errors import ProjectCheckoutError
+    from app.core.models import Attempt
+    from sqlalchemy import select
+
+    async with dbmod.get_session_factory()() as s:
+        att = (await s.execute(
+            select(Attempt).where(Attempt.id == "att-leak"))).scalar_one()
+        with pytest.raises(ProjectCheckoutError):
+            await start_attempt(s, attempt=att, runner=_NoOpRunner())
+
+    assert called == [], "ssh-agent was started before the attempt could fail"
+
+
+@pytest.mark.asyncio
+async def test_start_attempt_closes_ssh_agent_when_runner_start_fails(
+    tmp_path, monkeypatch,
+):
+    """runner.start() is the last window; a failure there must kill the agent."""
+    dbmod = await _seed_deploy(tmp_path, monkeypatch, scenario="demo_lab",
+                               dep_id="dep-rs", att_id="att-rs")
+
+    agent = _FakeAgent()
+    monkeypatch.setattr("app.core.deploy_trigger.unlock_workspace_keys",
+                        lambda ws, vp: agent)
+
+    class _BoomRunner:
+        async def start(self, *, private_data_dir, extravars, envvars):
+            assert envvars["SSH_AUTH_SOCK"] == "/tmp/fake.sock"
+            raise RuntimeError("runner exploded")
+
+    from app.core.deploy_trigger import start_attempt
+    from app.core.models import Attempt
+    from sqlalchemy import select
+
+    async with dbmod.get_session_factory()() as s:
+        att = (await s.execute(
+            select(Attempt).where(Attempt.id == "att-rs"))).scalar_one()
+        with pytest.raises(RuntimeError):
+            await start_attempt(s, attempt=att, runner=_BoomRunner())
+
+    assert agent.closed, "ssh-agent leaked when runner.start() failed"

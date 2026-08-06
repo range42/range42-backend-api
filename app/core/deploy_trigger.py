@@ -102,16 +102,6 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     if vault_pass.exists():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault_pass)
 
-    # Unlock the workspace's passphrase-protected SSH keys into a dedicated
-    # ssh-agent (there is none in the container) so ansible-runner can reach the
-    # Proxmox jump + VMs. Returns None when there is no vault/keys, in which case
-    # the deploy falls back to the ambient ~/.ssh. Closed in _run()'s finally.
-    ssh_agent = None
-    if vault_pass.exists():
-        ssh_agent = unlock_workspace_keys(ws, vault_pass)
-        if ssh_agent is not None:
-            envvars.update(ssh_agent.env)
-
     extravars: dict[str, Any] = {
         "r42_deployment_id": dep.id,
         "r42_attempt_id": attempt.id,
@@ -198,12 +188,33 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         # <ws>/inventory/; do not clone or generate anything.
         extravars["r42_inventory_dir"] = str(ws / "inventory")
 
+    # Unlock the workspace's passphrase-protected SSH keys into a dedicated
+    # ssh-agent (there is none in the container) so ansible-runner can reach the
+    # Proxmox jump + VMs. Returns None when there is no vault/keys, in which case
+    # the deploy falls back to the ambient ~/.ssh.
+    #
+    # Deliberately last: everything above can raise (missing project_sha, git
+    # checkout failure, malformed topology, absent Project/Source/ProxmoxHost),
+    # and an agent started before those would outlive the failed attempt holding
+    # unlocked private keys with nothing to reap it. The only remaining window
+    # is runner.start() itself, closed below; after that _run()'s finally owns it.
+    ssh_agent = None
+    if vault_pass.exists():
+        ssh_agent = unlock_workspace_keys(ws, vault_pass)
+        if ssh_agent is not None:
+            envvars.update(ssh_agent.env)
+
     runner = runner or DetachedRunner()
-    handle = await runner.start(
-        private_data_dir=artifact_dir,
-        extravars=extravars,
-        envvars=envvars,
-    )
+    try:
+        handle = await runner.start(
+            private_data_dir=artifact_dir,
+            extravars=extravars,
+            envvars=envvars,
+        )
+    except BaseException:
+        if ssh_agent is not None:
+            ssh_agent.close()
+        raise
     (artifact_dir / "pid").write_text(str(handle.pid or 0))
 
     layers = [ConfigDenylistLayer(settings.redaction_denylist),
