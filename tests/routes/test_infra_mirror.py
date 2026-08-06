@@ -57,6 +57,13 @@ def test_non_200_is_degraded(client, monkeypatch):
 @pytest.mark.parametrize("exc,detail", [
     (httpx.ConnectError("refused"), "connection refused"),
     (httpx.TimeoutException("timeout"), "timeout"),
+    (httpx.ConnectTimeout("connect timed out"), "timeout"),
+    # Mirror accepted the connection then broke it — these are the ones the
+    # first version missed, and they surfaced as 500s.
+    (httpx.ReadError("reset"), "ReadError"),
+    (httpx.RemoteProtocolError("truncated"), "RemoteProtocolError"),
+    (httpx.WriteError("broken pipe"), "WriteError"),
+    (httpx.ProtocolError("bad framing"), "ProtocolError"),
 ])
 def test_transport_failures_are_offline(client, monkeypatch, exc, detail):
     """The node polls every 30s — a down mirror must not surface as a 500."""
@@ -69,3 +76,18 @@ def test_transport_failures_are_offline(client, monkeypatch, exc, detail):
     r = client.get("/v1/infra/mirror/health")
     assert r.status_code == 503
     assert r.json() == {"status": "offline", "detail": detail}
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("true", "aptly"), ("True", "aptly"), ("1", "aptly"), ("yes", "aptly"),
+    # Explicitly disabling it must mean acng — presence alone is not truth.
+    ("false", "acng"), ("0", "acng"), ("no", "acng"), ("", "acng"),
+])
+def test_airgapped_flag_is_parsed_as_boolean(client, monkeypatch, value, expected):
+    monkeypatch.setenv("APT_MIRROR_HOST", "10.0.0.9")
+    monkeypatch.setenv("APT_MIRROR_AIRGAPPED", value)
+    monkeypatch.setattr(
+        "app.routes.infra.httpx.get",
+        lambda url, timeout=None: httpx.Response(200, request=httpx.Request("GET", url)),
+    )
+    assert client.get("/v1/infra/mirror/health").json()["backend"] == expected
