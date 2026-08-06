@@ -200,3 +200,84 @@ async def test_failed_seed_leaves_no_deployment_row(tmp_path, monkeypatch):
 
     vault_pass = tmp_path / "ws" / "ALPHA-demo_lab" / "secrets" / "vault_pass.txt"
     assert vault_pass.read_text() == VAULT_PW
+
+
+@pytest.mark.asyncio
+async def test_unknown_project_and_host_report_what_is_actually_wrong(
+    tmp_path, monkeypatch,
+):
+    """FKs are enforced at DB level, so a bad reference used to surface from
+    the flush as an IntegrityError and get reported as "already exists"."""
+    app = await _boot(tmp_path, monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://t"
+    ) as c:
+        bad_project = await c.post(
+            "/v1/deployments/", json=_payload(codename="BRAVO", project_id="nope"))
+        bad_host = await c.post(
+            "/v1/deployments/", json=_payload(codename="CHARLIE", target_host_id="nope"))
+
+    for r, missing in ((bad_project, "Project"), (bad_host, "ProxmoxHost")):
+        assert r.status_code == 404, r.text
+        assert r.json()["code"] == "NOT_FOUND"
+        assert missing in r.json()["message"]
+        assert "already exists" not in r.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_commit_failure_does_not_leave_a_stale_secret(tmp_path, monkeypatch):
+    """A commit failure after seeding must not leave the password behind.
+
+    The row would not exist, but a later create that supplies no password
+    skips the seed branch entirely — and would silently adopt a secret
+    belonging to a deployment that never existed.
+    """
+    app = await _boot(tmp_path, monkeypatch)
+    vault_pass = tmp_path / "ws" / "ALPHA-demo_lab" / "secrets" / "vault_pass.txt"
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    real_commit = AsyncSession.commit
+
+    async def _boom(self):
+        raise OSError(5, "I/O error")
+
+    monkeypatch.setattr(AsyncSession, "commit", _boom)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://t"
+    ) as c:
+        r = await c.post("/v1/deployments/",
+                         json=_payload(secrets={"vault_password": VAULT_PW}))
+    assert r.status_code == 500
+    assert r.json()["code"] == "DEPLOYMENT_PERSIST_FAILED"
+    assert not vault_pass.exists(), "a secret was left for a deployment that never existed"
+
+    monkeypatch.setattr(AsyncSession, "commit", real_commit)
+
+
+@pytest.mark.asyncio
+async def test_commit_failure_restores_an_operator_seeded_secret(
+    tmp_path, monkeypatch,
+):
+    """If the workspace already held a password, put it back — do not delete."""
+    app = await _boot(tmp_path, monkeypatch)
+    ws_secrets = tmp_path / "ws" / "ALPHA-demo_lab" / "secrets"
+    ws_secrets.mkdir(parents=True, exist_ok=True)
+    vault_pass = ws_secrets / "vault_pass.txt"
+    vault_pass.write_text("OPERATOR-SEEDED")
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+    real_commit = AsyncSession.commit
+
+    async def _boom(self):
+        raise OSError(5, "I/O error")
+
+    monkeypatch.setattr(AsyncSession, "commit", _boom)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://t"
+    ) as c:
+        await c.post("/v1/deployments/",
+                     json=_payload(secrets={"vault_password": VAULT_PW}))
+    assert vault_pass.read_text() == "OPERATOR-SEEDED"
+
+    monkeypatch.setattr(AsyncSession, "commit", real_commit)
