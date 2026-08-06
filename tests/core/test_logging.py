@@ -1,5 +1,4 @@
 import json
-import structlog
 from app.core.logging import configure_logging, get_logger, bind_context
 
 

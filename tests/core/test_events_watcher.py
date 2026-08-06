@@ -1,7 +1,6 @@
 import asyncio
 import json
 import pytest
-from pathlib import Path
 from app.core.events import EventsWriter, EventsReader
 from app.core.redaction import (
     RedactionAuditWriter, ConfigDenylistLayer, VaultTaggedLayer,

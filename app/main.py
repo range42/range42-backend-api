@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 
     # v1 state layer
     from app.core.db import get_engine, dispose_engine
-    engine = get_engine()
+    get_engine()
     logger.info("v1 state engine ready", db_url=settings.db_url)
 
     # v1 orphan reconcile: run once synchronously at boot so the structured

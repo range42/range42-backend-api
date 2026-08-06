@@ -11,7 +11,6 @@ def test_v1_router_importable():
     assert v1_router.prefix == "/v1"
     # Five sub-routers (catalog, projects, deployments, proxmox, admin) are
     # included even though they have no endpoints yet.
-    sub_prefixes = {r.prefix for r in v1_router.routes if hasattr(r, "prefix")}
     # APIRouter.include_router merges child routes in under routes; just
     # assert the aggregate has been constructed without raising.
     assert v1_router is not None

@@ -83,7 +83,7 @@ def _run_proxmox_action(req, action: str, extravars: dict) -> JSONResponse:
         # On failure, include error context from Ansible logs
         if rc != 0:
             lines = log_plain.splitlines()
-            fatal = next((l for l in lines if "fatal:" in l or "FAILED" in l), None)
+            fatal = next((line for line in lines if "fatal:" in line or "FAILED" in line), None)
             payload["error"] = fatal.strip() if fatal else f"Ansible exited with rc={rc}"
             payload["log_multiline"] = lines[-10:]  # last 10 lines for context
     else:
