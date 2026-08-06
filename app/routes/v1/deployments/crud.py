@@ -18,12 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, WorkspaceNonLocalFsError
-from app.core.models import Deployment
+from app.core.logging import get_logger
+from app.core.models import Deployment, Project, ProxmoxHost
 from app.core.workspace import Workspace, WorkspaceError
 from app.schemas.v1.common import Page
 from app.schemas.v1.deployments import DeploymentCreate, DeploymentOut
 
 router = APIRouter()
+log = get_logger(__name__)
 
 
 async def _session() -> AsyncSession:
@@ -41,6 +43,22 @@ async def list_deployments(session: AsyncSession = Depends(_session),
         items=[DeploymentOut.model_validate(r, from_attributes=True) for r in rows],
         total=total, offset=offset, limit=limit,
     )
+
+
+def _restore_vault_pass(path: Path, prior: str | None) -> None:
+    """Undo a seed whose deployment never persisted.
+
+    Best-effort: a workspace left slightly dirty is recoverable, but raising
+    here would mask the original failure.
+    """
+    try:
+        if prior is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(prior)
+    except OSError:
+        log.warning("could not restore vault_pass.txt after a failed create",
+                    path=str(path))
 
 
 @router.post("/", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED)
@@ -68,6 +86,27 @@ async def create_deployment(payload: DeploymentCreate,
             ),
             details=[{"field": "codename", "reason": f"in use by {clash.id}"}],
         )
+
+    # Validate the foreign keys here too. They are enforced at DB level
+    # (PRAGMA foreign_keys=ON), so a bad reference would otherwise surface
+    # from the flush below as an IntegrityError indistinguishable from the
+    # uniqueness clash — and get reported as "already exists".
+    for field, model, value in (
+        ("project_id", Project, payload.project_id),
+        ("target_host_id", ProxmoxHost, payload.target_host_id),
+    ):
+        found = (await session.execute(
+            select(model.id).where(model.id == value)
+        )).scalar_one_or_none()
+        if found is None:
+            raise Range42Error(
+                error="not_found",
+                code="NOT_FOUND",
+                status=404,
+                message=f"{model.__name__} {value} not found",
+                details=[{"field": field, "reason": "no such row"}],
+            )
+
     try:
         ws = Workspace.create(
             codename=payload.codename,
@@ -102,30 +141,51 @@ async def create_deployment(payload: DeploymentCreate,
         await session.flush()
     except IntegrityError as e:
         await session.rollback()
+        # Only the workspace-uniqueness constraint means "already exists".
+        # Anything else (a reference deleted between the checks above and this
+        # flush, say) must not be dressed up as a name clash.
+        detail = str(getattr(e, "orig", e))
+        if "unique" in detail.lower() or "uq_deployment_workspace" in detail:
+            raise Range42Error(
+                error="conflict",
+                code="DEPLOYMENT_EXISTS",
+                status=409,
+                message=(
+                    f"A deployment named {payload.codename}/"
+                    f"{payload.scenario_label} already exists"
+                ),
+                details=[{"field": "codename", "reason": "created concurrently"}],
+            ) from e
         raise Range42Error(
-            error="conflict",
-            code="DEPLOYMENT_EXISTS",
+            error="invalid_reference",
+            code="INVALID_REFERENCE",
             status=409,
-            message=(
-                f"A deployment named {payload.codename}/"
-                f"{payload.scenario_label} already exists"
-            ),
-            details=[{"field": "codename", "reason": "created concurrently"}],
+            message="Deployment could not be persisted",
+            details=[{"field": "payload", "reason": detail}],
         ) from e
 
     # Seed the workspace vault password: deploy_trigger reads
     # <ws>/secrets/vault_pass.txt to set ANSIBLE_VAULT_PASSWORD_FILE and to
     # unlock the SSH keys for the run, and nothing else writes it. Absent or
     # empty leaves an operator-seeded file alone.
+    vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
+    prior_secret: str | None = None
+    seeded = False
     if payload.secrets and payload.secrets.get("vault_password"):
         try:
-            vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
+            # Remember what was there. If the commit below fails, the row will
+            # not exist but the file would — and a later create that supplies
+            # no password skips this branch entirely, silently adopting a
+            # secret that belongs to a deployment that never existed.
+            if vault_pass_file.is_file():
+                prior_secret = vault_pass_file.read_text()
             vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
             # chmod before the content so the secret is never briefly
             # world-readable.
             vault_pass_file.touch(mode=0o600, exist_ok=True)
             vault_pass_file.chmod(0o600)
             vault_pass_file.write_text(payload.secrets["vault_password"])
+            seeded = True
         except OSError as e:
             await session.rollback()
             raise Range42Error(
@@ -136,7 +196,19 @@ async def create_deployment(payload: DeploymentCreate,
                 details=[{"field": "secrets.vault_password", "reason": str(e)}],
             ) from e
 
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        if seeded:
+            _restore_vault_pass(vault_pass_file, prior_secret)
+        raise Range42Error(
+            error="workspace_error",
+            code="DEPLOYMENT_PERSIST_FAILED",
+            status=500,
+            message="Deployment could not be persisted",
+            details=[{"field": "deployment", "reason": str(e)}],
+        ) from e
     await session.refresh(row)
 
     # Best-effort proxmox token provisioning: requires an app-level vault
