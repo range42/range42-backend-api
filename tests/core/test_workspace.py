@@ -14,6 +14,17 @@ def test_is_local_fs_accepts_common_local(monkeypatch):
         assert is_local_fs(name) is True
 
 
+def test_is_local_fs_accepts_both_overlay_spellings(monkeypatch):
+    """`stat -f -c %T` reports "overlayfs" on some kernels, "overlay" on others.
+
+    Rejecting either makes the backend refuse to create a workspace when its
+    root is on the container's own layer instead of a bind mount — which is
+    exactly what happens in a containerised CI job.
+    """
+    for name in ("overlay", "overlayfs"):
+        assert is_local_fs(name) is True
+
+
 def test_is_local_fs_rejects_network(monkeypatch):
     for name in ("nfs", "nfs4", "cifs", "fuse.sshfs", "fuse"):
         assert is_local_fs(name) is False

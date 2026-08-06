@@ -16,8 +16,12 @@ from pathlib import Path
 from app.core.config import settings
 
 
+# "overlayfs" and "overlay" are the same filesystem: `stat -f -c %T` reports
+# the former on some kernels, the latter elsewhere. Both must be accepted or
+# the backend refuses to create a workspace whenever its root sits on the
+# container's own layer rather than a bind mount.
 _LOCAL_FS = {"ext2", "ext3", "ext4", "xfs", "btrfs", "tmpfs", "zfs",
-             "f2fs", "overlay", "apfs", "hfs", "ntfs"}
+             "f2fs", "overlay", "overlayfs", "apfs", "hfs", "ntfs"}
 
 
 class WorkspaceError(Exception):
