@@ -67,3 +67,36 @@ async def patch_project(
     await session.commit()
     await session.refresh(row)
     return ProjectOut.model_validate(row, from_attributes=True)
+
+
+@router.post("/{project_id}/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
+async def project_heartbeat(
+    project_id: str,
+    session: AsyncSession = Depends(_session),
+):
+    """Liveness ping for an open editing session (#106).
+
+    The edit lock itself is **not** held here: it lives in the git-backed
+    project repo, written by the client (``ProjectRepoAdapter.writeLock``).
+    This endpoint answers one question for the SharedWorker that polls it —
+    "is the backend reachable and does it still know this project?" — so the
+    UI can distinguish a live session from a stale one.
+
+    Deliberately does no writes: a heartbeat must stay cheap enough to run
+    on a short interval per open editor, and it carries no state the lock
+    file does not already hold.
+
+    :returns: 204 when the project exists; 404 otherwise, which the worker
+        treats as a failed tick and eventually surfaces as a stale session.
+    """
+    exists = (
+        await session.execute(select(Project.id).where(Project.id == project_id))
+    ).scalar_one_or_none()
+    if exists is None:
+        raise Range42Error(
+            error="not_found",
+            code="NOT_FOUND",
+            status=404,
+            message=f"Project {project_id} not found",
+        )
+    return None
