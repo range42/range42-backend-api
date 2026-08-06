@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -91,23 +92,52 @@ async def create_deployment(payload: DeploymentCreate,
         workspace_path=str(ws.path),
     )
     session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    # Flush, do not commit: this reserves (codename, scenario_label) at the DB
+    # level — closing the race the pre-check above cannot — while leaving the
+    # transaction open. The secret is written inside that window, so a failed
+    # write rolls the row back and the caller can simply retry. Committing
+    # first would strand a deployment whose workspace has no password, and the
+    # retry would then hit the 409 rather than fixing itself.
+    try:
+        await session.flush()
+    except IntegrityError as e:
+        await session.rollback()
+        raise Range42Error(
+            error="conflict",
+            code="DEPLOYMENT_EXISTS",
+            status=409,
+            message=(
+                f"A deployment named {payload.codename}/"
+                f"{payload.scenario_label} already exists"
+            ),
+            details=[{"field": "codename", "reason": "created concurrently"}],
+        ) from e
 
-    # Everything below mutates the workspace, so it runs only once the row is
-    # persisted — a failed create must never touch another deployment's files.
-    #
     # Seed the workspace vault password: deploy_trigger reads
     # <ws>/secrets/vault_pass.txt to set ANSIBLE_VAULT_PASSWORD_FILE and to
     # unlock the SSH keys for the run, and nothing else writes it. Absent or
     # empty leaves an operator-seeded file alone.
     if payload.secrets and payload.secrets.get("vault_password"):
-        vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
-        vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
-        # chmod before the content so the secret is never briefly world-readable.
-        vault_pass_file.touch(mode=0o600, exist_ok=True)
-        vault_pass_file.chmod(0o600)
-        vault_pass_file.write_text(payload.secrets["vault_password"])
+        try:
+            vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
+            vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
+            # chmod before the content so the secret is never briefly
+            # world-readable.
+            vault_pass_file.touch(mode=0o600, exist_ok=True)
+            vault_pass_file.chmod(0o600)
+            vault_pass_file.write_text(payload.secrets["vault_password"])
+        except OSError as e:
+            await session.rollback()
+            raise Range42Error(
+                error="workspace_error",
+                code="VAULT_SEED_FAILED",
+                status=500,
+                message="Could not write the workspace vault password",
+                details=[{"field": "secrets.vault_password", "reason": str(e)}],
+            ) from e
+
+    await session.commit()
+    await session.refresh(row)
 
     # Best-effort proxmox token provisioning: requires an app-level vault
     # password file and a proxmox_token secret in the payload. Missing

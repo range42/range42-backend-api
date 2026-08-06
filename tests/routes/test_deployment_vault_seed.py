@@ -5,6 +5,7 @@ unlock the workspace SSH keys (#112). Nothing else wrote it, so a deployment
 created through the API could not decrypt anything — the UI collects the
 password on the deploy form and it had nowhere to go.
 """
+import pathlib
 import stat
 
 import pytest
@@ -159,3 +160,43 @@ async def test_duplicate_codename_is_rejected_without_touching_the_workspace(
     assert body["code"] == "DEPLOYMENT_EXISTS"
     assert first.json()["id"] in str(body["details"])
     assert vault_pass.read_text() == VAULT_PW, "the live deployment was clobbered"
+
+
+@pytest.mark.asyncio
+async def test_failed_seed_leaves_no_deployment_row(tmp_path, monkeypatch):
+    """A write failure must roll the deployment back, not strand it.
+
+    Committing before the seed left a row whose workspace had no password,
+    and the obvious retry then hit the 409 instead of fixing itself — the
+    deployment was unusable until someone deleted it by hand.
+    """
+    app = await _boot(tmp_path, monkeypatch)
+
+    real_write = pathlib.Path.write_text
+
+    def _boom(self, *a, **kw):
+        if self.name == "vault_pass.txt":
+            raise OSError(28, "No space left on device")
+        return real_write(self, *a, **kw)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", _boom)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://t"
+    ) as c:
+        failed = await c.post("/v1/deployments/",
+                              json=_payload(secrets={"vault_password": VAULT_PW}))
+        assert failed.status_code == 500, failed.text
+        assert failed.json()["code"] == "VAULT_SEED_FAILED"
+
+        listed = await c.get("/v1/deployments/")
+        assert listed.json()["items"] == [], "the failed create left a row behind"
+
+        # The obvious next move must work rather than 409.
+        monkeypatch.setattr(pathlib.Path, "write_text", real_write)
+        retry = await c.post("/v1/deployments/",
+                             json=_payload(secrets={"vault_password": VAULT_PW}))
+        assert retry.status_code == 201, retry.text
+
+    vault_pass = tmp_path / "ws" / "ALPHA-demo_lab" / "secrets" / "vault_pass.txt"
+    assert vault_pass.read_text() == VAULT_PW
