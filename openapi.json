@@ -3603,6 +3603,72 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/config": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Vm Config",
+        "description": "Return the raw PVE guest config (net0/net1/ipconfig*, etc.). The UI import\nflow parses net* to rebuild per-NIC bridge/network edges (#79); the v1 VM\nlist deliberately omits per-NIC detail.",
+        "operationId": "vm_config_v1_proxmox_hosts__host_id__vms__vmid__config_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "vmtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "qemu",
+                "lxc"
+              ],
+              "type": "string",
+              "default": "qemu",
+              "title": "Vmtype"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VmConfigResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts/{host_id}/vms/{vmid}/status/{action}": {
       "post": {
         "tags": [
@@ -9821,6 +9887,40 @@
           "vm_name": "test-cloned",
           "vm_new_id": "3000"
         }
+      },
+      "VmConfigResult": {
+        "properties": {
+          "vmid": {
+            "type": "integer",
+            "title": "Vmid"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "qemu",
+              "lxc"
+            ],
+            "title": "Type",
+            "default": "qemu"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vmid",
+          "node",
+          "config"
+        ],
+        "title": "VmConfigResult",
+        "description": "Raw PVE guest config (net0/net1/ipconfig*, cores, memory, ...). The UI\nimport flow parses net* to reconstruct per-NIC bridge/network edges (#79)."
       },
       "VmCreateItemReply": {
         "properties": {
