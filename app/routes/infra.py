@@ -26,6 +26,20 @@ def _mirror_base_url() -> str:
     return f"http://{host}:{port}"
 
 
+def _airgapped() -> bool:
+    """Whether the mirror is aptly (air-gapped) rather than apt-cacher-ng.
+
+    Parsed as a boolean, not mere presence: a deployment that sets
+    ``APT_MIRROR_AIRGAPPED=false`` means acng, but any non-empty string is
+    truthy. Matches the ``("1", "true", "yes")`` convention in core.config.
+    """
+    return os.getenv("APT_MIRROR_AIRGAPPED", "").lower() in ("1", "true", "yes")
+
+
+def _offline(detail: str) -> JSONResponse:
+    return JSONResponse({"status": "offline", "detail": detail}, status_code=503)
+
+
 @router.get(
     path="/mirror/health",
     summary="APT mirror health",
@@ -52,7 +66,7 @@ def infra_mirror_health() -> JSONResponse:
             return JSONResponse(
                 {
                     "status": "healthy",
-                    "backend": "aptly" if os.getenv("APT_MIRROR_AIRGAPPED") else "acng",
+                    "backend": "aptly" if _airgapped() else "acng",
                     "report_url": f"{base}{_MIRROR_REPORT_PATH}",
                 }
             )
@@ -60,7 +74,15 @@ def infra_mirror_health() -> JSONResponse:
             {"status": "degraded", "http_status": resp.status_code},
             status_code=502,
         )
-    except httpx.ConnectError:
-        return JSONResponse({"status": "offline", "detail": "connection refused"}, status_code=503)
     except httpx.TimeoutException:
-        return JSONResponse({"status": "offline", "detail": "timeout"}, status_code=503)
+        return _offline("timeout")
+    except httpx.ConnectError:
+        return _offline("connection refused")
+    except httpx.RequestError as exc:
+        # Everything else httpx can raise while talking to the mirror —
+        # ReadError, RemoteProtocolError, a reset mid-response. The canvas
+        # node polls this every 30s, so a broken mirror must read as offline
+        # rather than a 500 that makes the backend look at fault.
+        logger.warning("mirror health transport error",
+                       error=type(exc).__name__, detail=str(exc))
+        return _offline(type(exc).__name__)
