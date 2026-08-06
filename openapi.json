@@ -6485,6 +6485,10 @@
       },
       "HostOut": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -6500,9 +6504,10 @@
             "type": "string",
             "title": "Node Name"
           },
-          "token_ref": {
-            "type": "string",
-            "title": "Token Ref"
+          "has_token": {
+            "type": "boolean",
+            "title": "Has Token",
+            "default": false
           },
           "token_scope": {
             "anyOf": [
@@ -6537,10 +6542,6 @@
             ],
             "title": "Protected Vmids Override"
           },
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
           "added_at": {
             "type": "string",
             "format": "date-time",
@@ -6561,14 +6562,14 @@
         },
         "type": "object",
         "required": [
+          "id",
           "name",
           "api_url",
           "node_name",
-          "token_ref",
-          "id",
           "added_at"
         ],
-        "title": "HostOut"
+        "title": "HostOut",
+        "description": "Response shape for a registered host.\n\nDeliberately does NOT inherit from ``HostIn``: that would carry\n``token_ref`` \u2014 the live ``PVEAPIToken`` secret \u2014 into every response\n(#100). Only whether a token is stored is exposed."
       },
       "NodeNetworkAddItemReply": {
         "properties": {

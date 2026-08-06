@@ -38,7 +38,7 @@ def _row_to_out(row: ProxmoxHost) -> HostOut:
         name=row.name,
         api_url=row.api_url,
         node_name=row.node_name,
-        token_ref=row.token_ref,
+        has_token=bool(row.token_ref),
         token_scope=row.token_scope,
         default_bridge=row.default_bridge,
         protected_vmids_override=overrides,
