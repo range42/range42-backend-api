@@ -93,7 +93,7 @@ async def _build_universal_attempt(tmp_path: Path, ws: Path,
                      auth_kind="none"))
         s.add(ProxmoxHost(
             id="h", name="n", api_url="https://10.0.0.5:8006",
-            node_name="n", token_ref="t",
+            node_name="n", token_ref="root@pam!range42-backend=secret123",
         ))
         await s.commit()
     async with dbmod.get_session_factory()() as s:
@@ -216,6 +216,14 @@ async def test_universal_smoke_with_capturing_runner(tmp_path, monkeypatch):
     assert extravars["r42_playbook_path"].endswith(
         "scenarios/_universal/main.yml"
     )
+
+    # ASSERT: Proxmox API creds for the playbook's node-network tasks are
+    # derived from the host (token_ref format: user!tokenid=secret).
+    assert extravars["proxmox_api_host"] == "10.0.0.5:8006"
+    assert extravars["proxmox_node"] == "n"
+    assert extravars["proxmox_api_user"] == "root@pam"
+    assert extravars["proxmox_api_token_id"] == "range42-backend"
+    assert extravars["proxmox_api_token_secret"] == "secret123"
 
     # ASSERT: the stubbed checkout dropped topology.json into ws/project/
     assert (ws / "project" / "topology.json").is_file(), \

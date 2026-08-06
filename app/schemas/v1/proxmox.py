@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, HttpUrl, field_validator
 
@@ -127,3 +127,12 @@ class SnapshotCreateIn(BaseModel):
     snapname: str
     description: str | None = None
     vmstate: bool | None = None
+
+
+class VmConfigResult(BaseModel):
+    """Raw PVE guest config (net0/net1/ipconfig*, cores, memory, ...). The UI
+    import flow parses net* to reconstruct per-NIC bridge/network edges (#79)."""
+    vmid: int
+    node: str
+    type: Literal["qemu", "lxc"] = "qemu"
+    config: dict[str, Any]
