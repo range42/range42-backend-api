@@ -45,6 +45,28 @@ async def list_deployments(session: AsyncSession = Depends(_session),
 @router.post("/", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED)
 async def create_deployment(payload: DeploymentCreate,
                             session: AsyncSession = Depends(_session)):
+    # (codename, scenario_label) is unique and also names the workspace
+    # directory, so a duplicate would reuse an existing deployment's
+    # workspace. Reject it here rather than letting the commit fail: by then
+    # the shared directory has already been mutated, and the IntegrityError
+    # surfaces as an opaque 500.
+    clash = (await session.execute(
+        select(Deployment).where(
+            Deployment.codename == payload.codename,
+            Deployment.scenario_label == payload.scenario_label,
+        )
+    )).scalar_one_or_none()
+    if clash is not None:
+        raise Range42Error(
+            error="conflict",
+            code="DEPLOYMENT_EXISTS",
+            status=409,
+            message=(
+                f"A deployment named {payload.codename}/"
+                f"{payload.scenario_label} already exists"
+            ),
+            details=[{"field": "codename", "reason": f"in use by {clash.id}"}],
+        )
     try:
         ws = Workspace.create(
             codename=payload.codename,
@@ -56,15 +78,33 @@ async def create_deployment(payload: DeploymentCreate,
             message=e.message,
             details=[{"field": "workspace_root", "reason": e.message}],
         ) from e
-    # Seed the workspace vault password. deploy_trigger reads
+    row = Deployment(
+        id=uuid.uuid4().hex[:16],
+        codename=payload.codename,
+        scenario_label=payload.scenario_label,
+        project_id=payload.project_id,
+        target_host_id=payload.target_host_id,
+        catalog_sha=payload.catalog_sha,
+        project_sha=payload.project_sha,
+        team_count=payload.team_count,
+        state="pending",
+        workspace_path=str(ws.path),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+
+    # Everything below mutates the workspace, so it runs only once the row is
+    # persisted — a failed create must never touch another deployment's files.
+    #
+    # Seed the workspace vault password: deploy_trigger reads
     # <ws>/secrets/vault_pass.txt to set ANSIBLE_VAULT_PASSWORD_FILE and to
-    # unlock the SSH keys for the run; nothing else writes that file, so a
-    # deploy created purely through the API had no way to decrypt anything.
-    # The UI collects this on the deploy form.
+    # unlock the SSH keys for the run, and nothing else writes it. Absent or
+    # empty leaves an operator-seeded file alone.
     if payload.secrets and payload.secrets.get("vault_password"):
         vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
         vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
-        # Written before the content so the secret is never briefly world-readable.
+        # chmod before the content so the secret is never briefly world-readable.
         vault_pass_file.touch(mode=0o600, exist_ok=True)
         vault_pass_file.chmod(0o600)
         vault_pass_file.write_text(payload.secrets["vault_password"])
@@ -90,21 +130,7 @@ async def create_deployment(payload: DeploymentCreate,
             )
     except Exception:  # noqa: BLE001 — best-effort; preflight is source of truth
         pass
-    row = Deployment(
-        id=uuid.uuid4().hex[:16],
-        codename=payload.codename,
-        scenario_label=payload.scenario_label,
-        project_id=payload.project_id,
-        target_host_id=payload.target_host_id,
-        catalog_sha=payload.catalog_sha,
-        project_sha=payload.project_sha,
-        team_count=payload.team_count,
-        state="pending",
-        workspace_path=str(ws.path),
-    )
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
+
     return DeploymentOut.model_validate(row, from_attributes=True)
 
 
