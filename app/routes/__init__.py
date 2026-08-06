@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.routes.infra import router as infra_router
 from app.routes.debug import router as debug_router
 from app.routes.firewall import router as firewall_router
 from app.routes.network import router as network_router
@@ -10,6 +11,9 @@ from app.routes.vm_config import router as vm_config_router
 from app.routes.vms import vm_id_router, vms_router
 
 router = APIRouter()
+
+# /v1/infra/* — new surface goes on v1; v0 is legacy and shrinking.
+router.include_router(infra_router, prefix="/v1/infra")
 
 # /v0/admin/debug/*
 router.include_router(debug_router, prefix="/v0/admin/debug")
