@@ -8,7 +8,6 @@ the deployment still persists and preflight surfaces AUTH_FAILED later.
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
@@ -21,6 +20,11 @@ from app.core.errors import Range42Error, WorkspaceNonLocalFsError
 from app.core.logging import get_logger
 from app.core.models import Deployment, Project, ProxmoxHost
 from app.core.workspace import Workspace, WorkspaceError
+from app.core.workspace_secrets import (
+    VaultSeedError,
+    provision_host_token,
+    vault_seed,
+)
 from app.schemas.v1.common import Page
 from app.schemas.v1.deployments import DeploymentCreate, DeploymentOut
 
@@ -43,22 +47,6 @@ async def list_deployments(session: AsyncSession = Depends(_session),
         items=[DeploymentOut.model_validate(r, from_attributes=True) for r in rows],
         total=total, offset=offset, limit=limit,
     )
-
-
-def _restore_vault_pass(path: Path, prior: str | None) -> None:
-    """Undo a seed whose deployment never persisted.
-
-    Best-effort: a workspace left slightly dirty is recoverable, but raising
-    here would mask the original failure.
-    """
-    try:
-        if prior is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.write_text(prior)
-    except OSError:
-        log.warning("could not restore vault_pass.txt after a failed create",
-                    path=str(path))
 
 
 @router.post("/", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED)
@@ -164,44 +152,24 @@ async def create_deployment(payload: DeploymentCreate,
             details=[{"field": "payload", "reason": detail}],
         ) from e
 
-    # Seed the workspace vault password: deploy_trigger reads
-    # <ws>/secrets/vault_pass.txt to set ANSIBLE_VAULT_PASSWORD_FILE and to
-    # unlock the SSH keys for the run, and nothing else writes it. Absent or
-    # empty leaves an operator-seeded file alone.
-    vault_pass_file = ws.path / "secrets" / "vault_pass.txt"
-    prior_secret: str | None = None
-    seeded = False
-    if payload.secrets and payload.secrets.get("vault_password"):
-        try:
-            # Remember what was there. If the commit below fails, the row will
-            # not exist but the file would — and a later create that supplies
-            # no password skips this branch entirely, silently adopting a
-            # secret that belongs to a deployment that never existed.
-            if vault_pass_file.is_file():
-                prior_secret = vault_pass_file.read_text()
-            vault_pass_file.parent.mkdir(parents=True, exist_ok=True)
-            # chmod before the content so the secret is never briefly
-            # world-readable.
-            vault_pass_file.touch(mode=0o600, exist_ok=True)
-            vault_pass_file.chmod(0o600)
-            vault_pass_file.write_text(payload.secrets["vault_password"])
-            seeded = True
-        except OSError as e:
-            await session.rollback()
-            raise Range42Error(
-                error="workspace_error",
-                code="VAULT_SEED_FAILED",
-                status=500,
-                message="Could not write the workspace vault password",
-                details=[{"field": "secrets.vault_password", "reason": str(e)}],
-            ) from e
-
+    # The password is durable iff the row is — vault_seed reverts the file
+    # if the commit does not happen. See app/core/workspace_secrets.
     try:
-        await session.commit()
+        with vault_seed(ws.path, payload.secrets):
+            await session.commit()
+    except VaultSeedError as e:
+        await session.rollback()
+        raise Range42Error(
+            error="workspace_error",
+            code="VAULT_SEED_FAILED",
+            status=500,
+            message="Could not write the workspace vault password",
+            details=[{"field": "secrets.vault_password", "reason": e.reason}],
+        ) from e
+    except Range42Error:
+        raise
     except Exception as e:
         await session.rollback()
-        if seeded:
-            _restore_vault_pass(vault_pass_file, prior_secret)
         raise Range42Error(
             error="workspace_error",
             code="DEPLOYMENT_PERSIST_FAILED",
@@ -209,29 +177,9 @@ async def create_deployment(payload: DeploymentCreate,
             message="Deployment could not be persisted",
             details=[{"field": "deployment", "reason": str(e)}],
         ) from e
-    await session.refresh(row)
 
-    # Best-effort proxmox token provisioning: requires an app-level vault
-    # password file and a proxmox_token secret in the payload. Missing
-    # pieces fall through silently — preflight catches the failure mode.
-    try:
-        from app.core.vault import VaultManager
-        vp = VaultManager().vault_file
-        if (vp
-                and Path(vp).exists()
-                and payload.secrets
-                and "proxmox_token" in payload.secrets):
-            from app.core.proxmox_secrets import provision_proxmox_token
-            provision_proxmox_token(
-                workspace=ws.path,
-                host_id=payload.target_host_id,
-                api_url="",
-                token_id="",
-                token_secret=payload.secrets["proxmox_token"],
-                vault_password_file=Path(vp),
-            )
-    except Exception:  # noqa: BLE001 — best-effort; preflight is source of truth
-        pass
+    await session.refresh(row)
+    provision_host_token(ws.path, payload.target_host_id, payload.secrets)
 
     return DeploymentOut.model_validate(row, from_attributes=True)
 
