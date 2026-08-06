@@ -2548,6 +2548,42 @@
         }
       }
     },
+    "/v1/projects/{project_id}/heartbeat": {
+      "post": {
+        "tags": [
+          "v1 projects"
+        ],
+        "summary": "Project Heartbeat",
+        "description": "Liveness ping for an open editing session (#106).\n\nThe edit lock itself is **not** held here: it lives in the git-backed\nproject repo, written by the client (``ProjectRepoAdapter.writeLock``).\nThis endpoint answers one question for the SharedWorker that polls it \u2014\n\"is the backend reachable and does it still know this project?\" \u2014 so the\nUI can distinguish a live session from a stale one.\n\nDeliberately does no writes: a heartbeat must stay cheap enough to run\non a short interval per open editor, and it carries no state the lock\nfile does not already hold.\n\n:returns: 204 when the project exists; 404 otherwise, which the worker\n    treats as a failed tick and eventually surfaces as a stale session.",
+        "operationId": "project_heartbeat_v1_projects__project_id__heartbeat_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/projects/{project_id}/compose": {
       "post": {
         "tags": [
