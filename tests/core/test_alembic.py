@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -7,8 +8,12 @@ def test_alembic_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{db}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     repo = Path(__file__).resolve().parents[2]
-    subprocess.run(["alembic", "upgrade", "head"], cwd=repo, check=True,
-                       capture_output=True, text=True)
+    # Invoke alembic via the active interpreter (sys.executable -m) so the
+    # migration runs against the venv's SQLAlchemy, not whatever bare
+    # ``alembic`` happens to resolve to on PATH (e.g. a stale ~/.local copy).
+    alembic = [sys.executable, "-m", "alembic"]
+    subprocess.run(alembic + ["upgrade", "head"], cwd=repo, check=True,
+                   capture_output=True, text=True)
     assert db.exists()
-    subprocess.run(["alembic", "downgrade", "base"], cwd=repo, check=True,
-                       capture_output=True, text=True)
+    subprocess.run(alembic + ["downgrade", "base"], cwd=repo, check=True,
+                   capture_output=True, text=True)
