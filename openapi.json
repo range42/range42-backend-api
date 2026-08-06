@@ -11,6 +11,26 @@
     "version": "v0.1"
   },
   "paths": {
+    "/v1/infra/mirror/health": {
+      "get": {
+        "tags": [
+          "infra"
+        ],
+        "summary": "APT mirror health",
+        "description": "Returns health status and basic stats for the local APT mirror.",
+        "operationId": "infra_mirror_health_v1_infra_mirror_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/v0/admin/debug/ping": {
       "post": {
         "tags": [

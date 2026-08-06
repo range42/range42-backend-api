@@ -52,3 +52,6 @@ logs/
 # claude
 CLAUDE.md
 
+
+# Ansible collections installed locally via ansible-galaxy (see requirements.yml)
+collections/
