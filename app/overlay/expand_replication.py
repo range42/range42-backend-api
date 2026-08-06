@@ -62,6 +62,62 @@ def _num_to_str(value: float) -> str:
     return str(value)
 
 
+_UNDEFINED = object()
+
+
+def _js_str(value: object) -> str:
+    """Stringify a node id / notify target the way JS template literals do."""
+    if value is _UNDEFINED:
+        return "undefined"
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, float):
+        return _num_to_str(value)
+    return str(value)
+
+
+def _num_to_str_value(v: float) -> float | int:
+    """Keep integral results as ints so JSON matches JS number output."""
+    return int(v) if isinstance(v, float) and v.is_integer() else v
+
+
+def _js_number(value: object) -> float | None:
+    """Number() semantics: null is 0, booleans are 0/1, junk strings are NaN."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            return float(value.strip() or 0)
+        except ValueError:
+            return None
+    return None
+
+
+def _js_parse_int(value: object) -> int | None:
+    """parseInt() semantics: leading integer wins, anything else is NaN.
+
+    JS serializes NaN to null, so that is what the caller stores. Python's
+    int() would raise instead, which surfaced as a 500 from the compose
+    preview where TS quietly produced null.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if not isinstance(value, str):
+        return None
+    m = re.match(r"[ \t\n\r\f\v]*([+-]?[0-9]+)", value)
+    return int(m.group(1)) if m else None
+
+
 def _eval_expr(expr: str, team_id: int, bridge_base: float) -> str:
     """Left-to-right numeric expression over team_id/bridge_base with + - *.
 
@@ -116,33 +172,46 @@ def _apply_offsets(node: dict, team_id: int,
                    namespace_sink: list[str],
                    bridge_base: int) -> dict:
     out = deepcopy(node)
-    out["id"] = f"{node['id']}__team_{team_id}"
-    cfg = out.get("config") or {}
-    if "name_template" in cfg:
+    raw_id = node["id"] if "id" in node else _UNDEFINED
+    out["id"] = f"{_js_str(raw_id)}__team_{team_id}"
+    raw_cfg = out.get("config")
+    cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
+    if isinstance(cfg.get("name_template"), str):
         cfg["name"] = _render_template(
             cfg.pop("name_template"), team_id, bridge_base)
-    if "vlan_template" in cfg:
-        cfg["vlan"] = int(_render_template(
+    if isinstance(cfg.get("vlan_template"), str):
+        cfg["vlan"] = _js_parse_int(_render_template(
             cfg.pop("vlan_template"), team_id, bridge_base))
-    if id_offset and "vmid" in id_offset and "vm_id" in cfg:
-        cfg["vm_id"] = int(cfg["vm_id"]) + id_offset["vmid"] * team_id
+    if (isinstance(id_offset, dict)
+            and isinstance(id_offset.get("vmid"), (int, float))
+            and not isinstance(id_offset.get("vmid"), bool)
+            and "vm_id" in cfg):
+        base_vmid = _js_number(cfg["vm_id"])
+        if base_vmid is not None:
+            cfg["vm_id"] = _num_to_str_value(
+                base_vmid + int(id_offset["vmid"]) * team_id)
     out["config"] = cfg
     for tkey, okey in _NODE_TEMPLATES:
         if isinstance(out.get(tkey), str):
             out[okey] = _render_template(out.pop(tkey), team_id, bridge_base)
     if isinstance(out.get("networks"), list):
         for nw in out["networks"]:
-            if "ip_template" in nw:
+            if isinstance(nw, dict) and isinstance(nw.get("ip_template"), str):
                 nw["ip"] = _render_template(
                     nw.pop("ip_template"), team_id, bridge_base)
     # Rewrite play-level notify targets inside attachments.
-    for att in out.get("attachments") or []:
+    atts = out.get("attachments")
+    for att in atts if isinstance(atts, list) else []:
+        if not isinstance(att, dict):
+            continue
         if isinstance(att.get("notify"), list):
-            att["notify"] = [f"{n}__team_{team_id}" for n in att["notify"]]
+            att["notify"] = [f"{_js_str(n)}__team_{team_id}"
+                             for n in att["notify"]]
         elif isinstance(att.get("notify"), str):
             att["notify"] = f"{att['notify']}__team_{team_id}"
         if att.get("ansible_primitive") == "handler":
-            base_ns = att.get("handler_namespace") or ""
+            raw_ns = att.get("handler_namespace")
+            base_ns = raw_ns if isinstance(raw_ns, str) else ""
             ns = f"{base_ns}__team_{team_id}" if base_ns else f"team_{team_id}"
             att["handler_namespace"] = ns
             namespace_sink.append(ns)
@@ -154,8 +223,12 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
                      bridge_base: int) -> list[dict]:
     result: list[dict] = []
     for n in nodes:
-        rep = n.get("replication") or {}
-        scope = rep.get("scope", "shared")
+        raw_rep = n.get("replication")
+        rep = raw_rep if isinstance(raw_rep, dict) else {}
+        # `scope:` with no value is a present key holding None — .get(k, default)
+        # would return None and fall through to the per_team branch, expanding
+        # a node the author marked shared. TS coalesces with ??; mirror that.
+        scope = rep.get("scope") or "shared"
         if scope == "shared":
             if n.get("kind") == "group" and isinstance(n.get("children"), list):
                 nn = deepcopy(n)
@@ -166,7 +239,8 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
                 result.append(deepcopy(n))
             continue
         # per_team
-        id_offset = rep.get("id_offset") or {}
+        raw_offset = rep.get("id_offset")
+        id_offset = raw_offset if isinstance(raw_offset, dict) else {}
         for tid in range(1, team_count + 1):
             if n.get("kind") == "group" and isinstance(n.get("children"), list):
                 expanded_children = [
@@ -186,6 +260,8 @@ def _walk_and_expand(nodes: list[dict], team_count: int,
 
 
 def expand_replication(doc: dict, team_count: int) -> ExpandResult:
+    if not isinstance(team_count, int) or isinstance(team_count, bool):
+        raise ValueError(f"invalid team_count: {team_count!r}")
     if team_count < 1:
         raise ValueError(f"invalid team_count: {team_count}")
     out = deepcopy(doc)
@@ -196,8 +272,10 @@ def expand_replication(doc: dict, team_count: int) -> ExpandResult:
     raw_base = doc.get("bridge_base")
     bridge_base = raw_base if isinstance(raw_base, (int, float)) and not isinstance(
         raw_base, bool) else DEFAULT_BRIDGE_BASE
+    raw_nodes = doc.get("nodes")
     out["nodes"] = _walk_and_expand(
-        doc.get("nodes", []), team_count, namespace_sink, bridge_base)
+        raw_nodes if isinstance(raw_nodes, list) else [],
+        team_count, namespace_sink, bridge_base)
     return {
         "plays_per_team": team_count,
         "handler_namespaces": namespace_sink,
