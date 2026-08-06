@@ -225,10 +225,17 @@ def _resolve_file(
     #
 
     # if not is_init_yaml:
-    if is_init_yaml is False:
-        main_filepath = (actions_dir / action_name / "main.yml").resolve(strict=True)
-    else:
-        main_filepath = (actions_dir / action_name / "init.yml").resolve(strict=True)
+    filename = "init.yml" if is_init_yaml else "main.yml"
+    try:
+        # strict=True keeps the symlink semantics the traversal check below
+        # relies on, but it raises before the "not found" branch further down
+        # could ever run — so a typo'd bundle surfaced as an unhandled
+        # FileNotFoundError, i.e. a 500 from an endpoint documented as 400.
+        main_filepath = (actions_dir / action_name / filename).resolve(strict=True)
+    except FileNotFoundError as e:
+        err = f":: err - PLAYBOOK NOT FOUND : {action_name}/{filename}"
+        logger.error(err)
+        raise HTTPException(status_code=400, detail=err) from e
 
     #
     # checks - attempt to avoid file - path traversal injections + symlinks injections

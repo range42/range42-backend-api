@@ -65,13 +65,17 @@ class TestResolvePlaybooks:
         """Dotted <subject>.<verb>.<object> names pass format validation
         (range42-playbooks#133) and fail only on the missing file.
 
-        Asserting FileNotFoundError specifically is what makes this test
-        meaningful: the old regex rejected dots with HTTPException(400), so
-        a `raises((HTTPException, FileNotFoundError))` would pass either way.
+        Both failures are now HTTPException(400), so the assertion has to be
+        on the *detail*: NOT FOUND means the name was accepted and only the
+        file was missing, where the old regex would have said INVALID FORMAT.
+        Without that distinction this test passes either way.
         """
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(HTTPException) as exc_info:
             resolve_bundles_playbook(
                 "generic/systems.baseline.docker_host", "www_app")
+        assert exc_info.value.status_code == 400
+        assert "PLAYBOOK NOT FOUND" in exc_info.value.detail
+        assert "INVALID ACTION NAME" not in exc_info.value.detail
 
     def test_rejects_dot_segment(self):
         with pytest.raises(HTTPException) as exc_info:

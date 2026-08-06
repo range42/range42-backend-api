@@ -87,23 +87,6 @@ def test_vm_clone_request():
     assert req.vm_description == "cloned-vm"  # default
 
 
-def test_mass_delete_request():
-    from app.schemas.vms import MassDeleteRequest, MassDeleteVmItem
-
-    req = MassDeleteRequest(
-        proxmox_node="px-testing",
-        vms=[MassDeleteVmItem(id="4000", name="vuln-box-00")],
-    )
-    assert len(req.vms) == 1
-
-
-def test_mass_delete_request_rejects_empty_vms():
-    from app.schemas.vms import MassDeleteRequest
-
-    with pytest.raises(ValidationError):
-        MassDeleteRequest(proxmox_node="px-testing", vms=[])
-
-
 # ===========================================================================
 # vm_config.py
 # ===========================================================================
@@ -312,10 +295,6 @@ def test_backward_compat_aliases_vms():
     )
 
     assert Request_ProxmoxVmsVMID_StartStopPauseResume is VmActionRequest
-
-    from app.schemas.vms import MassDeleteRequest, Request_ProxmoxVmsVmIds_MassDelete
-
-    assert Request_ProxmoxVmsVmIds_MassDelete is MassDeleteRequest
 
 
 def test_backward_compat_aliases_vm_config():

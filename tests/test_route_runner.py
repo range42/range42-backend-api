@@ -73,3 +73,18 @@ class TestRunBundle:
         """
         resp = client.post(f"/v0/admin/run/bundles/{name}/run", json=BODY)
         assert resp.status_code == 400
+
+
+class TestMissingBundle:
+    """A typo'd bundle name is a user error, not a server fault (#119)."""
+
+    def test_missing_bundle_is_400_not_500(self, client):
+        resp = client.post(
+            "/v0/admin/run/bundles/generic/does.not.exist/run", json=BODY)
+        assert resp.status_code == 400, resp.text
+        assert "PLAYBOOK NOT FOUND" in str(resp.json())
+
+    def test_missing_scenario_is_400_not_500(self, client):
+        resp = client.post(
+            "/v0/admin/run/scenarios/no_such_scenario/run", json=BODY)
+        assert resp.status_code == 400, resp.text
