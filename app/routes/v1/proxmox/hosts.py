@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AuthFailedError, Range42Error
@@ -45,6 +46,26 @@ def _row_to_out(row: ProxmoxHost) -> HostOut:
         added_at=row.added_at,
         last_health_check=health,
     )
+
+
+async def _find_host_by_name(
+    session: AsyncSession, name: str
+) -> ProxmoxHost | None:
+    return (
+        await session.execute(
+            select(ProxmoxHost).where(ProxmoxHost.name == name)
+        )
+    ).scalar_one_or_none()
+
+
+def _refresh_host(row: ProxmoxHost, payload: HostIn, overrides_json: str | None) -> None:
+    """Carry a re-registration onto an existing row, id and added_at intact."""
+    row.api_url = str(payload.api_url)
+    row.node_name = payload.node_name
+    row.token_ref = payload.token_ref
+    row.token_scope = payload.token_scope
+    row.default_bridge = payload.default_bridge
+    row.protected_vmids_override_json = overrides_json
 
 
 @router.get("/hosts", response_model=Page[HostOut])
@@ -97,27 +118,19 @@ async def create_host(
         else None
     )
 
-    existing = (
-        await session.execute(
-            select(ProxmoxHost).where(ProxmoxHost.name == payload.name)
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        existing.api_url = str(payload.api_url)
-        existing.node_name = payload.node_name
-        existing.token_ref = payload.token_ref
-        existing.token_scope = payload.token_scope
-        existing.default_bridge = payload.default_bridge
-        existing.protected_vmids_override_json = overrides_json
+    async def _update_in_place(row: ProxmoxHost) -> HostOut:
         # added_at deliberately untouched: it records when this host was first
         # registered, and the dedupe migration keys on it.
+        _refresh_host(row, payload, overrides_json)
         await session.commit()
-        await session.refresh(existing)
-        log.info(
-            "proxmox_host_reregistered", host_id=existing.id, name=existing.name
-        )
+        await session.refresh(row)
+        log.info("proxmox_host_reregistered", host_id=row.id, name=row.name)
         response.status_code = status.HTTP_200_OK
-        return _row_to_out(existing)
+        return _row_to_out(row)
+
+    existing = await _find_host_by_name(session, payload.name)
+    if existing is not None:
+        return await _update_in_place(existing)
 
     row = ProxmoxHost(
         id=uuid.uuid4().hex[:16],
@@ -130,7 +143,19 @@ async def create_host(
         protected_vmids_override_json=overrides_json,
     )
     session.add(row)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Lost the race: another request registered this name between the
+        # lookup above and this commit. Recover into the update path instead
+        # of surfacing a 500 — the caller asked for a registration and one
+        # now exists, which is the outcome they wanted.
+        await session.rollback()
+        winner = await _find_host_by_name(session, payload.name)
+        if winner is None:
+            raise
+        log.info("proxmox_host_register_race", name=payload.name, host_id=winner.id)
+        return await _update_in_place(winner)
     await session.refresh(row)
     return _row_to_out(row)
 

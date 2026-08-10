@@ -32,11 +32,13 @@ def db_at_0001(tmp_path, monkeypatch):
     return db
 
 
-def _insert_host(conn, host_id, name, added_at, token):
+def _insert_host(
+    conn, host_id, name, added_at, token, api_url="https://pve:8006", node="pve"
+):
     conn.execute(
         "INSERT INTO proxmox_hosts (id, name, api_url, node_name, token_ref,"
         " default_bridge, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (host_id, name, "https://pve:8006", "pve", token, "vmbr0", added_at),
+        (host_id, name, api_url, node, token, "vmbr0", added_at),
     )
 
 
@@ -119,3 +121,41 @@ def test_upgrade_is_a_no_op_on_a_database_with_no_duplicates(db_at_0001):
 
     assert hosts == {"pve01": "h1", "pve02": "h2"}
     assert deployments == {"dep-a": "h1"}
+
+
+def test_upgrade_carries_the_newest_credentials_onto_the_surviving_row(db_at_0001):
+    """Keep the oldest id, but not the oldest credentials.
+
+    Duplicates accumulated one per scenario re-run, so the LAST row holds the
+    token the operator is actually using. Keeping the first row wholesale would
+    resurrect a token that may have been rotated away, and every deployment
+    repointed at it would start failing auth the moment the migration ran.
+    """
+    from alembic import command
+
+    with sqlite3.connect(db_at_0001) as conn:
+        _insert_host(
+            conn, "oldest", "pve01", "2026-06-01 00:00:00", "tok-revoked",
+            api_url="https://old-pve:8006", node="old-node",
+        )
+        _insert_host(
+            conn, "newest", "pve01", "2026-08-01 00:00:00", "tok-current",
+            api_url="https://pve01.lan:8006", node="pve-node-2",
+        )
+        conn.commit()
+
+    command.upgrade(_alembic_config(), "head")
+
+    with sqlite3.connect(db_at_0001) as conn:
+        row = conn.execute(
+            "SELECT id, added_at, api_url, node_name, token_ref FROM proxmox_hosts"
+        ).fetchone()
+
+    host_id, added_at, api_url, node_name, token = row
+    # identity and registration date stay with the row deployments point at
+    assert host_id == "oldest"
+    assert added_at.startswith("2026-06-01")
+    # ...but the connection details come from the most recent registration
+    assert api_url == "https://pve01.lan:8006"
+    assert node_name == "pve-node-2"
+    assert token == "tok-current"

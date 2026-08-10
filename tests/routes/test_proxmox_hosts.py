@@ -239,3 +239,65 @@ async def test_a_second_host_under_a_different_name_is_still_created(
             assert listing.json()["total"] == 2
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_losing_the_race_on_a_new_name_still_upserts(tmp_path, monkeypatch):
+    """Two concurrent registrations of the same new name must not 500.
+
+    WEB_CONCURRENCY=1 keeps this to one process, but asyncio still interleaves
+    across the await between the duplicate check and the commit: both requests
+    can find nothing and both take the insert path. The loser of that race hits
+    uq_proxmox_host_name and has to recover into the update path rather than
+    surfacing an IntegrityError.
+    """
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as c:
+            first = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=winner",
+                },
+            )
+            assert first.status_code == 201, first.text
+
+            # Blind ONLY the pre-check, and only once: that is exactly what the
+            # racing request sees. The recovery path re-reads and must find the
+            # row the winner committed.
+            import app.routes.v1.proxmox.hosts as hosts_mod
+
+            real_lookup = hosts_mod._find_host_by_name
+            seen = {"calls": 0}
+
+            async def _blind_first_lookup(session, name):
+                seen["calls"] += 1
+                if seen["calls"] == 1:
+                    return None
+                return await real_lookup(session, name)
+
+            monkeypatch.setattr(
+                hosts_mod, "_find_host_by_name", _blind_first_lookup
+            )
+
+            second = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=loser",
+                },
+            )
+            assert second.status_code == 200, second.text
+            assert second.json()["id"] == first.json()["id"]
+
+            listing = await c.get("/v1/proxmox/hosts")
+            assert listing.json()["total"] == 1
+    finally:
+        await dbmod.dispose_engine()

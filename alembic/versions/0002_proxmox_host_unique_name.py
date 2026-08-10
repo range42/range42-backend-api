@@ -37,27 +37,58 @@ def upgrade() -> None:
         sa.text("SELECT id, name FROM proxmox_hosts ORDER BY name, added_at, id")
     ).fetchall()
 
-    keepers: dict[str, str] = {}
+    groups: dict[str, list[str]] = {}
     for host_id, name in rows:
-        keeper_id = keepers.setdefault(name, host_id)
-        if keeper_id == host_id:
-            continue
+        groups.setdefault(name, []).append(host_id)
 
-        moved = conn.execute(
-            sa.text(
-                "UPDATE deployments SET target_host_id = :keeper"
-                " WHERE target_host_id = :loser"
-            ),
-            {"keeper": keeper_id, "loser": host_id},
-        ).rowcount
+    for name, ids in groups.items():
+        if len(ids) == 1:
+            continue
+        keeper_id, *loser_ids = ids
+
+        # The id is the oldest row's, because deployments reference it. The
+        # connection details are the NEWEST row's: duplicates accumulated one
+        # per scenario re-run, so the last registration holds the credentials
+        # in force. Keeping the first row wholesale would resurrect a token
+        # that may since have been rotated away, and every deployment
+        # repointed at it would start failing auth the moment this ran.
         conn.execute(
-            sa.text("DELETE FROM proxmox_hosts WHERE id = :loser"),
-            {"loser": host_id},
+            sa.text(
+                "UPDATE proxmox_hosts SET"
+                "   api_url = latest.api_url,"
+                "   node_name = latest.node_name,"
+                "   token_ref = latest.token_ref,"
+                "   token_scope = latest.token_scope,"
+                "   default_bridge = latest.default_bridge,"
+                "   protected_vmids_override_json ="
+                "       latest.protected_vmids_override_json,"
+                "   last_health_check_json = latest.last_health_check_json"
+                " FROM (SELECT * FROM proxmox_hosts WHERE id = :newest) AS latest"
+                " WHERE proxmox_hosts.id = :keeper"
+            ),
+            {"newest": loser_ids[-1], "keeper": keeper_id},
         )
+
+        for loser_id in loser_ids:
+            moved = conn.execute(
+                sa.text(
+                    "UPDATE deployments SET target_host_id = :keeper"
+                    " WHERE target_host_id = :loser"
+                ),
+                {"keeper": keeper_id, "loser": loser_id},
+            ).rowcount
+            conn.execute(
+                sa.text("DELETE FROM proxmox_hosts WHERE id = :loser"),
+                {"loser": loser_id},
+            )
+            log.info(
+                "proxmox_hosts: collapsed duplicate %r (%s) into %s, "
+                "repointed %d deployment(s)",
+                name, loser_id, keeper_id, moved,
+            )
         log.info(
-            "proxmox_hosts: collapsed duplicate %r (%s) into %s, "
-            "repointed %d deployment(s)",
-            name, host_id, keeper_id, moved,
+            "proxmox_hosts: %r kept id %s with the connection details from %s",
+            name, keeper_id, loser_ids[-1],
         )
 
     with op.batch_alter_table("proxmox_hosts") as batch:
