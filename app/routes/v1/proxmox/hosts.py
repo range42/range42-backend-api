@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,11 +68,57 @@ async def list_hosts(
 
 
 @router.post(
-    "/hosts", response_model=HostOut, status_code=status.HTTP_201_CREATED
+    "/hosts",
+    response_model=HostOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        200: {
+            "model": HostOut,
+            "description": "Host already registered under this name; updated in place.",
+        }
+    },
 )
 async def create_host(
-    payload: HostIn, session: AsyncSession = Depends(_session)
+    payload: HostIn,
+    response: Response,
+    session: AsyncSession = Depends(_session),
 ):
+    """Register a Proxmox host, or refresh the one already under that name.
+
+    The deploy bundle POSTs this on every scenario run, so it has to be
+    idempotent. Re-registering keeps the existing row's id — ``deployments``
+    reference it by FK — and returns 200 instead of 201. Credentials are part
+    of what gets refreshed: a rotated PVE token reaches the backend on the next
+    deploy rather than leaving it authenticating with a stale one.
+    """
+    overrides_json = (
+        json.dumps(payload.protected_vmids_override)
+        if payload.protected_vmids_override
+        else None
+    )
+
+    existing = (
+        await session.execute(
+            select(ProxmoxHost).where(ProxmoxHost.name == payload.name)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.api_url = str(payload.api_url)
+        existing.node_name = payload.node_name
+        existing.token_ref = payload.token_ref
+        existing.token_scope = payload.token_scope
+        existing.default_bridge = payload.default_bridge
+        existing.protected_vmids_override_json = overrides_json
+        # added_at deliberately untouched: it records when this host was first
+        # registered, and the dedupe migration keys on it.
+        await session.commit()
+        await session.refresh(existing)
+        log.info(
+            "proxmox_host_reregistered", host_id=existing.id, name=existing.name
+        )
+        response.status_code = status.HTTP_200_OK
+        return _row_to_out(existing)
+
     row = ProxmoxHost(
         id=uuid.uuid4().hex[:16],
         name=payload.name,
@@ -81,11 +127,7 @@ async def create_host(
         token_ref=payload.token_ref,
         token_scope=payload.token_scope,
         default_bridge=payload.default_bridge,
-        protected_vmids_override_json=(
-            json.dumps(payload.protected_vmids_override)
-            if payload.protected_vmids_override
-            else None
-        ),
+        protected_vmids_override_json=overrides_json,
     )
     session.add(row)
     await session.commit()

@@ -57,6 +57,11 @@ class ProxmoxHost(Base):
     protected_vmids_override_json: Mapped[str | None] = mapped_column(Text)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     last_health_check_json: Mapped[str | None] = mapped_column(Text)
+    # A host is identified by its name: the deploy bundle re-POSTs the same
+    # name on every scenario run, and deployments.target_host_id is a FK here,
+    # so a second row per re-run would strand earlier deployments on a host
+    # nobody updates. Uniqueness turns those re-runs into in-place updates.
+    __table_args__ = (UniqueConstraint("name", name="uq_proxmox_host_name"),)
 
 
 class Project(Base):

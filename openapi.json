@@ -3507,6 +3507,7 @@
           "v1 proxmox"
         ],
         "summary": "Create Host",
+        "description": "Register a Proxmox host, or refresh the one already under that name.\n\nThe deploy bundle POSTs this on every scenario run, so it has to be\nidempotent. Re-registering keeps the existing row's id \u2014 ``deployments``\nreference it by FK \u2014 and returns 200 instead of 201. Credentials are part\nof what gets refreshed: a rotated PVE token reaches the backend on the next\ndeploy rather than leaving it authenticating with a stale one.",
         "operationId": "create_host_v1_proxmox_hosts_post",
         "requestBody": {
           "required": true,
@@ -3535,6 +3536,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Host already registered under this name; updated in place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostOut"
                 }
               }
             }

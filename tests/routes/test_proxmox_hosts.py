@@ -120,3 +120,122 @@ async def test_health_unreachable_host_returns_unreachable_status(
             assert body["status"] == "unreachable"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_reseeding_the_same_host_updates_it_in_place(tmp_path, monkeypatch):
+    """A scenario re-run POSTs the same name; it must not pile up duplicates.
+
+    The id has to survive: deployments.target_host_id is a FK to it, so a new
+    row per re-run would strand every earlier deployment on a stale host.
+    """
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as c:
+            first = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=abc",
+                },
+            )
+            assert first.status_code == 201, first.text
+
+            second = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01.lan:8006",
+                    "node_name": "pve-node-2",
+                    "token_ref": "r42@pam!tok=rotated",
+                },
+            )
+            assert second.status_code == 200, second.text
+            assert second.json()["id"] == first.json()["id"]
+            # pydantic HttpUrl normalises a bare-host URL with a trailing slash
+            assert second.json()["api_url"] == "https://pve01.lan:8006/"
+            assert second.json()["node_name"] == "pve-node-2"
+
+            listing = await c.get("/v1/proxmox/hosts")
+            assert listing.json()["total"] == 1
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_reseeding_refreshes_a_rotated_token(tmp_path, monkeypatch):
+    """The stored PVE token must follow the re-seed, or deploys 401 forever."""
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as c:
+            await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=stale",
+                },
+            )
+            await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=fresh",
+                },
+            )
+
+        from sqlalchemy import select
+        from app.core.models import ProxmoxHost
+        async with dbmod.get_session_factory()() as session:
+            stored = (
+                await session.execute(select(ProxmoxHost.token_ref))
+            ).scalars().all()
+        assert stored == ["r42@pam!tok=fresh"]
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_a_second_host_under_a_different_name_is_still_created(
+    tmp_path, monkeypatch
+):
+    """Upsert keys on name only — a genuinely new host must still register."""
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as c:
+            a = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve01",
+                    "api_url": "https://pve01:8006",
+                    "node_name": "pve01",
+                    "token_ref": "r42@pam!tok=a",
+                },
+            )
+            b = await c.post(
+                "/v1/proxmox/hosts",
+                json={
+                    "name": "pve02",
+                    "api_url": "https://pve02:8006",
+                    "node_name": "pve02",
+                    "token_ref": "r42@pam!tok=b",
+                },
+            )
+            assert b.status_code == 201, b.text
+            assert b.json()["id"] != a.json()["id"]
+
+            listing = await c.get("/v1/proxmox/hosts")
+            assert listing.json()["total"] == 2
+    finally:
+        await dbmod.dispose_engine()
