@@ -42,7 +42,7 @@ from app.core.redaction import (
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
 from app.core.ssh_agent import unlock_workspace_keys
-from app.core.workspace import shred_envvars
+from app.core.attempt_cleanup import cleanup_attempt_credentials, record_attempt_cleanup
 from app.utils.checks_playbooks import resolve_scenarios_playbook
 
 logger = get_logger(__name__)
@@ -231,6 +231,14 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     runner = runner or DetachedRunner()
     handle = None
     runtime_vault = None
+
+    def cleanup() -> None:
+        # The in-memory handles also cover failures before metadata publication.
+        if ssh_agent is not None:
+            ssh_agent.close()
+        cleanup_runtime_vault(runtime_vault)
+        cleanup_attempt_credentials(ws, artifact_dir)
+
     try:
         # Save the original redaction context before the detached process can
         # emit output. Database credentials can rotate while it is running.
@@ -240,14 +248,22 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             os.fsync(stream.fileno())
         if scenario is not None:
             runtime_vault = prepare_runtime_vault(ws)
+        record_attempt_cleanup(artifact_dir, ssh_agent=ssh_agent, runtime_vault=runtime_vault)
         if runtime_run is not None:
             from app.core.runtime_runner import recheck_runtime_run
             await recheck_runtime_run(dep, attempt, target_host, runtime_run)
-        handle = await runner.start(
+        launch = asyncio.create_task(runner.start(
             private_data_dir=artifact_dir,
             extravars=extravars,
             envvars=envvars,
-        )
+        ))
+        try:
+            handle = await asyncio.shield(launch)
+        except asyncio.CancelledError:
+            # Complete process/PID publication if shutdown overlaps spawning.
+            # The next API instance can then adopt the independent runner.
+            handle = await launch
+            raise
         (artifact_dir / "pid").write_text(str(handle.pid or 0))
         running = await mark_attempt_running(
             attempt_id=attempt.id, pid=handle.pid, artifact_dir=artifact_dir,
@@ -256,22 +272,18 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         if not running:
             # Cancellation can arrive while Git/runner setup is in progress.
             await handle.kill()
-            cleanup_runtime_vault(runtime_vault)
+            cleanup()
             await finish_attempt(attempt_id=attempt.id, rc=None)
-            if ssh_agent is not None:
-                ssh_agent.close()
-            cleanup_runtime_vault(runtime_vault)
-            for path in ("env/envvars", "env/extravars", "command", "redaction.json"):
-                shred_envvars(artifact_dir / path)
             return
+    except asyncio.CancelledError:
+        if handle is None:
+            cleanup()
+        # A launched runner keeps its credentials and lock through API shutdown.
+        raise
     except BaseException:
         if handle is not None:
             await handle.kill()
-        if ssh_agent is not None:
-            ssh_agent.close()
-        cleanup_runtime_vault(runtime_vault)
-        for path in ("env/envvars", "env/extravars", "command", "redaction.json"):
-            shred_envvars(artifact_dir / path)
+        cleanup()
         raise
 
     layers = [ConfigDenylistLayer(settings.redaction_denylist),
@@ -292,13 +304,14 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             attempt_id=attempt_id, deployment_id=deployment_id, stop=stop,
         ))
         rc = None
+        detached = False
         try:
             rc = await handle.wait()
             stop.set()
             await task_watch
             await task_lock
             # Release shared runtime files before the lock permits another run.
-            cleanup_runtime_vault(runtime_vault)
+            cleanup()
             runtime_result = {}
             if runtime_run is not None:
                 from app.core.runtime_completion import observe_runtime_completion
@@ -310,43 +323,24 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             await finish_attempt(attempt_id=attempt_id, rc=rc, event_cursor_tip=cursor)
             logger.info("attempt finished", attempt_id=attempt_id, rc=rc)
         except asyncio.CancelledError:
-            # Graceful shutdown cancels local attempts; hard crashes are
-            # recovered using process identity and durable runner artifacts.
-            await handle.kill()
-            cleanup_runtime_vault(runtime_vault)
-            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, cancelled=True)
-            try:
-                cursor = writer.append({"event_type": "attempt_end", "payload": {
-                    "terminal_state": terminal_state, "rc": rc,
-                }}, attempt_id=attempt_id, deployment_id=deployment_id)
-                await finish_attempt(attempt_id=attempt_id, rc=rc, event_cursor_tip=cursor)
-            except OSError:
-                pass
+            # Stopping observation is not a user cancellation. The Cancel API
+            # signals the runner itself and records cancellation in the DB.
+            detached = True
             raise
         except Exception as exc:
             await handle.kill()
-            cleanup_runtime_vault(runtime_vault)
+            cleanup()
             await finish_attempt(attempt_id=attempt_id, rc=rc, error_code="ATTEMPT_MONITOR_FAILED")
             logger.warning("attempt monitor failed", attempt_id=attempt_id,
                            exception_type=type(exc).__name__)
         finally:
             stop.set()
-            if not task_watch.done():
-                task_watch.cancel()
+            for task in (task_watch, task_lock):
+                if not task.done():
+                    task.cancel()
             await asyncio.gather(task_watch, task_lock, return_exceptions=True)
-            # Kill the ssh-agent started for this attempt (if any) so it does
-            # not outlive the deploy.
-            if ssh_agent is not None:
-                ssh_agent.close()
-            cleanup_runtime_vault(runtime_vault)
-            # Shred secrets-bearing files in the runner's private_data_dir.
-            # Defense-in-depth: prevents the snapshotted PAT / vault pass from
-            # sitting on disk after the attempt completes. Runs on both success
-            # and failure paths so cleanup is guaranteed.
-            shred_envvars(artifact_dir / "env" / "envvars")
-            shred_envvars(artifact_dir / "env" / "extravars")
-            shred_envvars(artifact_dir / "command")
-            shred_envvars(artifact_dir / "redaction.json")
+            if not detached:
+                cleanup()
 
     task = asyncio.create_task(_run())
     track_attempt(attempt_id, task)

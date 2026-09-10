@@ -21,9 +21,9 @@ from app.core.config import settings
 from app.core.db import get_session_factory
 from app.core.models import Attempt, Deployment, WorkspaceLock
 from app.core.attempt_lifecycle import TERMINAL_ATTEMPT_STATES, advance_attempt_cursor, finish_attempt, keep_attempt_lock
+from app.core.attempt_cleanup import cleanup_attempt_credentials
 from app.core.runner_detached import process_matches, signal_running_attempt
 from app.core.events import EventsWriter
-from app.core.workspace import shred_envvars
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -181,6 +181,7 @@ async def _finish_recovered(dep: Deployment, attempt: Attempt, artifact: Path, r
     if attempt.scope == "runtime":
         from app.core.runtime_completion import observe_runtime_completion
         runtime_result = await observe_runtime_completion(attempt.id, writer)
+    cleanup_attempt_credentials(Path(dep.workspace_path), artifact)
     state = await finish_attempt(
         attempt_id=attempt.id, rc=rc, unknown=rc is None,
         **({"error_code": "RUNNER_EXIT_UNOBSERVED"} if rc is None else runtime_result),
@@ -189,8 +190,6 @@ async def _finish_recovered(dep: Deployment, attempt: Attempt, artifact: Path, r
         "terminal_state": state, "rc": rc, "recovered": True,
     }}, attempt_id=attempt.id, deployment_id=dep.id)
     await finish_attempt(attempt_id=attempt.id, rc=rc, event_cursor_tip=cursor)
-    for relative in ("env/envvars", "env/extravars", "command", "redaction.json"):
-        shred_envvars(artifact / relative)
 
 
 async def reconcile_once() -> list[ReconcileResult]:

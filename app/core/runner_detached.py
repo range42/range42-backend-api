@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import select
 import shutil
 import signal
 import tempfile
@@ -63,6 +64,31 @@ def process_matches(artifact_dir: Path, pid: int) -> bool:
         return False
     current = _process_identity(pid)
     return current is not None and recorded == current
+
+
+def signal_process_identity(identity: dict, sig: int = signal.SIGTERM) -> bool:
+    """Signal an exact Linux process through a pidfd, never a recycled PID."""
+    pid = identity.get("pid")
+    if type(pid) is not int or not 0 < pid < 2**31:
+        return False
+    try:
+        descriptor = os.pidfd_open(pid)
+    except (AttributeError, OSError):
+        return False
+    try:
+        # Open first, then verify. Even if the original exits after this check,
+        # the descriptor cannot address a replacement that inherits its PID.
+        if _process_identity(pid) != identity:
+            return False
+        signal.pidfd_send_signal(descriptor, sig)
+        # Agents are daemonized, not waitable children. A readable pidfd means
+        # termination is complete before the workspace can start another run.
+        select.select([descriptor], [], [], 1)
+        return True
+    except (AttributeError, OSError):
+        return False
+    finally:
+        os.close(descriptor)
 
 
 class _LiteralCredential(str):

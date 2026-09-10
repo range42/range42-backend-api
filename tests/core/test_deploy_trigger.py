@@ -355,6 +355,7 @@ class _FakeAgent:
 
     def __init__(self) -> None:
         self.env = {"SSH_AUTH_SOCK": "/tmp/fake.sock"}
+        self.identity = None
         self.closed = False
 
     def close(self) -> None:

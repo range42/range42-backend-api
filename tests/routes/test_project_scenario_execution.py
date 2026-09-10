@@ -242,9 +242,9 @@ async def test_api_attempt_executes_real_pinned_content_and_persists_result(tmp_
 
 
 @pytest.mark.asyncio
-async def test_cancelling_background_monitor_stops_runner_and_releases_workspace(tmp_path, monkeypatch):
+async def test_api_shutdown_preserves_runner_credentials_and_workspace_lock(tmp_path, monkeypatch):
     app, dbmod = await _boot(tmp_path, monkeypatch)
-    from app.core.deploy_trigger import _BACKGROUND_TASKS, start_attempt
+    from app.core.deploy_trigger import start_attempt
 
     class PausedHandle:
         pid = None
@@ -261,24 +261,30 @@ async def test_cancelling_background_monitor_stops_runner_and_releases_workspace
 
     class PausedRunner:
         async def start(self, **kwargs):
+            artifact = kwargs["private_data_dir"]
+            (artifact / "env").mkdir(exist_ok=True)
+            (artifact / "env/envvars").write_text("private runner credentials")
             return handle
 
     try:
-        await seed_scenario(dbmod, tmp_path)
+        ws, _ = await seed_scenario(dbmod, tmp_path)
         async with dbmod.get_session_factory()() as session:
             attempt = Attempt(id="cancel-me", deployment_id="dep-1", scope="full", state="pending")
             session.add(attempt)
             await session.commit()
             await start_attempt(session, attempt=attempt, runner=PausedRunner())
         await asyncio.sleep(0)
-        tasks = list(_BACKGROUND_TASKS)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        assert handle.killed
+        from app.core.orphans import stop_observers
+        await stop_observers()
+        assert not handle.killed
+        assert (ws / "secrets/default_vault.yml").read_text() == "{}\n"
+        artifact = ws / "runner/cancel-me"
+        assert (artifact / "env/envvars").read_text() == "private runner credentials"
+        assert (artifact / "redaction.json").is_file()
+        assert (artifact / "cleanup.json").is_file()
         async with dbmod.get_session_factory()() as session:
-            assert (await session.get(Attempt, "cancel-me")).state == "cancelled"
-            assert (await session.execute(select(WorkspaceLock))).scalar_one_or_none() is None
+            assert (await session.get(Attempt, "cancel-me")).state == "deploying"
+            assert (await session.execute(select(WorkspaceLock))).scalar_one().owner == "attempt-cancel-me"
     finally:
         await dbmod.dispose_engine()
 
@@ -298,4 +304,86 @@ async def test_direct_trigger_rejects_unsupported_concrete_scope(tmp_path, monke
             assert exc.value.code == "PROJECT_SCENARIO_SCOPE_UNSUPPORTED"
     finally:
         await asyncio.gather(*list(_BACKGROUND_TASKS), return_exceptions=True)
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+@pytest.mark.parametrize("during_launch", [False, True])
+async def test_live_runner_survives_shutdown_and_recovery_keeps_user_cancel(tmp_path, monkeypatch, cancel, during_launch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    from app.core import orphans
+    from app.core.deploy_trigger import start_attempt
+    from app.core.runner_detached import _SubprocessHandle, _process_identity, record_process_identity
+    from app.core.ssh_agent import _start_agent
+    agent = _start_agent()
+    monkeypatch.setattr("app.core.deploy_trigger.unlock_workspace_keys", lambda *args: agent)
+    processes = []
+    spawned = asyncio.Event()
+    continue_launch = asyncio.Event()
+    if not during_launch:
+        continue_launch.set()
+
+    class LiveRunner:
+        async def start(self, *, private_data_dir, **kwargs):
+            (private_data_dir / "env").mkdir(exist_ok=True)
+            (private_data_dir / "env/envvars").write_text("private credentials")
+            proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "import time; time.sleep(30)",
+                                                        start_new_session=True)
+            processes.append(proc)
+            (private_data_dir / "pid").write_text(str(proc.pid))
+            record_process_identity(private_data_dir, proc.pid)
+            spawned.set()
+            await continue_launch.wait()
+            return _SubprocessHandle(private_data_dir, proc)
+
+    try:
+        ws, _ = await seed_scenario(dbmod, tmp_path)
+        (ws / "secrets").mkdir(parents=True, exist_ok=True)
+        (ws / "secrets/vault_pass.txt").write_text("test vault password")
+        async with dbmod.get_session_factory()() as session:
+            session.add(Attempt(id="survivor", deployment_id="dep-1", scope="full", state="pending"))
+            (await session.get(Deployment, "dep-1")).current_attempt_id = "survivor"
+            await session.commit()
+            starting = asyncio.create_task(start_attempt(session, attempt=await session.get(Attempt, "survivor"), runner=LiveRunner()))
+            await asyncio.wait_for(spawned.wait(), 5)
+            if during_launch:
+                stopping = asyncio.create_task(orphans.stop_observers())
+                await asyncio.sleep(0)
+                continue_launch.set()
+                await asyncio.wait_for(stopping, 5)
+                assert starting.cancelled()
+            else:
+                await starting
+                await asyncio.sleep(0)
+                await orphans.stop_observers()
+        assert processes[0].returncode is None
+        assert _process_identity(agent.pid) is not None
+        artifact = ws / "runner/survivor"
+        assert (artifact / "env/envvars").is_file()
+        await orphans.reconcile_once()
+        observer = orphans._TASKS["survivor"]
+        if cancel:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+                response = await client.post("/v1/deployments/dep-1/cancel")
+            assert response.status_code == 202, response.text
+        else:
+            (artifact / "rc").write_text("0")
+            processes[0].terminate()
+        await asyncio.wait_for(processes[0].wait(), 5)
+        await asyncio.wait_for(observer, 5)
+        assert _process_identity(agent.pid) is None
+        assert not (ws / "secrets/default_vault.yml").exists()
+        assert not (artifact / "env/envvars").exists()
+        assert not (artifact / "cleanup.json").exists()
+        async with dbmod.get_session_factory()() as session:
+            assert (await session.get(Attempt, "survivor")).state == ("cancelled" if cancel else "succeeded")
+            assert (await session.execute(select(WorkspaceLock))).scalar_one_or_none() is None
+    finally:
+        for proc in processes:
+            if proc.returncode is None:
+                proc.kill()
+            await proc.wait()
+        await orphans.stop_observers()
+        agent.close()
         await dbmod.dispose_engine()

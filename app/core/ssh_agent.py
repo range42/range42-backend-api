@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from app.core.logging import get_logger
+from app.core.runner_detached import _process_identity, signal_process_identity
 
 logger = get_logger(__name__)
 
@@ -47,26 +48,20 @@ class SshAgentHandle:
 
     pid: int
     env: dict[str, str] = field(default_factory=dict)
+    identity: dict | None = None
     _closed: bool = False
 
+    def __post_init__(self) -> None:
+        if self.identity is None:
+            self.identity = _process_identity(self.pid)
+
     def close(self) -> None:
-        """Kill the agent process. Idempotent."""
+        """Terminate only the original agent, including after PID reuse."""
         if self._closed:
             return
         self._closed = True
-        try:
-            subprocess.run(
-                ["ssh-agent", "-k"],
-                env={**self.env, "SSH_AGENT_PID": str(self.pid)},
-                capture_output=True, text=True, check=False,
-            )
-        except OSError:
-            pass
-        try:
-            os.kill(self.pid, 0)
-            os.kill(self.pid, 15)
-        except OSError:
-            pass
+        if self.identity is not None:
+            signal_process_identity(self.identity)
 
 
 def _passphrase_field_for(name: str) -> str | None:

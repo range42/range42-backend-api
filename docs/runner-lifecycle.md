@@ -41,8 +41,11 @@ lock. Existing or replaced user vaults are preserved.
 
 ## Restart recovery and infrastructure serialization
 
-Graceful cancellation of a local background monitor stops the process and
-persists `cancelled`. After a hard crash, `orphans.py` reads database attempts and
+Graceful API shutdown stops local observation while retaining the independent
+runner, its credentials and workspace ownership. The Cancel API separately
+signals the runner and persists `cancelled`. A shutdown overlapping process
+launch waits for its PID publication, so recovery can find it even before its
+database running-state update. After a restart, `orphans.py` reads database attempts and
 their `runner/<attempt-id>` artifacts. It adopts only a process whose persisted
 PID, Linux start time and boot ID still match. It restores workspace heartbeats
 and drains new events through the original redaction context. Persisted source
@@ -56,6 +59,25 @@ with runner credential files at terminal cleanup. Old artifacts without that
 context are not replayed as raw output. A process without verifiable identity
 is never adopted or signalled; operators must inspect an unknown outcome
 before retrying infrastructure changes.
+
+Before launch, private `cleanup.json` records the SSH-agent PID/start time/boot
+identity and the device/inode of a backend-created empty runtime vault. Recovery
+terminates only that original agent and removes only that unchanged vault, then
+removes runner credentials before releasing the workspace lock. Existing user
+vaults and replacement files are preserved. The agent is signalled through a
+Linux process descriptor after checking identity; unsupported kernels or denied
+process access skip termination rather than signal an unverified PID. This uses
+[Python's Linux pidfd API](https://docs.python.org/3/library/os.html#os.pidfd_open)
+and [descriptor-based signals](https://docs.python.org/3/library/signal.html#signal.pidfd_send_signal).
+Older attempts without cleanup metadata cannot safely reclaim an unrecorded
+SSH agent or claim ownership of an existing vault.
+
+The service manager must preserve child processes on API restart (the shared
+deployment uses systemd `KillMode=process`). A container or VM shutdown still
+stops its processes; persisted exit evidence then determines the recovered
+result. Release tooling must refuse to replace runtime files while any runner
+is active. Credential files remain private plaintext for the running Ansible
+process and are not described as encrypted execution storage.
 
 Full provisioning is serialized across this installation by a filesystem lock.
 The detached runner inherits its descriptor, so an API crash does not allow

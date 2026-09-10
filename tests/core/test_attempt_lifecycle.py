@@ -54,6 +54,41 @@ async def test_runner_start_persists_process_and_active_states(lifecycle_db, tmp
 
 
 @pytest.mark.asyncio
+async def test_recovered_exit_reclaims_owned_runtime_credentials_before_unlock(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle, orphans
+    from app.core.attempt_cleanup import record_attempt_cleanup
+    from app.core.runner_detached import _process_identity
+    from app.core.scenario_runtime import prepare_runtime_vault
+    from app.core.ssh_agent import _start_agent
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db)
+    artifact = tmp_path / "runner/att"
+    artifact.mkdir(parents=True)
+    (artifact / "rc").write_text("0")
+    (artifact / "pid").write_text("999999999")
+    (artifact / "redaction.json").write_text("[]")
+    agent = _start_agent()
+    vault = prepare_runtime_vault(tmp_path)
+    record_attempt_cleanup(artifact, ssh_agent=agent, runtime_vault=vault)
+    original_finish = orphans.finish_attempt
+
+    async def checked_finish(**kwargs):
+        assert _process_identity(agent.pid) is None
+        assert not vault.path.exists()
+        return await original_finish(**kwargs)
+
+    monkeypatch.setattr(orphans, "finish_attempt", checked_finish)
+    try:
+        await orphans.reconcile_once()
+        async with lifecycle_db() as session:
+            assert (await session.get(Attempt, "att")).state == "succeeded"
+            assert await session.get(WorkspaceLock, "dep") is None
+        assert not (artifact / "cleanup.json").exists()
+    finally:
+        agent.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("rc", "expected"), [(0, "succeeded"), (2, "failed"), (-15, "failed")])
 async def test_process_exit_persists_terminal_state_and_releases_lock(lifecycle_db, monkeypatch, rc, expected):
     from app.core import attempt_lifecycle
