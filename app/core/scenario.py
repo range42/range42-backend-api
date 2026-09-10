@@ -22,7 +22,7 @@ def validate_concrete_scope(deployment: Deployment, scope: str) -> None:
             message="_universal is retired. Save a concrete scenario and create a new deployment from its commit.",
         )
     if deployment.project_sha and scope not in (
-        "full", "configure", "teardown",
+        "full", "configure", "teardown", "runtime",
     ):
         raise Range42Error(
             error="scenario_scope_unsupported", code="PROJECT_SCENARIO_SCOPE_UNSUPPORTED", status=400,
@@ -84,6 +84,9 @@ async def prepare_project_scenario(
     scenario = resolve_project_scenario(
         root, subdir=project.subdir, scenario_label=deployment.scenario_label, scope=scope,
     )
+    if scope in {"full", "configure"}:
+        from app.core.bundle_attachments import validate_scenario_bundles
+        await asyncio.to_thread(validate_scenario_bundles, scenario.playbook.parent)
     if project_sha and project_sha.lower() != (deployment.project_sha or "").lower():
         baseline_root = await asyncio.to_thread(
             checkout_repository, repo_url=repo_url, sha=deployment.project_sha,

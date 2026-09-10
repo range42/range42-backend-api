@@ -31,6 +31,22 @@ def advance(tmp_path, changes):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["full", "configure"])
+async def test_project_preparation_rejects_unverified_bundle_import(tmp_path, monkeypatch, scope):
+    _, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        ws, _ = await seed_scenario(dbmod, tmp_path, extra_files={
+            "configure.yml": "- import_playbook: \"{{ lookup('env', 'RANGE42_BUNDLE_DIR') }}/generic/demo/main.yml\"\n",
+        })
+        async with dbmod.get_session_factory()() as session:
+            dep = await session.get(Deployment, "dep-1")
+            with pytest.raises(Range42Error, match="verified resolutions"):
+                await prepare_project_scenario(session, dep, dest=ws / "candidate", scope=scope)
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
 async def test_configure_runs_new_content_and_preserves_deployment_pin(tmp_path, monkeypatch):
     monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "1")
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")

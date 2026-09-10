@@ -34,6 +34,13 @@ def test_concrete_scenario_resolves_shared_repository_subdir(tmp_path):
     assert result.vmids == [5000, 5001]
 
 
+def test_internal_runtime_scope_resolves_pinned_manifest_without_executing_main(tmp_path):
+    scenario = scenario_tree(tmp_path, vmids=[5000])
+    result = resolve(tmp_path, scope="runtime")
+    assert result.playbook == scenario / "main.yml"
+    assert result.vmids == [5000]
+
+
 @pytest.mark.parametrize("name", ["main.yml", "hosts.yml", "manifest/scenario_vms.json"])
 def test_concrete_scenario_requires_its_own_files(tmp_path, name):
     scenario = scenario_tree(tmp_path)

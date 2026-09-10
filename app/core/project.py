@@ -61,7 +61,9 @@ def resolve_project_scenario(
             raise invalid(f"Scenario requires scenarios/{scenario_label}/{name}")
         return path
 
-    entrypoints = {"full": "main.yml", "configure": "configure.yml", "teardown": "teardown.yml"}
+    # Runtime operations inspect the pinned scenario, then execute a separate
+    # backend-owned wrapper; they never execute its provisioning entrypoint.
+    entrypoints = {"full": "main.yml", "configure": "configure.yml", "teardown": "teardown.yml", "runtime": "main.yml"}
     if scope not in entrypoints:
         raise Range42Error(code="PROJECT_SCENARIO_SCOPE_UNSUPPORTED", error="unsupported_scope",
                            message="Concrete scenarios support full, configure and teardown entrypoints")
