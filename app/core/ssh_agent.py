@@ -15,6 +15,8 @@ the runner's envvars and a ``close()`` to kill the agent when the attempt ends.
 from __future__ import annotations
 
 import os
+import re
+import signal
 import stat
 import subprocess
 import tempfile
@@ -24,6 +26,7 @@ from pathlib import Path
 import yaml
 
 from app.core.logging import get_logger
+from app.core.errors import RunnerSetupError
 from app.core.runner_detached import _process_identity, signal_process_identity
 
 logger = get_logger(__name__)
@@ -49,6 +52,8 @@ class SshAgentHandle:
     pid: int
     env: dict[str, str] = field(default_factory=dict)
     identity: dict | None = None
+    workspace: Path | None = None
+    socket_ownership: dict | None = None
     _closed: bool = False
 
     def __post_init__(self) -> None:
@@ -60,8 +65,61 @@ class SshAgentHandle:
         if self._closed:
             return
         self._closed = True
-        if self.identity is not None:
-            signal_process_identity(self.identity)
+        cleanup_agent(self.identity, self.workspace, self.socket_ownership)
+
+
+def cleanup_agent(identity: dict | None, workspace: Path | None,
+                  socket_ownership: dict | None) -> None:
+    """Stop only the owned process, then unlink only its original socket."""
+    if not isinstance(identity, dict):
+        return
+    pid = identity.get("pid")
+    if type(pid) is not int or not 0 < pid < 2**31:
+        return
+    # ssh-agent's SIGTERM handler blindly unlinks its original socket pathname.
+    # For owned sockets, bypass that handler and perform identity-checked
+    # deletion below so a replaced directory/file cannot be removed by it.
+    stop_signal = signal.SIGKILL if socket_ownership is not None else signal.SIGTERM
+    if not signal_process_identity(identity, stop_signal) and _process_identity(pid) is not None:
+        return  # Live, unverified process: preserve both it and its socket.
+    if workspace is None or not isinstance(socket_ownership, dict):
+        return  # Older attempts used ssh-agent's own temporary directory.
+    name = socket_ownership.get("directory")
+    if not isinstance(name, str) or not re.fullmatch(r"\.agent-[a-z0-9_]{8}", name):
+        return
+    fields = ("device", "inode", "socket_device", "socket_inode")
+    if any(type(socket_ownership.get(key)) is not int for key in fields):
+        return
+    try:
+        parent = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            directory = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                dir_fd=parent)
+            try:
+                info = os.fstat(directory)
+                if (info.st_dev, info.st_ino) != (socket_ownership["device"], socket_ownership["inode"]):
+                    return
+                try:
+                    sock = os.stat("s", dir_fd=directory, follow_symlinks=False)
+                except FileNotFoundError:
+                    pass  # ssh-agent normally removes its socket on SIGTERM.
+                else:
+                    if not stat.S_ISSOCK(sock.st_mode) or (sock.st_dev, sock.st_ino) != (
+                        socket_ownership["socket_device"], socket_ownership["socket_inode"],
+                    ):
+                        return
+                    os.unlink("s", dir_fd=directory)
+                # No recursive deletion: added files or a replaced directory
+                # belong to another owner and must remain untouched.
+                current = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                if (current.st_dev, current.st_ino) == (info.st_dev, info.st_ino):
+                    os.rmdir(name, dir_fd=parent)
+            finally:
+                os.close(directory)
+        finally:
+            os.close(parent)
+    except OSError:
+        pass
 
 
 def _passphrase_field_for(name: str) -> str | None:
@@ -96,9 +154,26 @@ def _decrypt_vault(vault_file: Path, vault_password_file: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _start_agent() -> SshAgentHandle:
-    r = subprocess.run(["ssh-agent", "-s"], capture_output=True, text=True,
-                       check=True)
+def _start_agent(workspace: Path | None = None) -> SshAgentHandle:
+    # systemd PrivateTmp removes /tmp contents when the API stops, even when
+    # KillMode=process preserves the runner and agent. Keep this socket with
+    # the workspace whose lease outlives the API, without weakening isolation.
+    directory = None
+    command = ["ssh-agent", "-s"]
+    if workspace is not None:
+        workspace = Path(workspace).resolve()
+        directory = Path(tempfile.mkdtemp(prefix=".agent-", dir=workspace))
+        socket = directory / "s"
+        if len(os.fsencode(socket)) >= 108:
+            directory.rmdir()
+            raise RunnerSetupError(message="Workspace path is too long for an SSH agent socket. Configure a shorter workspace root.")
+        command.extend(["-a", str(socket)])
+    try:
+        r = subprocess.run(command, capture_output=True, text=True, check=True)
+    except BaseException:
+        if directory is not None:
+            directory.rmdir()
+        raise
     sock = ""
     pid = 0
     for line in r.stdout.splitlines():
@@ -107,7 +182,14 @@ def _start_agent() -> SshAgentHandle:
             sock = line[len("SSH_AUTH_SOCK="):].split(";", 1)[0]
         elif line.startswith("SSH_AGENT_PID="):
             pid = int(line[len("SSH_AGENT_PID="):].split(";", 1)[0])
-    return SshAgentHandle(pid=pid, env={"SSH_AUTH_SOCK": sock})
+    handle = SshAgentHandle(pid=pid, env={"SSH_AUTH_SOCK": sock}, workspace=workspace)
+    if directory is not None:
+        info, socket_info = directory.stat(), (directory / "s").lstat()
+        handle.socket_ownership = {
+            "directory": directory.name, "device": info.st_dev, "inode": info.st_ino,
+            "socket_device": socket_info.st_dev, "socket_inode": socket_info.st_ino,
+        }
+    return handle
 
 
 def _ssh_add(key: Path, passphrase: str, agent_env: dict[str, str]) -> bool:
@@ -161,7 +243,7 @@ def unlock_workspace_keys(
         logger.warning("ssh_agent vault decrypt failed", error=str(exc))
         return None
 
-    handle = _start_agent()
+    handle = _start_agent(workspace)
     loaded = 0
     for key in keys:
         field_name = _passphrase_field_for(key.name)

@@ -7,9 +7,8 @@ from pathlib import Path
 import tempfile
 
 from app.core.logging import get_logger
-from app.core.runner_detached import signal_process_identity
 from app.core.scenario_runtime import RuntimeVaultPlaceholder, cleanup_runtime_vault
-from app.core.ssh_agent import SshAgentHandle
+from app.core.ssh_agent import SshAgentHandle, cleanup_agent
 from app.core.workspace import shred_envvars
 
 logger = get_logger(__name__)
@@ -21,6 +20,7 @@ def record_attempt_cleanup(artifact: Path, *, ssh_agent: SshAgentHandle | None,
     document = {
         "version": 1,
         "ssh_agent": ssh_agent.identity if ssh_agent is not None else None,
+        "ssh_socket": getattr(ssh_agent, "socket_ownership", None),
         "runtime_vault": ({"device": runtime_vault.device, "inode": runtime_vault.inode}
                           if runtime_vault is not None else None),
     }
@@ -51,7 +51,7 @@ def cleanup_attempt_credentials(workspace: Path, artifact: Path) -> None:
         document = {}
     identity = document.get("ssh_agent")
     if isinstance(identity, dict):
-        signal_process_identity(identity)
+        cleanup_agent(identity, workspace, document.get("ssh_socket"))
     vault = document.get("runtime_vault")
     if (isinstance(vault, dict) and type(vault.get("device")) is int
             and type(vault.get("inode")) is int):

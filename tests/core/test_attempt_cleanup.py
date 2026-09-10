@@ -1,6 +1,7 @@
 """Private runtime resources survive observation loss and are safely reclaimed."""
 import json
 import os
+from pathlib import Path
 
 from app.core.runner_detached import _process_identity
 from app.core.scenario_runtime import prepare_runtime_vault
@@ -24,7 +25,8 @@ def test_private_cleanup_metadata_reaps_agent_and_owned_vault(tmp_path):
     from app.core.attempt_cleanup import cleanup_attempt_credentials, record_attempt_cleanup
     artifact = tmp_path / "runner/attempt"
     artifact.mkdir(parents=True)
-    agent = _start_agent()
+    agent = _start_agent(tmp_path)
+    socket_directory = Path(agent.env["SSH_AUTH_SOCK"]).parent
     vault = prepare_runtime_vault(tmp_path)
     try:
         record_attempt_cleanup(artifact, ssh_agent=agent, runtime_vault=vault)
@@ -37,6 +39,7 @@ def test_private_cleanup_metadata_reaps_agent_and_owned_vault(tmp_path):
         assert _process_identity(agent.pid) is None
         assert not vault.path.exists()
         assert not metadata.exists()
+        assert not socket_directory.exists()
         cleanup_attempt_credentials(tmp_path, artifact)  # idempotent
     finally:
         agent.close()

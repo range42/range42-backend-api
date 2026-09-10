@@ -61,8 +61,10 @@ is never adopted or signalled; operators must inspect an unknown outcome
 before retrying infrastructure changes.
 
 Before launch, private `cleanup.json` records the SSH-agent PID/start time/boot
-identity and the device/inode of a backend-created empty runtime vault. Recovery
-terminates only that original agent and removes only that unchanged vault, then
+identity, its workspace socket directory and device/inode identities, and the
+device/inode of a backend-created empty runtime vault. Recovery
+terminates only that original agent and removes only its original socket and
+unchanged vault, then
 removes runner credentials before releasing the workspace lock. Existing user
 vaults and replacement files are preserved. The agent is signalled through a
 Linux process descriptor after checking identity; unsupported kernels or denied
@@ -71,6 +73,19 @@ process access skip termination rather than signal an unverified PID. This uses
 and [descriptor-based signals](https://docs.python.org/3/library/signal.html#signal.pidfd_send_signal).
 Older attempts without cleanup metadata cannot safely reclaim an unrecorded
 SSH agent or claim ownership of an existing vault.
+
+Agents use an explicit socket inside a new mode-0700 `.agent-*` workspace
+directory. This survives an API service restart with `PrivateTmp=true`:
+systemd deletes service-private `/tmp` contents on stop even when processes
+survive. See [systemd's PrivateTmp documentation](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.exec.xml).
+Terminal cleanup checks the recorded directory and socket inodes and never
+recursively deletes socket directories. Owned agents receive an identity-checked
+SIGKILL because their SIGTERM handler would blindly unlink a replacement at the
+original path. Unknown files, symlinks and replaced directories are preserved.
+The full socket pathname must fit Linux's 107-byte limit; a longer workspace
+root fails before starting an agent instead of falling back to temporary storage.
+The shared installation's Ansible local temp and SSH ControlMaster directories
+are under the service account's home, outside systemd's private `/tmp`.
 
 The service manager must preserve child processes on API restart (the shared
 deployment uses systemd `KillMode=process`). A container or VM shutdown still

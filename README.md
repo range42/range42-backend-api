@@ -478,7 +478,8 @@ artifacts. After a hard API crash, recovery verifies process identity before
 adopting a live runner, restores recorded exit results, or reports an unknown
 outcome. Events pass through the redaction pipeline with replay deduplication.
 Full provisioning shares a lock inherited by the runner, including across API
-crashes. Graceful shutdown cancels locally started attempts.
+crashes. Graceful API shutdown detaches local observation while preserving the
+runner and its workspace-owned credentials; explicit cancellation signals it.
 
 ## Events + SSE
 
