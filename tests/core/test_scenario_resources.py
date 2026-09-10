@@ -24,7 +24,13 @@ async def check(tmp_path, data, *, scope="full", marker="range42-deployment:dep-
             assert request.url.params["vmid"] == "3191"
             return httpx.Response(400, text="already exists") if occupied else httpx.Response(200, json={"data": "3191"})
         if path.endswith("/status"):
-            return httpx.Response(200, json={"data": {"memory": {"free": 4 * 1024**3}}})
+            return httpx.Response(200, json={"data": {"cpuinfo": {"cpus": 8}, "cpu": 0.2,
+                "memory": {"total": 8 * 1024**3, "used": 4 * 1024**3, "free": 4 * 1024**3}}})
+        if path.endswith("/storage"):
+            return httpx.Response(200, json={"data": [{"storage": "local-lvm", "type": "lvmthin", "content": "images",
+                "active": 1, "enabled": 1, "shared": 0, "total": 100 * 1024**3, "used": 20 * 1024**3, "avail": 80 * 1024**3}]})
+        if path.endswith("/9901/config"):
+            return httpx.Response(200, json={"data": {"cores": 2, "scsi0": "local-lvm:base-9901-disk-0,size=10G"}})
         if path.endswith("/config"):
             return httpx.Response(200, json={"data": {"name": "r42-ui-smoke", "description": marker}})
         return httpx.Response(404)

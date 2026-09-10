@@ -14,6 +14,7 @@ from app.core.models import ProxmoxHost
 from app.core.preflight import PreflightCheck
 from app.core.proxmox_read import ProxmoxReadError, list_proxmox_data, read_proxmox_data
 from app.core.scenario_manifest import validate_vm_manifest
+from app.core.scenario_capacity import check_plan_capacity
 
 
 def _blocked(code: str, detail: str) -> list[PreflightCheck]:
@@ -105,12 +106,8 @@ async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None,
                 if not isinstance(config, dict) or f"range42-deployment:{deployment_id}" not in str(config.get("description", "")).splitlines():
                     return _blocked("VM_OWNERSHIP_MISMATCH", f"VMID {vmid} is missing this deployment's ownership marker. It will not be configured or removed.")
         if scope == "full":
-            status = await read_proxmox_data(client, host, f"/nodes/{quote(host.node_name, safe='')}/status")
-            free = status.get("memory", {}).get("free") if isinstance(status, dict) else None
-            if type(free) not in (int, float) or free <= 0:
-                return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Proxmox did not report available host memory.")
-            if required_memory > free:
-                return _blocked("INSUFFICIENT_MEMORY", f"The VMs need {required_memory / 1024**2:.0f} MiB, but the target currently has {free / 1024**2:.0f} MiB free.")
+            checks = await check_plan_capacity(client, host, vms, required_memory=required_memory)
+            return [PreflightCheck(check="scenario_resources", result="pass", detail="Template and free VMID checks passed."), *checks]
         return [PreflightCheck(check="scenario_resources", result="pass", detail="Template and free VMID checks passed." if scope == "full" else "Deployment VM ownership verified.")]
     except ProxmoxReadError as exc:
         return _blocked("SCENARIO_RESOURCES_UNREADABLE", str(exc))
