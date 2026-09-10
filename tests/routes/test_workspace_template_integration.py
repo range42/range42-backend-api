@@ -3,7 +3,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from tests.core.test_workspace_template import template
+from tests.core.test_workspace_template import template as template
 from tests.routes.test_deployment_vault_seed import _boot, _payload
 
 
