@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,11 +13,39 @@ from app.core.proxmox_tls import proxmox_verify
 from app.core.models import ProxmoxHost
 from app.core.preflight import PreflightCheck
 from app.core.proxmox_read import ProxmoxReadError, list_proxmox_data, read_proxmox_data
+from app.core.scenario_manifest import validate_vm_manifest
 
 
 def _blocked(code: str, detail: str) -> list[PreflightCheck]:
     return [PreflightCheck(check="scenario_resources", result="block", code=code,
                            detail=detail, field_path="manifest/scenario_vms.json")]
+
+
+def _missing_bootstrap_features(vms: list[dict]) -> set[str]:
+    required = set()
+    for vm in vms:
+        if len(vm.get("nics") or []) > 1:
+            required.add("extra_nics")
+        if any(vm.get(field) is not None for field in ("cores", "memory_mb")):
+            required.add("resources")
+        if vm.get("disk_gb") is not None:
+            required.add("disk_resize")
+    if not required:
+        return set()
+    root = os.getenv("RANGE42_BUNDLE_DIR")
+    try:
+        if not root:
+            return required
+        path = Path(root) / "proxmox/vm.bootstrap/capabilities.json"
+        if path.stat().st_size > 8192:
+            return required
+        capabilities = json.loads(path.read_text())
+        features = capabilities.get("features")
+        if capabilities.get("version") != 1 or not isinstance(features, list) or any(not isinstance(feature, str) for feature in features):
+            return required
+        return required.difference(features)
+    except (OSError, ValueError, AttributeError):
+        return required
 
 
 async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None, *,
@@ -27,7 +56,7 @@ async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None,
         path = scenario_dir / "manifest/scenario_vms.json"
         if not path.resolve().is_relative_to(scenario_dir.resolve()) or path.stat().st_size > 1024 * 1024:
             raise ValueError("invalid VM manifest path or size")
-        vms = json.loads(path.read_text())["vms"]
+        vms = validate_vm_manifest(json.loads(path.read_text()))["vms"]
         if not isinstance(vms, list) or any(not isinstance(vm, dict) for vm in vms):
             raise ValueError("invalid VM list")
         if not any("template_vm_id" in vm for vm in vms):
@@ -37,6 +66,8 @@ async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None,
             raise ValueError("generated VMs require a template, integer id and name")
         if host is None:
             return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Select an available target host.")
+        if scope == "full" and (missing := _missing_bootstrap_features(vms)):
+            return _blocked("BOOTSTRAP_CAPABILITY_MISSING", "Update the installed VM bootstrap bundle before deployment. Missing support: " + ", ".join(sorted(missing)) + ".")
         if client is None:
             async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8) as owned_client:
                 return await check_scenario_resources(scenario_dir, host, deployment_id=deployment_id,
@@ -60,7 +91,7 @@ async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None,
                 if (not template or template.get("template") != 1 or template.get("node") != host.node_name
                         or template.get("type") != "qemu"):
                     return _blocked("TEMPLATE_NOT_READY", f"Template {planned['template_vm_id']} must be a QEMU template on {host.node_name}.")
-                memory = template.get("maxmem")
+                memory = planned["memory_mb"] * 1024**2 if planned.get("memory_mb") is not None else template.get("maxmem")
                 if type(memory) not in (int, float) or memory <= 0:
                     return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Proxmox did not report template memory requirements.")
                 required_memory += memory

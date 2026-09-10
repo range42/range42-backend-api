@@ -17,6 +17,7 @@ import yaml
 
 from app.core.errors import ProjectCheckoutError, Range42Error
 from app.core.repository_urls import GIT_HTTP_ENV
+from app.core.scenario_manifest import validate_vm_manifest
 
 
 _AUTHED_URL_RE = re.compile(r'https://[^@]+@')
@@ -68,7 +69,7 @@ def resolve_project_scenario(
     inventory = required_file("hosts.yml")
     manifest_path = required_file("manifest/scenario_vms.json")
     try:
-        manifest = json.loads(manifest_path.read_text())
+        manifest = validate_vm_manifest(json.loads(manifest_path.read_text()))
         vms = manifest.get("vms") if isinstance(manifest, dict) else None
         if not isinstance(vms, list) or any(
             not isinstance(vm, dict) or type(vm.get("vm_id")) is not int

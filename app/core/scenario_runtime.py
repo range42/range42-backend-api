@@ -89,7 +89,7 @@ def _guest_password(workspace: Path) -> str:
         loader.cleanup_all_tmp_files()
 
 
-def target_runtime_variables(host: ProxmoxHost, workspace: Path) -> dict[str, str]:
+def target_runtime_variables(host: ProxmoxHost, workspace: Path) -> dict[str, str | bool]:
     """Extra vars have precedence over old vault and committed inventory values."""
     def invalid(message: str):
         return Range42Error(code="PROJECT_TARGET_INVALID", error="invalid_target", message=message)
@@ -117,6 +117,7 @@ def target_runtime_variables(host: ProxmoxHost, workspace: Path) -> dict[str, st
         "proxmox_api_user": user,
         "proxmox_api_token_id": token_id,
         "proxmox_api_token_secret": secret,
+        "proxmox_api_validate_certs": True,
         "r42_proxmox_address": f"[{address}]" if ":" in address else address,
         "r42_proxmox_ssh_user": ssh_user,
         "deployer_cli_user_ssh_known_hosts": str(workspace / "ssh_keys/known_hosts"),

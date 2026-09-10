@@ -7,11 +7,11 @@ import pytest
 from tests.core.test_scenario_networks import target
 
 
-async def check(tmp_path, data, *, scope="full", marker="range42-deployment:dep-1", occupied=False):
+async def check(tmp_path, data, *, scope="full", marker="range42-deployment:dep-1", occupied=False, planned=None):
     from app.core.scenario_resources import check_scenario_resources
     (tmp_path / "manifest").mkdir()
     (tmp_path / "manifest/scenario_vms.json").write_text(json.dumps({"vms": [
-        {"vm_id": 3191, "vm_name": "r42-ui-smoke", "template_vm_id": 9901},
+        {"vm_id": 3191, "vm_name": "r42-ui-smoke", "template_vm_id": 9901, **(planned or {})},
     ]}))
     requests = []
     def handle(request):
@@ -95,3 +95,52 @@ async def test_teardown_skips_vm_only_after_cluster_confirms_global_absence(tmp_
     result, requests = await check(tmp_path, [], scope="teardown")
     assert result[-1].result == "pass"
     assert any(request.url.path.endswith("/cluster/nextid") for request in requests)
+
+
+def capabilities(tmp_path, monkeypatch, features):
+    bundle = tmp_path / "bundles/proxmox/vm.bootstrap"
+    bundle.mkdir(parents=True)
+    (bundle / "capabilities.json").write_text(json.dumps({"version": 1, "features": features}))
+    monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(tmp_path / "bundles"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("planned", [
+    {"cores": 4}, {"memory_mb": 8192}, {"disk_gb": 30, "disk_device": "scsi0"},
+    {"nics": [{"index": 0, "ip": "10.1.0.2", "bridge": "vnet1"}, {"index": 1, "ip": "10.2.0.2", "bridge": "vnet2"}]},
+])
+async def test_extended_plan_requires_matching_installed_bootstrap(tmp_path, monkeypatch, planned):
+    capabilities(tmp_path, monkeypatch, [])
+    result, requests = await check(tmp_path, [template()], planned=planned)
+    assert result[-1].code == "BOOTSTRAP_CAPABILITY_MISSING"
+    assert not requests
+
+
+@pytest.mark.asyncio
+async def test_memory_override_is_used_for_host_capacity(tmp_path, monkeypatch):
+    capabilities(tmp_path, monkeypatch, ["resources"])
+    result, _ = await check(tmp_path, [template()], planned={"memory_mb": 8192})
+    assert result[-1].code == "INSUFFICIENT_MEMORY"
+    assert "8192 MiB" in result[-1].detail
+
+
+@pytest.mark.asyncio
+async def test_smaller_explicit_memory_override_replaces_template_memory(tmp_path, monkeypatch):
+    capabilities(tmp_path, monkeypatch, ["resources"])
+    result, _ = await check(tmp_path, [template(maxmem=8 * 1024**3)], planned={"memory_mb": 1024})
+    assert result[-1].result == "pass"
+
+
+@pytest.mark.asyncio
+async def test_configure_does_not_require_bootstrap_capabilities(tmp_path, monkeypatch):
+    capabilities(tmp_path, monkeypatch, [])
+    result, _ = await check(tmp_path, [vm()], scope="configure", planned={"memory_mb": 8192})
+    assert result[-1].result == "pass"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("planned", [{"memory_mb": -1}, {"cores": 1.5}, {"disk_gb": True}])
+async def test_legacy_manifest_cannot_bypass_resource_override_validation(tmp_path, monkeypatch, planned):
+    capabilities(tmp_path, monkeypatch, ["resources", "disk_resize"])
+    result, _ = await check(tmp_path, [template()], planned=planned)
+    assert result[-1].code == "SCENARIO_RESOURCES_INVALID"

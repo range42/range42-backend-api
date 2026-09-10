@@ -32,6 +32,7 @@ def test_target_runtime_uses_selected_api_and_workspace_public_key(tmp_path, mon
         "proxmox_api_host": "pve.example:8006", "proxmox_node": "pve",
         "proxmox_api_user": "deployer@pve", "proxmox_api_token_id": "ui",
         "proxmox_api_token_secret": "selected-target-secret",
+        "proxmox_api_validate_certs": True,
         "r42_proxmox_address": "pve.example", "r42_proxmox_ssh_user": "root",
         "default_admin_vm_ci_ssh_key": "ssh-ed25519 AAAA test",
         "deployer_cli_user_ssh_known_hosts": str(tmp_path / "ssh_keys/known_hosts"),
