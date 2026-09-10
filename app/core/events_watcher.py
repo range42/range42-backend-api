@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,8 @@ def _translate(ansible_event: dict[str, Any]) -> dict[str, Any]:
         payload["host"] = data.get("host")
     else:
         payload["text"] = ansible_event.get("stdout") or data.get("stdout") or ""
+        payload["ansible_event"] = et
+        payload["task_action"] = data.get("task_action")
     return {"event_type": r42_type, "payload": payload,
             "proxmox_ts": ansible_event.get("created")}
 
@@ -75,7 +78,8 @@ class EventsWatcher:
     def __init__(self, *, job_events_dir: Path, writer: EventsWriter,
                  audit: RedactionAuditWriter, layers: list[RedactionLayer],
                  deployment_id: str, attempt_id: str,
-                 stop: asyncio.Event | None = None, poll_ms: int = 250) -> None:
+                 stop: asyncio.Event | None = None, poll_ms: int = 250,
+                 on_progress: Callable[[int], Awaitable[None]] | None = None) -> None:
         self.job_events_dir = Path(job_events_dir)
         self.writer = writer
         self.audit = audit
@@ -84,9 +88,16 @@ class EventsWatcher:
         self.attempt_id = attempt_id
         self.stop = stop or asyncio.Event()
         self.poll_ms = poll_ms
-        self._seen = {event["runner_event_id"] for event in EventsReader(writer.path).read_range()
-                      if event.get("attempt_id") == attempt_id
-                      and isinstance(event.get("runner_event_id"), str)}
+        self.on_progress = on_progress
+        self._seen: set[str] = set()
+        self._cursor = 0
+        self._reported_cursor = 0
+        for event in EventsReader(writer.path).read_range():
+            if event.get("attempt_id") != attempt_id:
+                continue
+            self._cursor = max(self._cursor, event["event_seq"])
+            if isinstance(event.get("runner_event_id"), str):
+                self._seen.add(event["runner_event_id"])
 
     async def run(self) -> None:
         self.job_events_dir.mkdir(parents=True, exist_ok=True)
@@ -115,8 +126,13 @@ class EventsWatcher:
                     # Truncating first can leave a credential prefix that no
                     # longer matches the complete known secret.
                     redacted["payload"]["text"] = redacted["payload"]["text"][:4096]
-                self.writer.append(redacted, attempt_id=self.attempt_id,
-                                   deployment_id=self.deployment_id)
+                self._cursor = self.writer.append(redacted, attempt_id=self.attempt_id,
+                                                  deployment_id=self.deployment_id)
+            # One short transaction per changed batch, including persisted
+            # events recovered after restart. Idle polls do not write the DB.
+            if self.on_progress is not None and self._cursor > self._reported_cursor:
+                await self.on_progress(self._cursor)
+                self._reported_cursor = self._cursor
             if self.stop.is_set():
                 break
             try:

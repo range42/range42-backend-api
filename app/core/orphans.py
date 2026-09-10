@@ -20,7 +20,7 @@ from sqlalchemy import and_, or_, select
 from app.core.config import settings
 from app.core.db import get_session_factory
 from app.core.models import Attempt, Deployment, WorkspaceLock
-from app.core.attempt_lifecycle import TERMINAL_ATTEMPT_STATES, finish_attempt, keep_attempt_lock
+from app.core.attempt_lifecycle import TERMINAL_ATTEMPT_STATES, advance_attempt_cursor, finish_attempt, keep_attempt_lock
 from app.core.runner_detached import process_matches, signal_running_attempt
 from app.core.events import EventsWriter
 from app.core.workspace import shred_envvars
@@ -138,6 +138,7 @@ def _watcher(dep: Deployment, attempt: Attempt, artifact: Path, stop: asyncio.Ev
         audit=RedactionAuditWriter(ws / "redactions.jsonl"),
         layers=[ConfigDenylistLayer(settings.redaction_denylist), VaultTaggedLayer(), TaintedStringLayer(set(secrets))],
         deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
+        on_progress=lambda cursor: advance_attempt_cursor(attempt_id=attempt.id, event_cursor_tip=cursor),
     )
 
 

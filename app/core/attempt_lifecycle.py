@@ -14,6 +14,15 @@ from app.core.models import Attempt, Deployment
 TERMINAL_ATTEMPT_STATES = ("succeeded", "completed", "partial", "failed", "cancelled", "unknown")
 
 
+async def advance_attempt_cursor(*, attempt_id: str, event_cursor_tip: int) -> None:
+    """Publish observed canonical events without changing lifecycle or ownership."""
+    async with get_session_factory()() as session:
+        await session.execute(update(Attempt).where(
+            Attempt.id == attempt_id, Attempt.event_cursor_tip < event_cursor_tip,
+        ).values(event_cursor_tip=event_cursor_tip))
+        await session.commit()
+
+
 async def heartbeat_attempt(*, attempt_id: str, deployment_id: str) -> bool:
     """Renew this process's lock in an independent, short-lived transaction."""
     async with get_session_factory()() as session:

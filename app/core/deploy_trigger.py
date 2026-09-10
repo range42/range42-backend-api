@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.allocation import ssh_controlmaster_env
-from app.core.attempt_lifecycle import finish_attempt, keep_attempt_lock, mark_attempt_running
+from app.core.attempt_lifecycle import advance_attempt_cursor, finish_attempt, keep_attempt_lock, mark_attempt_running
 from app.core.config import settings
 from app.core.errors import PreflightBlockedError, Range42Error
 from app.core.events import EventsWriter
@@ -153,6 +153,12 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         "ANSIBLE_FORKS": "25",
         "ANSIBLE_PIPELINING": "True",
     }
+    ca_file = os.getenv("RANGE42_PROXMOX_CA_FILE")
+    if ca_file:
+        # Ansible URI modules use Python's SSL trust; SDK-based modules use
+        # requests. Both must trust the same CA as the verified preflight.
+        ca_path = str(Path(ca_file).resolve())
+        envvars.update(SSL_CERT_FILE=ca_path, REQUESTS_CA_BUNDLE=ca_path)
     envvars.update(ssh_controlmaster_env(deployment_id=dep.id))
     if provisioning_fd is not None:
         envvars["RANGE42_PROVISIONING_LOCK_FD"] = str(provisioning_fd)
@@ -262,15 +268,14 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
               VaultTaggedLayer(),
               TaintedStringLayer(tainted_strings=tainted)]
     stop = asyncio.Event()
+    # Background work retains values, not ORM attributes from the request.
+    attempt_id, deployment_id = attempt.id, dep.id
     watcher = EventsWatcher(
         job_events_dir=artifact_dir / "job_events",
         writer=writer, audit=audit, layers=layers,
         deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
+        on_progress=lambda cursor: advance_attempt_cursor(attempt_id=attempt_id, event_cursor_tip=cursor),
     )
-    # The request may expire/close ORM instances immediately after we return.
-    # Background work must retain values rather than lazy ORM attributes.
-    attempt_id, deployment_id = attempt.id, dep.id
-
     async def _run() -> None:
         task_watch = asyncio.create_task(watcher.run())
         task_lock = asyncio.create_task(keep_attempt_lock(

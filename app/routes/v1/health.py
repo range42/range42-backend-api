@@ -47,7 +47,7 @@ async def readiness(session: AsyncSession = Depends(_session)):
         checks["workspace_writable"] = {"ok": True}
     except Exception as e:  # noqa: BLE001
         checks["workspace_writable"] = {"ok": False, "err": str(e)}
-    # Proxmox reachability — best-effort across registered hosts.
+    # Readiness requires successful authenticated access to every registered host.
     hosts = (await session.execute(select(ProxmoxHost))).scalars().all()
     host_results: list[dict] = []
     async with httpx.AsyncClient(verify=proxmox_verify(), timeout=3) as cli:
@@ -57,7 +57,7 @@ async def readiness(session: AsyncSession = Depends(_session)):
                     f"{h.api_url.rstrip('/')}/api2/json/version",
                     headers={"Authorization": f"PVEAPIToken={h.token_ref}"},
                 )
-                host_results.append({"id": h.id, "ok": r.status_code < 500,
+                host_results.append({"id": h.id, "ok": r.is_success,
                                      "status": r.status_code})
             except httpx.ConnectError:
                 host_results.append({"id": h.id, "ok": False,
