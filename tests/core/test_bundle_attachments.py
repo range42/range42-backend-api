@@ -256,7 +256,7 @@ def test_unmatched_or_unbounded_bundle_cannot_be_resolved(bundle, tmp_path, chan
             write(
                 root,
                 f"{bundle['path']}/main.yml",
-                '- hosts: "{{ target_group }}"\n  tasks: []\n',
+                '- hosts: "{{ target_ansible_hosts }}"\n  tasks: []\n',
             )
     if change == "missing_role":
         (bundle["runtime"] / "roles/demo/tasks/main.yml").unlink()

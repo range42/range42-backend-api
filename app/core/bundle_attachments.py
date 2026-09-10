@@ -15,7 +15,7 @@ from app.core.catalog_index import detail_at_path
 from app.core.credential_store import credential_cipher
 from app.core.errors import Range42Error
 
-_TARGETS = {'global_vm_ssh_name', 'global_vm_ci_ip', 'target_ansible_host'}
+_TARGETS = {'global_vm_ssh_name', 'global_vm_ci_ip', 'target_ansible_host', 'target_group'}
 _BUNDLE_PREFIX = "{{ lookup('env', 'RANGE42_BUNDLE_DIR') }}/"
 _ENV_PATTERN = re.compile(r"lookup\(\s*['\"]env['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)")
 _PATH = re.compile(r'[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+')
@@ -105,15 +105,38 @@ def _check_bundle_scope(base: Path, profile: dict) -> None:
             raise invalid(f'Bundle runtime role is unavailable: {name}', 'BUNDLE_DEPENDENCY_UNAVAILABLE')
 
 
+def _single_vm_group_binding(base: Path, entrypoint: str) -> None:
+    """Narrow only a static selector; installed role code remains trusted runtime."""
+    plays = _bounded_document(base / Path(entrypoint).name, base, yaml_document=True)
+    if (not isinstance(plays, list) or not plays or not all(
+            isinstance(play, dict) and isinstance(play.get('hosts'), str)
+            and re.fullmatch(r'{{\s*target_group\s*}}', play['hosts']) for play in plays)):
+        raise invalid('Single-VM group binding requires every play to use exactly hosts: "{{ target_group }}"', 'BUNDLE_SCOPE_UNSUPPORTED')
+    for path in base.rglob('*'):
+        if path.suffix not in {'.yml', '.yaml'} or path.name.endswith('.src.yml'):
+            continue
+        document = _bounded_document(path, base, yaml_document=True)
+        for node in _walk(document):
+            for key, value in node.items():
+                action = str(key).removeprefix('ansible.builtin.')
+                if (action in {'delegate_to', 'local_action', 'add_host', 'group_by', 'target_group', 'vars_files', 'include_vars'}
+                        or action.lower().startswith('ansible_')
+                        or action == 'connection' and value != 'ssh'):
+                    raise invalid('Single-VM group bundles cannot change delegation, inventory or the managed target selector', 'BUNDLE_SCOPE_UNSUPPORTED')
+
+
 def resolve_bundle(repo_root: Path, *, source_id: str, sha: str, path: str) -> dict:
     _path(path)
     if not path.startswith('bundles/') or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', sha):
         raise invalid('A bundle source directory and full commit SHA are required')
     profile, fingerprint = runtime_snapshot()
     entry = detail_at_path(repo_root, path)
-    if not entry or entry['kind'] != 'bundle' or entry['document']['bundle_kind'] != 'VM':
-        raise invalid('Only bundles targeting one explicit VM can be attached; group, infrastructure and unknown scopes are unsupported', 'BUNDLE_SCOPE_UNSUPPORTED')
+    if not entry or entry['kind'] != 'bundle' or entry['document']['bundle_kind'] not in {'VM', 'GROUP'}:
+        raise invalid('Only VM bundles or static group bundles bound to one VM can be attached', 'BUNDLE_SCOPE_UNSUPPORTED')
     base = repo_root / path
+    kind = entry['document']['bundle_kind']
+    if kind == 'GROUP':
+        _single_vm_group_binding(base, entry['document']['entrypoint'])
     installed = Path(profile['environment']['RANGE42_BUNDLE_DIR']) / path.removeprefix('bundles/')
     try:
         source_digest = tree_digest(base, max_files=512, max_bytes=16 * 1024 * 1024)
@@ -123,6 +146,8 @@ def resolve_bundle(repo_root: Path, *, source_id: str, sha: str, path: str) -> d
         raise invalid('Selected bundle content does not match the installed runtime release', 'BUNDLE_CONTENT_MISMATCH') from None
     _check_bundle_scope(base, profile)
     params = entry['document']['params']
+    if kind == 'GROUP' and any(param['name'].lower().startswith('ansible_') for param in params):
+        raise invalid('Single-VM group bundle descriptors cannot expose Ansible connection overrides', 'BUNDLE_SCOPE_UNSUPPORTED')
     if len(params) > 128 or len({p['name'] for p in params}) != len(params):
         raise invalid('Bundle parameter names must be unique and bounded')
     targets = [param['name'] for param in params if param['name'] in _TARGETS]
@@ -134,7 +159,7 @@ def resolve_bundle(repo_root: Path, *, source_id: str, sha: str, path: str) -> d
             targets.append(name)
     result = {'source_id': source_id, 'source_sha': sha, 'path': path,
               'entrypoint': entry['document']['entrypoint'].removeprefix('bundles/'),
-              'bundle_kind': 'VM', 'params': params, 'target_vars': targets,
+              'bundle_kind': kind, 'target_kind': 'VM', 'params': params, 'target_vars': targets,
               'proof_kind': 'content_match', 'runtime': {'fingerprint': fingerprint, 'dependencies': dependencies(profile)}}
     claims = {'purpose': 'range42-bundle-resolution-v1', 'resolution': result}
     result['runtime']['proof'] = credential_cipher().encrypt(canonical(claims)).decode()
@@ -150,7 +175,9 @@ def _verify_resolution(resolution: dict, fingerprint: str) -> None:
         claims = json.loads(credential_cipher().decrypt(token.encode()))
         if claims != {'purpose': 'range42-bundle-resolution-v1', 'resolution': unsigned}:
             raise ValueError('resolution changed')
-        if unsigned['runtime']['fingerprint'] != fingerprint or unsigned['bundle_kind'] != 'VM':
+        kind = unsigned['bundle_kind']
+        if (unsigned['runtime']['fingerprint'] != fingerprint or kind not in {'VM', 'GROUP'}
+                or kind == 'GROUP' and (unsigned.get('target_kind') != 'VM' or 'target_group' not in unsigned['target_vars'])):
             raise ValueError('runtime changed')
     except (ValueError, TypeError, KeyError, InvalidToken):
         raise invalid('Bundle resolution proof is invalid or its runtime changed; resolve the attachment again') from None
@@ -162,7 +189,7 @@ def _parameters(resolution: dict, values: dict) -> None:
     declarations = {param['name']: param for param in resolution['params']}
     for name, value in values.items():
         param = declarations.get(name)
-        if not param or param.get('from_vault') or param.get('target') or name in resolution['target_vars']:
+        if not param or param.get('from_vault') or param.get('target') or name in resolution['target_vars'] or name.lower().startswith('ansible_'):
             raise invalid(f'Bundle parameter is undeclared or managed by the runtime: {name}')
         kind = param.get('type', 'string')
         valid = {'string': isinstance(value, str), 'str': isinstance(value, str), 'int': type(value) is int,
@@ -176,6 +203,7 @@ def _parameters(resolution: dict, values: dict) -> None:
             raise invalid(f'Bundle parameter must use a declared choice: {name}')
     for name, param in declarations.items():
         if (param.get('required') and not param.get('from_vault') and not param.get('target')
+                and not name.lower().startswith('ansible_')
                 and name not in resolution['target_vars'] and name not in values and 'default' not in param
                 and param.get('default_where', 'none') == 'none'):
             raise invalid(f'Required bundle parameter is missing: {name}')
@@ -190,6 +218,14 @@ def _inventory_hosts(value: dict) -> dict:
                     raise invalid('Bundle targets require unique inventory host names')
                 hosts[name] = settings
     return hosts
+
+
+def _inventory_groups(value: dict) -> set[str]:
+    names = set(value)
+    for node in _walk(value):
+        if isinstance(node.get('children'), dict):
+            names.update(node['children'])
+    return names
 
 
 def validate_scenario_bundles(scenario_dir: Path) -> None:
@@ -212,7 +248,9 @@ def validate_scenario_bundles(scenario_dir: Path) -> None:
         return
     _, fingerprint = runtime_snapshot()
     vms = _bounded_document(scenario_dir / 'manifest/scenario_vms.json', scenario_dir)['vms']
-    inventory = _inventory_hosts(_bounded_document(scenario_dir / 'hosts.yml', scenario_dir, yaml_document=True))
+    inventory_document = _bounded_document(scenario_dir / 'hosts.yml', scenario_dir, yaml_document=True)
+    inventory = _inventory_hosts(inventory_document)
+    groups = _inventory_groups(inventory_document)
     expected = []
     seen = set()
     for attachment in document['attachments']:
@@ -225,11 +263,14 @@ def validate_scenario_bundles(scenario_dir: Path) -> None:
         host = attachment['inventory_host']
         if not vm or host != vm.get('vm_name') or not isinstance(inventory.get(host), dict) or inventory[host].get('ansible_host') != vm.get('ip'):
             raise invalid('Bundle target must match its declared VM ID, inventory hostname and IP')
+        if (not isinstance(host, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9-]{0,62}', host)
+                or host in groups | {'all', 'ungrouped', 'localhost', 'proxmox', 'proxmox_cli', 'scenario_guests', 'r42-proxmox', 'r42-proxmox-cli'}):
+            raise invalid('Bundle targets must be literal inventory hostnames distinct from reserved names and inventory groups')
         identity = (attachment['vm_id'], resolution['path'])
         if identity in seen:
             raise invalid('Duplicate bundle attachment for the same VM and bundle')
         seen.add(identity)
-        target_values = {'global_vm_ssh_name': host, 'target_ansible_host': host, 'global_vm_ci_ip': vm['ip']}
+        target_values = {'global_vm_ssh_name': host, 'target_ansible_host': host, 'global_vm_ci_ip': vm['ip'], 'target_group': host}
         variables = {**attachment['parameters'], **{name: target_values[name] for name in resolution['target_vars']}}
         expected.append({'path': _BUNDLE_PREFIX + resolution['entrypoint'], 'vars': variables})
     if any(set(play) not in ({'ansible.builtin.import_playbook', 'vars'}, {'import_playbook', 'vars'}) for play in imports):
