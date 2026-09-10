@@ -2175,7 +2175,89 @@
         }
       }
     },
+    "/v1/catalog/sources/default": {
+      "post": {
+        "tags": [
+          "v1 catalog"
+        ],
+        "summary": "Register Default Source",
+        "description": "Ensure the public Range42 catalog is registered, without cloning it.",
+        "operationId": "register_default_source_v1_catalog_sources_default_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/catalog/sources/{source_id}": {
+      "patch": {
+        "tags": [
+          "v1 catalog"
+        ],
+        "summary": "Update Source Credentials",
+        "operationId": "update_source_credentials_v1_catalog_sources__source_id__patch",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceCredentialsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "v1 catalog"
@@ -2497,6 +2579,98 @@
       }
     },
     "/v1/projects/{project_id}": {
+      "get": {
+        "tags": [
+          "v1 projects"
+        ],
+        "summary": "Get Project",
+        "operationId": "get_project_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "v1 projects"
+        ],
+        "summary": "Register Project",
+        "description": "Register a browser identity with a backend-owned Git Source binding.",
+        "operationId": "register_project_v1_projects__project_id__put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "v1 projects"
@@ -2519,7 +2693,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectIn"
+                "$ref": "#/components/schemas/ProjectPatch"
               }
             }
           }
@@ -3105,6 +3279,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PreflightRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4558,7 +4749,7 @@
         "properties": {
           "scope": {
             "type": "string",
-            "pattern": "^(full|failed_teams|team_reset|teardown|rollback_all|rollback_team)$",
+            "pattern": "^(full|configure|failed_teams|team_reset|teardown|rollback_all|rollback_team)$",
             "title": "Scope"
           },
           "team_id": {
@@ -4571,6 +4762,29 @@
               }
             ],
             "title": "Team Id"
+          },
+          "confirm_codename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Codename"
+          },
+          "project_sha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Sha"
           }
         },
         "type": "object",
@@ -4592,6 +4806,17 @@
           "scope": {
             "type": "string",
             "title": "Scope"
+          },
+          "project_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Sha"
           },
           "team_id": {
             "anyOf": [
@@ -7604,6 +7829,30 @@
         ],
         "title": "Page[VmSummary]"
       },
+      "PreflightRequest": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "pattern": "^(full|configure|teardown)$",
+            "title": "Scope",
+            "default": "full"
+          },
+          "project_sha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Sha"
+          }
+        },
+        "type": "object",
+        "title": "PreflightRequest"
+      },
       "PreflightResponse": {
         "properties": {
           "id": {
@@ -7657,10 +7906,12 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 256,
             "title": "Name"
           },
           "source_id": {
             "type": "string",
+            "maxLength": 64,
             "title": "Source Id"
           },
           "branch_strategy": {
@@ -7671,7 +7922,8 @@
           "repo_owner": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -7682,7 +7934,8 @@
           "repo_name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -7693,7 +7946,8 @@
           "subdir": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 256
               },
               {
                 "type": "null"
@@ -7704,7 +7958,8 @@
           "base_catalog_url": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 512
               },
               {
                 "type": "null"
@@ -7715,7 +7970,8 @@
           "base_catalog_sha": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"
@@ -7724,6 +7980,7 @@
             "title": "Base Catalog Sha"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
@@ -7736,10 +7993,12 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 256,
             "title": "Name"
           },
           "source_id": {
             "type": "string",
+            "maxLength": 64,
             "title": "Source Id"
           },
           "branch_strategy": {
@@ -7750,7 +8009,8 @@
           "repo_owner": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -7761,7 +8021,8 @@
           "repo_name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -7772,7 +8033,8 @@
           "subdir": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 256
               },
               {
                 "type": "null"
@@ -7783,7 +8045,8 @@
           "base_catalog_url": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 512
               },
               {
                 "type": "null"
@@ -7794,7 +8057,8 @@
           "base_catalog_sha": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"
@@ -7817,6 +8081,7 @@
             "title": "Updated At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
@@ -7827,6 +8092,109 @@
           "updated_at"
         ],
         "title": "ProjectOut"
+      },
+      "ProjectPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "branch_strategy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(shared_repo_subdir|dedicated_repo)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Strategy"
+          },
+          "repo_owner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Owner"
+          },
+          "repo_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Name"
+          },
+          "subdir": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subdir"
+          },
+          "base_catalog_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Catalog Url"
+          },
+          "base_catalog_sha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Catalog Sha"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProjectPatch"
       },
       "Reply_ProxmoxVmsVMID_VmSetCpu": {
         "properties": {
@@ -8846,6 +9214,32 @@
           "vm_snapshot_name": "CCCC"
         }
       },
+      "SourceCredentialsIn": {
+        "properties": {
+          "auth_kind": {
+            "type": "string",
+            "pattern": "^(pat|none)$",
+            "title": "Auth Kind"
+          },
+          "token_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auth_kind"
+        ],
+        "title": "SourceCredentialsIn"
+      },
       "SourceIn": {
         "properties": {
           "provider": {
@@ -8868,13 +9262,22 @@
           "token_ref": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
               }
             ],
             "title": "Token Ref"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRepoIn"
+            },
+            "type": "array",
+            "maxItems": 1,
+            "title": "Repos"
           }
         },
         "type": "object",
@@ -8915,6 +9318,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRepoOut"
+            },
+            "type": "array",
+            "title": "Repos"
           }
         },
         "type": "object",
@@ -8961,6 +9371,75 @@
           "finished_at"
         ],
         "title": "SourceRefreshResult"
+      },
+      "SourceRepoIn": {
+        "properties": {
+          "owner": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Owner"
+          },
+          "repo": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Repo"
+          },
+          "branch": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Branch",
+            "default": "main"
+          }
+        },
+        "type": "object",
+        "required": [
+          "owner",
+          "repo"
+        ],
+        "title": "SourceRepoIn"
+      },
+      "SourceRepoOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "owner": {
+            "type": "string",
+            "title": "Owner"
+          },
+          "repo": {
+            "type": "string",
+            "title": "Repo"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          },
+          "last_refreshed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Refreshed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "owner",
+          "repo",
+          "branch"
+        ],
+        "title": "SourceRepoOut"
       },
       "StatsResponse": {
         "properties": {

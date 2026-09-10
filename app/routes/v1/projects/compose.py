@@ -24,6 +24,7 @@ import git  # type: ignore
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.models import Project
+from app.core.repository_urls import GIT_HTTP_ENV, require_repository_url
 from app.overlay.compose import compose
 from app.overlay.expand_replication import expand_replication
 from app.schemas.generated import CatalogEntry, ProjectOverlay
@@ -50,17 +51,18 @@ def _load_base_and_overlay(project: Project) -> tuple[dict, dict]:
             status=400,
             message="Project missing base_catalog_url/sha",
         )
+    require_repository_url(project.base_catalog_url)
     base_doc: dict | None = None
     with tempfile.TemporaryDirectory() as td:
         try:
-            repo = git.Repo.clone_from(project.base_catalog_url, td)
+            repo = git.Repo.clone_from(project.base_catalog_url, td, env=GIT_HTTP_ENV)
             repo.git.checkout(project.base_catalog_sha)
-        except Exception as e:
+        except Exception:
             raise SourceUnreachableError(
                 details=[
                     {
                         "field": "base_catalog_url",
-                        "reason": f"clone failed: {e}",
+                        "reason": "Cannot clone the pinned base catalog; check its URL, revision and access",
                     }
                 ]
             )

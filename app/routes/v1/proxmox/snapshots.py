@@ -8,6 +8,8 @@ from __future__ import annotations
 from typing import Literal
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +41,7 @@ async def list_snapshots(
 ):
     row = await _get_host(host_id, session)
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(_snap_base(row, vmtype, vmid), headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -75,7 +77,7 @@ async def create_snapshot(
     if vmtype == "qemu" and body.vmstate is not None:
         form["vmstate"] = 1 if body.vmstate else 0
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.post(_snap_base(row, vmtype, vmid),
                                headers=_auth_headers(row), data=form)
     except httpx.RequestError as e:
@@ -97,7 +99,7 @@ async def delete_snapshot(
     row = await _get_host(host_id, session)
     url = f"{_snap_base(row, vmtype, vmid)}/{name}"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.delete(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -120,7 +122,7 @@ async def rollback_snapshot(
     _assert_vmid_safe(row, vmid, "rollback")
     url = f"{_snap_base(row, vmtype, vmid)}/{name}/rollback"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.post(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e

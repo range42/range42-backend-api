@@ -1,5 +1,6 @@
 """/v1/proxmox/hosts CRUD + health probe tests."""
 import pytest
+import httpx
 from httpx import ASGITransport, AsyncClient
 
 
@@ -44,6 +45,31 @@ async def test_create_and_delete_host(tmp_path, monkeypatch):
             assert any(h["id"] == hid for h in r.json()["items"])
             r = await c.delete(f"/v1/proxmox/hosts/{hid}")
             assert r.status_code == 204
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_registered_host_health_uses_normalized_api_paths(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    paths = []
+    def handle(request):
+        paths.append(request.url.path)
+        status = 200 if request.url.path in ("/api2/json/version", "/api2/json/cluster/sdn") else 500
+        return httpx.Response(status, json={"data": {}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: AsyncClient(transport=httpx.MockTransport(handle), **kwargs))
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            created = await client.post("/v1/proxmox/hosts", json={
+                "name": "pve01", "node_name": "pve01", "api_url": "https://pve01:8006",
+                "token_ref": "r42@pam!tok=abc", "default_bridge": "vmbr0",
+            })
+            assert created.status_code == 201
+            health = await client.get(f"/v1/proxmox/hosts/{created.json()['id']}/health")
+            assert health.status_code == 200
+            assert health.json()["status"] == "ok"
+            assert health.json()["sdn_available"] is True
+            assert paths == ["/api2/json/version", "/api2/json/cluster/sdn"]
     finally:
         await dbmod.dispose_engine()
 
@@ -299,5 +325,27 @@ async def test_losing_the_race_on_a_new_name_still_upserts(tmp_path, monkeypatch
 
             listing = await c.get("/v1/proxmox/hosts")
             assert listing.json()["total"] == 1
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_registered_host_health_verifies_tls_certificates(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    verifications = []
+    original_client = httpx.AsyncClient
+    def client_factory(**kwargs):
+        verifications.append(kwargs.get("verify", True))
+        return original_client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"data": {}})), **kwargs)
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory)
+    try:
+        async with original_client(transport=ASGITransport(app=app), base_url="http://t") as client:
+            created = await client.post("/v1/proxmox/hosts", json={
+                "name": "pve-tls", "node_name": "pve-tls", "api_url": "https://pve-tls:8006",
+                "token_ref": "r42@pam!tok=secret", "default_bridge": "vmbr0",
+            })
+            response = await client.get(f"/v1/proxmox/hosts/{created.json()['id']}/health")
+            assert response.status_code == 200
+        assert verifications and all(value is not False for value in verifications)
     finally:
         await dbmod.dispose_engine()

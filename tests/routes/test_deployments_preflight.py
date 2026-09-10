@@ -128,127 +128,10 @@ async def test_preflight_post_404_on_missing_deployment(tmp_path, monkeypatch):
         await dbmod.dispose_engine()
 
 
-@pytest.mark.asyncio
-async def test_preflight_universal_loads_topology_and_runs_topology_checks(
-    tmp_path, monkeypatch,
-):
-    """For ``_universal``, the route clones the project (stubbed),
-    reads topology.json, and runs the new topology-aware checks."""
-    app, dbmod = await _boot(tmp_path, monkeypatch)
-    try:
-        await _seed(
-            dbmod, tmp_path,
-            scenario="_universal",
-            project_sha="deadbeef",
-            team_count=2,
-            repo_owner="me", repo_name="proj",
-        )
-        # Stub checkout_project on the route module so no real git runs.
-        from app.routes.v1.deployments import preflight as preflight_mod
-        monkeypatch.setattr(
-            preflight_mod, "checkout_project",
-            _stub_checkout_project_writing(_good_topology()),
-        )
-
-        async with AsyncClient(transport=ASGITransport(app=app),
-                               base_url="http://t") as c:
-            r = await c.post("/v1/deployments/dep-1/preflight")
-            assert r.status_code == 200, r.text
-            body = r.json()
-            checks = body["checks"]
-            # All three new topology-aware checks should be present and pass.
-            role_checks = [c for c in checks if c["check"] == "topology_node_role"]
-            assert role_checks and all(c["result"] == "pass" for c in role_checks), \
-                role_checks
-            asset_checks = [c for c in checks if c["check"] == "topology_assets"]
-            assert asset_checks and all(c["result"] == "pass" for c in asset_checks), \
-                asset_checks
-            vmid_checks = [c for c in checks if c["check"] == "vmid_collision"]
-            assert vmid_checks and all(c["result"] == "pass" for c in vmid_checks), \
-                vmid_checks
-            # No legacy placeholder checks should appear in _universal mode.
-            assert not any(c["check"] == "secret_completeness" for c in checks)
-            assert not any(c["check"] == "resource_budget" for c in checks)
-    finally:
-        await dbmod.dispose_engine()
 
 
-@pytest.mark.asyncio
-async def test_preflight_universal_blocks_on_missing_role(tmp_path, monkeypatch):
-    """A topology with a VM/LXC node missing ``role`` produces a
-    ``topology_node_role`` block check."""
-    app, dbmod = await _boot(tmp_path, monkeypatch)
-    try:
-        await _seed(
-            dbmod, tmp_path,
-            scenario="_universal",
-            project_sha="deadbeef",
-            team_count=1,
-            repo_owner="me", repo_name="proj",
-        )
-        bad_topology = _good_topology()
-        bad_topology["nodes"][0].pop("role")
-        from app.routes.v1.deployments import preflight as preflight_mod
-        monkeypatch.setattr(
-            preflight_mod, "checkout_project",
-            _stub_checkout_project_writing(bad_topology),
-        )
-
-        async with AsyncClient(transport=ASGITransport(app=app),
-                               base_url="http://t") as c:
-            r = await c.post("/v1/deployments/dep-1/preflight")
-            assert r.status_code == 200, r.text
-            body = r.json()
-            blocks = [
-                c for c in body["checks"]
-                if c["check"] == "topology_node_role" and c["result"] == "block"
-            ]
-            assert blocks, body["checks"]
-            assert blocks[0]["code"] == "TOPOLOGY_NODE_MISSING_ROLE"
-            assert body["result"] == "block"
-    finally:
-        await dbmod.dispose_engine()
 
 
-@pytest.mark.asyncio
-async def test_preflight_universal_blocks_on_project_checkout_failure(
-    tmp_path, monkeypatch,
-):
-    """If ``checkout_project`` raises ``ProjectCheckoutError``, the report
-    surfaces a ``topology_load`` block with ``PROJECT_CHECKOUT_FAILED``
-    instead of crashing the route."""
-    app, dbmod = await _boot(tmp_path, monkeypatch)
-    try:
-        await _seed(
-            dbmod, tmp_path,
-            scenario="_universal",
-            project_sha="deadbeef",
-            team_count=1,
-            repo_owner="me", repo_name="proj",
-        )
-
-        from app.core.errors import ProjectCheckoutError
-        from app.routes.v1.deployments import preflight as preflight_mod
-
-        def _boom(*, repo_url, sha, dest, token):
-            raise ProjectCheckoutError(message="repo not found")
-
-        monkeypatch.setattr(preflight_mod, "checkout_project", _boom)
-
-        async with AsyncClient(transport=ASGITransport(app=app),
-                               base_url="http://t") as c:
-            r = await c.post("/v1/deployments/dep-1/preflight")
-            assert r.status_code == 200, r.text
-            body = r.json()
-            loads = [
-                c for c in body["checks"]
-                if c["check"] == "topology_load" and c["result"] == "block"
-            ]
-            assert loads, body["checks"]
-            assert loads[0]["code"] == "PROJECT_CHECKOUT_FAILED"
-            assert "repo not found" in loads[0]["detail"]
-    finally:
-        await dbmod.dispose_engine()
 
 
 @pytest.mark.asyncio
@@ -270,5 +153,86 @@ async def test_preflight_legacy_scenario_unchanged(tmp_path, monkeypatch):
             assert "secret_completeness" in check_names
             assert "resource_budget" in check_names
             assert "vmid_collision" in check_names
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", ["demo_lab"])
+@pytest.mark.parametrize(
+    "installation", ["missing_config", "missing_scenario", "public_only", "installed"]
+)
+async def test_preflight_requires_scenario_in_runner_playbooks_directory(
+    tmp_path, monkeypatch, scenario, installation,
+):
+    """A reachable host and valid topology cannot compensate for absent playbooks.
+
+    Use the real scenario resolver and filesystem; only external Proxmox/git
+    operations are replaced. A public checkout alone is insufficient because
+    the attempt runner resolves scenarios from the www-app directory.
+    """
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        await _seed(
+            dbmod, tmp_path, scenario=scenario,
+            project_sha="deadbeef" if scenario == "_universal" else None,
+            repo_owner="me", repo_name="proj",
+        )
+        runner_playbooks = tmp_path / "runner-playbooks"
+        runner_playbooks.mkdir()
+        monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(runner_playbooks))
+        monkeypatch.delenv("API_BACKEND_PUBLIC_PLAYBOOKS_DIR", raising=False)
+        if installation == "missing_config":
+            monkeypatch.delenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR")
+        elif installation in ("public_only", "installed"):
+            root = tmp_path / "public-playbooks" if installation == "public_only" else runner_playbooks
+            entrypoint = root / "scenarios" / scenario / "main.yml"
+            entrypoint.parent.mkdir(parents=True)
+            entrypoint.write_text("- hosts: localhost\n  tasks: []\n")
+            if installation == "public_only":
+                monkeypatch.setenv("API_BACKEND_PUBLIC_PLAYBOOKS_DIR", str(root))
+
+        from app.core.preflight import PreflightCheck
+        from app.routes.v1.deployments import preflight as preflight_mod
+
+        async def healthy_proxmox(api_url, token_ref):
+            return PreflightCheck(check="proxmox_api", result="pass")
+
+        monkeypatch.setattr(preflight_mod, "check_proxmox_api_status", healthy_proxmox)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            response = await c.post("/v1/deployments/dep-1/preflight")
+            assert response.status_code == 200, response.text
+            report = response.json()
+            expected = "pass" if installation == "installed" else "block"
+            assert report["result"] == expected, report
+            playbook_checks = [
+                check for check in report["checks"] if check["check"] == "scenario_playbook"
+            ]
+            assert len(playbook_checks) == 1, report
+            check = playbook_checks[0]
+            assert check["result"] == expected
+            if expected == "block":
+                assert check["code"] == "SCENARIO_PLAYBOOK_UNAVAILABLE"
+                assert check["field_path"] == "scenario_label"
+                assert scenario in check["detail"]
+                assert "API_BACKEND_WWWAPP_PLAYBOOKS_DIR" in check["detail"]
+            latest = await c.get("/v1/deployments/dep-1/preflight")
+            assert latest.json()["checks"] == report["checks"]
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_existing_universal_preflight_explains_retirement(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        await _seed(dbmod, tmp_path, scenario="_universal", project_sha="a" * 40)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            response = await client.post("/v1/deployments/dep-1/preflight")
+        assert response.status_code == 200
+        assert response.json()["result"] == "block"
+        assert response.json()["checks"][0]["code"] == "SCENARIO_RETIRED"
+        assert not (tmp_path / "WS-_universal" / "project").exists()
     finally:
         await dbmod.dispose_engine()

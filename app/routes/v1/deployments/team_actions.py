@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
 from app.core.models import Attempt, Deployment
+from app.core.scenario import validate_concrete_scope
 from app.schemas.v1.deployments import AttemptOut
 
 router = APIRouter()
@@ -32,6 +33,7 @@ async def reset_team(deployment_id: str, team_id: int,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
+    validate_concrete_scope(dep, "team_reset")
     if team_id < 1 or team_id > dep.team_count:
         raise Range42Error(
             error="bad_team", code="TEAM_OUT_OF_RANGE", status=400,

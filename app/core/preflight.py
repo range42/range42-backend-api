@@ -14,6 +14,9 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.core.proxmox_tls import proxmox_verify
+from fastapi import HTTPException
+
 from app.core.vmid_guard import assert_vmid_safe, VmidProtectedError
 
 
@@ -37,6 +40,27 @@ class PreflightReport:
         if any(c.result == "warn" for c in self.checks):
             return "warn"
         return "pass"
+
+
+def check_scenario_playbook(scenario_label: str) -> PreflightCheck:
+    """Check the entrypoint using the same resolver and config as the runner."""
+    from app.core.deploy_trigger import _resolve_playbook_for_scenario
+
+    try:
+        _resolve_playbook_for_scenario(scenario_label)
+    except HTTPException as e:
+        return PreflightCheck(
+            check="scenario_playbook",
+            result="block",
+            code="SCENARIO_PLAYBOOK_UNAVAILABLE",
+            detail=(
+                f"Scenario '{scenario_label}' is unavailable. Install its playbooks "
+                "and configure API_BACKEND_WWWAPP_PLAYBOOKS_DIR to the directory "
+                f"containing scenarios/. {e.detail}"
+            ),
+            field_path="scenario_label",
+        )
+    return PreflightCheck(check="scenario_playbook", result="pass")
 
 
 def check_vmids(requested: list[int], *, host_overrides: list[list[int]] | None) -> PreflightCheck:
@@ -89,9 +113,9 @@ def check_resource_budget(*, total_ram_mb_required: int,
 
 async def check_proxmox_api_status(api_url: str, token_ref: str) -> PreflightCheck:
     try:
-        async with httpx.AsyncClient(verify=False, timeout=5) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=5) as cli:
             r = await cli.get(
-                f"{api_url}/api2/json/nodes",
+                f"{api_url.rstrip('/')}/api2/json/nodes",
                 headers={"Authorization": f"PVEAPIToken={token_ref}"},
             )
     except httpx.HTTPError as e:
@@ -121,9 +145,9 @@ async def check_proxmox_api_status(api_url: str, token_ref: str) -> PreflightChe
 async def check_sdn_bridge(api_url: str, token_ref: str,
                            bridge: str) -> PreflightCheck:
     try:
-        async with httpx.AsyncClient(verify=False, timeout=5) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=5) as cli:
             r = await cli.get(
-                f"{api_url}/api2/json/cluster/sdn/vnets",
+                f"{api_url.rstrip('/')}/api2/json/cluster/sdn/vnets",
                 headers={"Authorization": f"PVEAPIToken={token_ref}"},
             )
     except httpx.HTTPError as e:

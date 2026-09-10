@@ -10,6 +10,8 @@ from typing import Literal
 from urllib.parse import quote
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +48,7 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
     headers = _auth_headers(row)
     items: list[VmSummary] = []
     try:
-        async with httpx.AsyncClient(verify=False, timeout=10) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
             for vm_type in ("qemu", "lxc"):
                 r = await cli.get(
                     f"{base}/api2/json/nodes/{row.node_name}/{vm_type}", headers=headers
@@ -97,7 +99,7 @@ async def vm_config(
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/config"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -144,7 +146,7 @@ async def vm_status_action(
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/{action}"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.post(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -183,7 +185,7 @@ async def vm_delete(
         params["purge"] = 1
         params["destroy-unreferenced-disks"] = 1
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.delete(url, headers=_auth_headers(row), params=params)
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -212,7 +214,7 @@ async def task_status(host_id: str, upid: str, session: AsyncSession = Depends(_
     enc = quote(upid, safe="")
     url = f"{base}/api2/json/nodes/{row.node_name}/tasks/{enc}/status"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e

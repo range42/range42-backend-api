@@ -21,6 +21,8 @@ async def _boot(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_deployment_scaffolds_workspace(tmp_path, monkeypatch):
+    # CRUD registration is also supported without invoking a runner.
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
     app, dbmod = await _boot(tmp_path, monkeypatch)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t", follow_redirects=True) as c:

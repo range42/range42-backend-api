@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DeploymentCreate(BaseModel):
@@ -15,6 +15,13 @@ class DeploymentCreate(BaseModel):
     catalog_sha: str | None = None
     project_sha: str | None = None
     secrets: dict[str, str] | None = None
+
+    @field_validator("scenario_label")
+    @classmethod
+    def concrete_scenario(cls, value: str) -> str:
+        if value == "_universal":
+            raise ValueError("_universal is retired; save a concrete scenario and use its name")
+        return value
 
 
 class DeploymentOut(BaseModel):
@@ -38,6 +45,7 @@ class AttemptOut(BaseModel):
     id: str
     deployment_id: str
     scope: str
+    project_sha: str | None = None
     team_id: int | None = None
     state: str
     sub_reason: str | None = None
@@ -48,8 +56,10 @@ class AttemptOut(BaseModel):
 
 
 class AttemptCreate(BaseModel):
-    scope: str = Field(pattern=r"^(full|failed_teams|team_reset|teardown|rollback_all|rollback_team)$")
+    scope: str = Field(pattern=r"^(full|configure|failed_teams|team_reset|teardown|rollback_all|rollback_team)$")
     team_id: int | None = None
+    confirm_codename: str | None = None
+    project_sha: str | None = Field(default=None, pattern=r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 
 
 class PreflightResponse(BaseModel):
@@ -59,6 +69,11 @@ class PreflightResponse(BaseModel):
     ts: datetime
     result: str
     checks: list[dict]
+
+
+class PreflightRequest(BaseModel):
+    scope: str = Field(default="full", pattern=r"^(full|configure|teardown)$")
+    project_sha: str | None = Field(default=None, pattern=r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 
 
 class TeardownRequest(BaseModel):

@@ -9,6 +9,9 @@ Spec refs: §7 concurrency, §8 concurrency primitives.
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+import fcntl
+import os
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +24,41 @@ class LockHeldError(Range42Error):
     status = 409
     error = "deployment_locked"
     code = "DEPLOYMENT_LOCKED"
+
+
+class ProvisioningLock:
+    """Serialize full provisioning across this installation's workspaces.
+
+    The detached runner inherits the locked descriptor. A hard API crash cannot
+    release the lock while that runner is staging/applying cluster SDN changes.
+    All targets share one lock so aliases for the same cluster cannot bypass it.
+    External Proxmox writers must still coordinate their changes separately.
+    """
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.fd = -1
+
+    def __enter__(self):
+        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(self.directory / "provisioning.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            raise Range42Error(
+                status=409, error="provisioning_busy", code="PROVISIONING_BUSY",
+                message="Another full deployment is preparing infrastructure. Wait for it to finish before retrying.",
+            ) from None
+        self.fd = fd
+        return self
+
+    def __exit__(self, *_):
+        # Do not LOCK_UN: that would also unlock the child's inherited open
+        # file description. Closing leaves it locked until the runner exits.
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
 
 
 def _is_stale(lock: WorkspaceLock) -> bool:
@@ -102,8 +140,11 @@ async def heartbeat(
     return True
 
 
-async def cleanup_stale_locks(session: AsyncSession) -> int:
-    rows = (await session.execute(select(WorkspaceLock))).scalars().all()
+async def cleanup_stale_locks(session: AsyncSession, *, deployment_id: str | None = None) -> int:
+    query = select(WorkspaceLock)
+    if deployment_id is not None:
+        query = query.where(WorkspaceLock.deployment_id == deployment_id)
+    rows = (await session.execute(query)).scalars().all()
     stale = [r for r in rows if _is_stale(r)]
     for r in stale:
         await session.delete(r)

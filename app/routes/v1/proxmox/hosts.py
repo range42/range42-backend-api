@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -197,10 +199,10 @@ async def host_health(host_id: str, session: AsyncSession = Depends(_session)):
     start = time.perf_counter()
     status_value = "unreachable"
     sdn_available: bool | None = None
-    async with httpx.AsyncClient(verify=False, timeout=5) as cli:
+    async with httpx.AsyncClient(verify=proxmox_verify(), timeout=5) as cli:
         try:
             version_r = await cli.get(
-                f"{row.api_url}/api2/json/version", headers=headers
+                f"{row.api_url.rstrip('/')}/api2/json/version", headers=headers
             )
             if version_r.status_code in (401, 403):
                 raise AuthFailedError(
@@ -216,7 +218,7 @@ async def host_health(host_id: str, session: AsyncSession = Depends(_session)):
                 )
             status_value = "ok" if version_r.status_code == 200 else "degraded"
             sdn_r = await cli.get(
-                f"{row.api_url}/api2/json/cluster/sdn", headers=headers
+                f"{row.api_url.rstrip('/')}/api2/json/cluster/sdn", headers=headers
             )
             sdn_available = sdn_r.status_code == 200
         except httpx.ConnectError as e:

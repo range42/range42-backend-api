@@ -133,5 +133,19 @@
   ],
   "/v0/admin/run/scenarios/{scenario_name}/run": [
     "POST"
+  ],
+  "/v1/catalog/sources": [
+    "GET",
+    "POST"
+  ],
+  "/v1/catalog/sources/default": [
+    "POST"
+  ],
+  "/v1/catalog/sources/{source_id}": [
+    "DELETE",
+    "PATCH"
+  ],
+  "/v1/catalog/sources/{source_id}/refresh": [
+    "POST"
   ]
 }

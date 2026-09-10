@@ -70,9 +70,28 @@ class Settings:
     cors_origin_regex: str = field(
         default_factory=lambda: os.getenv(
             "CORS_ORIGIN_REGEX",
-            r"^https?://(localhost|127\.0\.0\.1|\[::1\]|192\.168\.42\.\d{1,3})(:\d+)?$",
+            r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
         )
     )
+
+    cors_origins: tuple[str, ...] = field(default_factory=lambda: tuple(
+        origin.strip() for origin in os.getenv("RANGE42_CORS_ORIGINS", "").split(",") if origin.strip()
+    ))
+
+    # Explicit development opt-in; deployments fail closed without a token.
+    auth_mode: str = field(default_factory=lambda: os.getenv("RANGE42_AUTH_MODE", "required"))
+    api_token: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN", ""), repr=False)
+    api_token_file: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN_FILE", ""))
+
+    credential_key: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY", ""), repr=False)
+    credential_key_file: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY_FILE", ""))
+
+    git_allowed_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
+        host.strip().lower() for host in os.getenv("RANGE42_GIT_ALLOWED_HOSTS", "github.com,gitlab.com,codeberg.org").split(",") if host.strip()
+    ))
+    git_allow_http: bool = field(default_factory=lambda: os.getenv("RANGE42_GIT_ALLOW_HTTP", "").lower() in ("1", "true", "yes"))
+
+    proxmox_ca_file: str = field(default_factory=lambda: os.getenv("RANGE42_PROXMOX_CA_FILE", ""))
 
     # Server
     host: str = field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))

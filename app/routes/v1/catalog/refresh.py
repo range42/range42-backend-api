@@ -12,6 +12,7 @@ from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.logging import get_logger
 from app.core.models import Source, SourceRepo
+from app.core.repository_urls import GIT_HTTP_ENV, require_repository_url
 from app.schemas.v1.catalog import SourceRefreshResult
 
 router = APIRouter()
@@ -43,6 +44,12 @@ async def refresh_source(
             select(SourceRepo).where(SourceRepo.source_id == source_id)
         )
     ).scalars().all()
+    if not repos:
+        raise Range42Error(
+            error="source_repos_required", code="SOURCE_REPOS_REQUIRED", status=400,
+            message="Register a repository for this source before refreshing its catalog.",
+            details=[{"field": "repos", "reason": "No repositories registered"}],
+        )
     entries = 0
     for repo in repos:
         try:
@@ -90,12 +97,12 @@ def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
     from app.core.project import _redact_authed_url, authed_url
 
     url = authed_url(
-        f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git",
+        require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"),
         src.token_ref,
     )
     with tempfile.TemporaryDirectory() as td:
         try:
-            git.Repo.clone_from(url, td, depth=1, branch=repo.branch)
+            git.Repo.clone_from(url, td, depth=1, branch=repo.branch, env=GIT_HTTP_ENV)
         except Exception as e:
             raise SourceUnreachableError(
                 details=[{"field": "source_id",

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.core.events import EventsWriter
+from app.core.events import EventsReader, EventsWriter
 from app.core.redaction import (
     RedactionAuditWriter, RedactionLayer, run_pipeline,
 )
@@ -34,8 +34,9 @@ logger = get_logger(__name__)
 #   - preflight_check: emitted by app/core/preflight.py per-check, written
 #     directly to events.jsonl (preflight is not routed through the runner).
 _ANSIBLE_TO_RANGE42 = {
-    "playbook_on_start": "attempt_start",
-    "playbook_on_stats": "attempt_end",
+    # The deploy trigger owns lifecycle events and their durable terminal state.
+    "playbook_on_start": "log_line",
+    "playbook_on_stats": "log_line",
     "playbook_on_play_start": "phase_transition",
     "runner_on_ok": "task_end",
     "runner_on_failed": "task_end",
@@ -65,7 +66,7 @@ def _translate(ansible_event: dict[str, Any]) -> dict[str, Any]:
     elif r42_type == "host_unreachable":
         payload["host"] = data.get("host")
     else:
-        payload["text"] = (data.get("stdout") or "")[:4096]
+        payload["text"] = ansible_event.get("stdout") or data.get("stdout") or ""
     return {"event_type": r42_type, "payload": payload,
             "proxmox_ts": ansible_event.get("created")}
 
@@ -83,12 +84,19 @@ class EventsWatcher:
         self.attempt_id = attempt_id
         self.stop = stop or asyncio.Event()
         self.poll_ms = poll_ms
-        self._seen: set[str] = set()
+        self._seen = {event["runner_event_id"] for event in EventsReader(writer.path).read_range()
+                      if event.get("attempt_id") == attempt_id
+                      and isinstance(event.get("runner_event_id"), str)}
 
     async def run(self) -> None:
         self.job_events_dir.mkdir(parents=True, exist_ok=True)
-        while not self.stop.is_set():
-            for p in sorted(self.job_events_dir.glob("*.json")):
+        while True:
+            # A final scan is required after the process exits; the last event
+            # files can arrive between a polling scan and stop.set().
+            for p in sorted(self.job_events_dir.glob("*.json"), key=lambda p: (
+                int(p.name.split("-", 1)[0]) if p.name.split("-", 1)[0].isdigit() else 0,
+                p.name,
+            )):
                 if p.name in self._seen:
                     continue
                 try:
@@ -100,8 +108,17 @@ class EventsWatcher:
                 redacted = run_pipeline(ev, self.layers, audit=self.audit,
                                          deployment_id=self.deployment_id,
                                          attempt_id=self.attempt_id)
+                # Persist the source identity in the same append as the event;
+                # a second observer after restart can drain without replay.
+                redacted["runner_event_id"] = p.name
+                if redacted["event_type"] == "log_line":
+                    # Truncating first can leave a credential prefix that no
+                    # longer matches the complete known secret.
+                    redacted["payload"]["text"] = redacted["payload"]["text"][:4096]
                 self.writer.append(redacted, attempt_id=self.attempt_id,
                                    deployment_id=self.deployment_id)
+            if self.stop.is_set():
+                break
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.poll_ms / 1000)
             except asyncio.TimeoutError:

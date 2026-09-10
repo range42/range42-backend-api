@@ -28,6 +28,7 @@ from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.project import _redact_authed_url, authed_url
 from app.core.models import Source, SourceRepo
+from app.core.repository_urls import GIT_HTTP_ENV, require_repository_url
 from app.schemas.v1.catalog import CatalogEntryDetail, CatalogEntrySummary
 from app.schemas.v1.common import Page
 
@@ -43,13 +44,13 @@ async def _session() -> AsyncSession:
 
 def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
     url = authed_url(
-        f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git",
+        require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"),
         src.token_ref,
     )
     dest = workdir / f"{src.id}-{repo.owner}-{repo.repo}"
     if not dest.exists():
         try:
-            git.Repo.clone_from(url, str(dest), depth=1, branch=repo.branch)
+            git.Repo.clone_from(url, str(dest), depth=1, branch=repo.branch, env=GIT_HTTP_ENV)
         except Exception as e:
             raise SourceUnreachableError(
                 details=[
@@ -195,6 +196,8 @@ async def list_entries(
             ).scalars().all()
             for repo in repos:
                 dest = _clone_repo(src, repo, workdir)
+                with git.Repo(dest) as checkout:
+                    sha = checkout.head.commit.hexsha
                 for entry in _discover(dest):
                     if kind and entry["kind"] != kind:
                         continue
@@ -208,7 +211,7 @@ async def list_entries(
                             name=entry["name"],
                             description=entry.get("description"),
                             tags=entry.get("tags") or [],
-                            sha=None,
+                            sha=sha,
                         )
                     )
     total = len(summaries)
@@ -247,6 +250,8 @@ async def get_entry(
             dest = _clone_repo(src, repo, workdir)
             entry = _detail_at_path(dest, path)
             if entry is not None:
+                with git.Repo(dest) as checkout:
+                    sha = checkout.head.commit.hexsha
                 readme = dest / path / "README.md"
                 return CatalogEntryDetail(
                     source_id=src.id,
@@ -255,7 +260,7 @@ async def get_entry(
                     name=entry["name"],
                     description=entry.get("description"),
                     tags=entry.get("tags") or [],
-                    sha=None,
+                    sha=sha,
                     document=entry["document"],
                     readme_md=readme.read_text() if readme.exists() else None,
                 )

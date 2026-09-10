@@ -12,6 +12,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.core.credential_store import EncryptedCredential
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -27,7 +29,7 @@ class Source(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
     auth_kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    token_ref: Mapped[str | None] = mapped_column(String(128))
+    token_ref: Mapped[str | None] = mapped_column(EncryptedCredential())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     repos: Mapped[list["SourceRepo"]] = relationship(back_populates="source", cascade="all, delete-orphan")
 
@@ -51,7 +53,7 @@ class ProxmoxHost(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     api_url: Mapped[str] = mapped_column(String(512), nullable=False)
     node_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    token_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_ref: Mapped[str] = mapped_column(EncryptedCredential(), nullable=False)
     token_scope: Mapped[str | None] = mapped_column(String(256))
     default_bridge: Mapped[str] = mapped_column(String(32), default="vmbr0")
     protected_vmids_override_json: Mapped[str | None] = mapped_column(Text)
@@ -103,6 +105,7 @@ class Attempt(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     deployment_id: Mapped[str] = mapped_column(ForeignKey("deployments.id"), nullable=False)
     scope: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_sha: Mapped[str | None] = mapped_column(String(64))
     team_id: Mapped[int | None] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     sub_reason: Mapped[str | None] = mapped_column(String(64))

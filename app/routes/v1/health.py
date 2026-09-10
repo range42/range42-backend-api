@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +50,7 @@ async def readiness(session: AsyncSession = Depends(_session)):
     # Proxmox reachability — best-effort across registered hosts.
     hosts = (await session.execute(select(ProxmoxHost))).scalars().all()
     host_results: list[dict] = []
-    async with httpx.AsyncClient(verify=False, timeout=3) as cli:
+    async with httpx.AsyncClient(verify=proxmox_verify(), timeout=3) as cli:
         for h in hosts:
             try:
                 r = await cli.get(

@@ -1,0 +1,87 @@
+"""VM resource and ownership checks for generated concrete scenarios."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from urllib.parse import quote
+
+import httpx
+
+from app.core.proxmox_tls import proxmox_verify
+
+from app.core.models import ProxmoxHost
+from app.core.preflight import PreflightCheck
+from app.core.proxmox_read import ProxmoxReadError, list_proxmox_data, read_proxmox_data
+
+
+def _blocked(code: str, detail: str) -> list[PreflightCheck]:
+    return [PreflightCheck(check="scenario_resources", result="block", code=code,
+                           detail=detail, field_path="manifest/scenario_vms.json")]
+
+
+async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None, *,
+                                   deployment_id: str, scope: str = "full",
+                                   client: httpx.AsyncClient | None = None) -> list[PreflightCheck]:
+    """Check generated template-based plans. Hand-authored inventory stays supported."""
+    try:
+        path = scenario_dir / "manifest/scenario_vms.json"
+        if not path.resolve().is_relative_to(scenario_dir.resolve()) or path.stat().st_size > 1024 * 1024:
+            raise ValueError("invalid VM manifest path or size")
+        vms = json.loads(path.read_text())["vms"]
+        if not isinstance(vms, list) or any(not isinstance(vm, dict) for vm in vms):
+            raise ValueError("invalid VM list")
+        if not any("template_vm_id" in vm for vm in vms):
+            return []
+        if any(type(vm.get("vm_id")) is not int or type(vm.get("template_vm_id")) is not int
+               or not isinstance(vm.get("vm_name"), str) for vm in vms):
+            raise ValueError("generated VMs require a template, integer id and name")
+        if host is None:
+            return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Select an available target host.")
+        if client is None:
+            async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8) as owned_client:
+                return await check_scenario_resources(scenario_dir, host, deployment_id=deployment_id,
+                                                       scope=scope, client=owned_client)
+        resources = await list_proxmox_data(client, host, "/cluster/resources", params={"type": "vm"})
+        by_id = {int(vm["vmid"]): vm for vm in resources}
+        required_memory = 0
+        for planned in vms:
+            vmid = planned["vm_id"]
+            existing = by_id.get(vmid)
+            if existing is None and scope in ("full", "teardown"):
+                # Resource lists are filtered by VM.Audit. nextid checks global
+                # occupancy even when the token cannot see an existing VM.
+                available = await read_proxmox_data(client, host, "/cluster/nextid", params={"vmid": vmid})
+                if str(available) != str(vmid):
+                    return _blocked("SCENARIO_RESOURCES_UNREADABLE", f"Proxmox did not confirm VMID {vmid} is unused.")
+            if scope == "full":
+                if existing:
+                    return _blocked("VMID_IN_USE", f"VMID {vmid} already exists. Use configuration for an owned VM, or select an unused VMID.")
+                template = by_id.get(planned["template_vm_id"])
+                if (not template or template.get("template") != 1 or template.get("node") != host.node_name
+                        or template.get("type") != "qemu"):
+                    return _blocked("TEMPLATE_NOT_READY", f"Template {planned['template_vm_id']} must be a QEMU template on {host.node_name}.")
+                memory = template.get("maxmem")
+                if type(memory) not in (int, float) or memory <= 0:
+                    return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Proxmox did not report template memory requirements.")
+                required_memory += memory
+            else:
+                if existing is None and scope == "teardown":
+                    continue
+                if (not existing or existing.get("node") != host.node_name or existing.get("name") != planned["vm_name"]
+                        or existing.get("type") != "qemu" or existing.get("template")):
+                    return _blocked("VM_OWNERSHIP_MISMATCH", f"VMID {vmid} does not match the deployment's VM name, type and target node.")
+                config = await read_proxmox_data(client, host, f"/nodes/{quote(host.node_name, safe='')}/qemu/{vmid}/config")
+                if not isinstance(config, dict) or f"range42-deployment:{deployment_id}" not in str(config.get("description", "")).splitlines():
+                    return _blocked("VM_OWNERSHIP_MISMATCH", f"VMID {vmid} is missing this deployment's ownership marker. It will not be configured or removed.")
+        if scope == "full":
+            status = await read_proxmox_data(client, host, f"/nodes/{quote(host.node_name, safe='')}/status")
+            free = status.get("memory", {}).get("free") if isinstance(status, dict) else None
+            if type(free) not in (int, float) or free <= 0:
+                return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Proxmox did not report available host memory.")
+            if required_memory > free:
+                return _blocked("INSUFFICIENT_MEMORY", f"The VMs need {required_memory / 1024**2:.0f} MiB, but the target currently has {free / 1024**2:.0f} MiB free.")
+        return [PreflightCheck(check="scenario_resources", result="pass", detail="Template and free VMID checks passed." if scope == "full" else "Deployment VM ownership verified.")]
+    except ProxmoxReadError as exc:
+        return _blocked("SCENARIO_RESOURCES_UNREADABLE", str(exc))
+    except (ValueError, TypeError, KeyError, OSError):
+        return _blocked("SCENARIO_RESOURCES_INVALID", "The VM manifest or target resource data is invalid.")
