@@ -100,8 +100,12 @@ async def create_deployment(payload: DeploymentCreate,
             codename=payload.codename,
             scenario_label=payload.scenario_label,
             workspace_root=settings.workspace_root,
+            inherit_template=not bool(payload.secrets),
         )
     except WorkspaceError as e:
+        if e.code != "WORKSPACE_NON_LOCAL_FS":
+            raise Range42Error(error="workspace_error", code=e.code, status=500,
+                               message=e.message) from e
         raise WorkspaceNonLocalFsError(
             message=e.message,
             details=[{"field": "workspace_root", "reason": e.message}],
