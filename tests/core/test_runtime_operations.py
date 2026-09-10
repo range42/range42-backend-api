@@ -8,7 +8,7 @@ from app.core.errors import Range42Error
 
 
 def state():
-    return {"vms": [{"vm_id": 3191, "name": "owned-guest", "status": "owned",
+    return {"node_name": "pve01", "vms": [{"vm_id": 3191, "name": "owned-guest", "status": "owned",
                      "firewall_enabled": False, "nics": [{"index": 0, "firewall_enabled": False}]}],
             "sdn": {"pending_changes": False, "errors": []},
             "networks": [{"vnet": "r42blue", "identity_matches": True, "active": True,
@@ -80,8 +80,12 @@ def test_nat_refuses_pending_or_mismatched_shared_state(change):
 @pytest.mark.parametrize("capability", [None, False, True])
 def test_nat_runtime_requires_reviewed_all_subnet_reconciliation(tmp_path, monkeypatch, capability):
     from app.core import runtime_operations
+    roles = tmp_path / "roles"
+    controller = roles / "range42-ansible_roles-proxmox_controller"
+    controller.mkdir(parents=True)
+    (controller / "runtime-capabilities.json").write_text(json.dumps({"version": 1, "snat_rule_matching": "exact_source_nat_target_v1"}))
     monkeypatch.setattr(runtime_operations, "runtime_snapshot", lambda: (
-        {"environment": {"RANGE42_BUNDLE_DIR": str(tmp_path)}, "components": {}}, "f" * 64,
+        {"environment": {"RANGE42_BUNDLE_DIR": str(tmp_path), "ANSIBLE_ROLES_PATH": str(roles)}, "components": {}}, "f" * 64,
     ))
     if capability is not None:
         (tmp_path / "runtime-capabilities.json").write_text(json.dumps({
@@ -114,3 +118,22 @@ def test_malformed_capability_document_has_actionable_profile_error(tmp_path, mo
     with pytest.raises(Range42Error) as error:
         runtime_operations.operation_profile("vm_firewall")
     assert error.value.code == "RUNTIME_CAPABILITY_MISSING"
+
+
+@pytest.mark.parametrize("controller_capability", [None, "source_only", [], {"version": 1}])
+def test_nat_refuses_controller_without_exact_nat_target_parser(tmp_path, monkeypatch, controller_capability):
+    from app.core import runtime_operations
+    roles = tmp_path / "roles"
+    controller = roles / "range42-ansible_roles-proxmox_controller"
+    controller.mkdir(parents=True)
+    monkeypatch.setattr(runtime_operations, "runtime_snapshot", lambda: (
+        {"environment": {"RANGE42_BUNDLE_DIR": str(tmp_path), "ANSIBLE_ROLES_PATH": str(roles)}, "components": {}}, "f" * 64,
+    ))
+    (tmp_path / "runtime-capabilities.json").write_text(json.dumps({"version": 1,
+        "operations": ["vm_firewall", "sdn_snat"], "snat_reconciles_all_declared_subnets": True}))
+    if controller_capability is not None:
+        (controller / "runtime-capabilities.json").write_text(json.dumps(controller_capability))
+    with pytest.raises(Range42Error) as error:
+        runtime_operations.operation_profile("sdn_snat")
+    assert error.value.code == "RUNTIME_CAPABILITY_MISSING"
+    assert runtime_operations.operation_profile("vm_firewall")["operations"] == ["vm_firewall"]

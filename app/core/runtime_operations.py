@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import json
+import os
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -23,6 +24,27 @@ def target_identity(host: ProxmoxHost | None) -> dict[str, str]:
     return {"api_url": host.api_url.rstrip("/"), "node_name": host.node_name}
 
 
+def _controller_exact_snat(profile: dict) -> bool:
+    for directory in profile["environment"].get("ANSIBLE_ROLES_PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        role = Path(directory) / "range42-ansible_roles-proxmox_controller"
+        if not role.is_dir():
+            continue
+        # The first installed role wins Ansible's search order. A later safe
+        # copy cannot authorize an older role that will actually be imported.
+        marker = role / "runtime-capabilities.json"
+        try:
+            if marker.is_symlink() or marker.stat().st_size > 8192:
+                return False
+            capabilities = json.loads(marker.read_text())
+            return (isinstance(capabilities, dict) and capabilities.get("version") == 1
+                    and capabilities.get("snat_rule_matching") == "exact_source_nat_target_v1")
+        except (OSError, ValueError, TypeError):
+            return False
+    return False
+
+
 def operation_profile(kind: str) -> dict:
     profile, fingerprint = runtime_snapshot()
     try:
@@ -33,13 +55,15 @@ def operation_profile(kind: str) -> dict:
         capabilities = json.loads(marker.read_text())
         if (not isinstance(capabilities, dict) or capabilities.get("version") != 1
                 or not isinstance(capabilities.get("operations"), list) or kind not in capabilities["operations"]
-                or (kind == "sdn_snat" and capabilities.get("snat_reconciles_all_declared_subnets") is not True)):
+                or (kind == "sdn_snat" and (capabilities.get("snat_reconciles_all_declared_subnets") is not True
+                                          or not _controller_exact_snat(profile)))):
             raise ValueError("unsupported operation")
     except (OSError, ValueError, TypeError):
         raise blocked("Install a matching runtime release with this operation's reviewed composite bundles", "RUNTIME_CAPABILITY_MISSING") from None
     operations = [name for name in ("vm_firewall", "scenario_firewall", "sdn_snat")
                   if name in capabilities["operations"] and
-                  (name != "sdn_snat" or capabilities.get("snat_reconciles_all_declared_subnets") is True)]
+                  (name != "sdn_snat" or (capabilities.get("snat_reconciles_all_declared_subnets") is True
+                                         and _controller_exact_snat(profile)))]
     return {"fingerprint": fingerprint, "dependencies": dependencies(profile), "operations": operations}
 
 

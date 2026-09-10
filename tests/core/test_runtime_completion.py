@@ -40,6 +40,7 @@ def test_nat_success_requires_live_rule_readback_as_well_as_declaration(count, e
     current["networks"][0]["configured_snat"] = True
     events = [] if count is None else [{"payload": {"res": {"network_delete_extra_snat_rules": {
         "subnet_cidr": "10.42.70.0/24", "snat_after": count, "snat_host": "r42-proxmox-cli",
+        "snat_rule_matching": "exact_source_nat_target_v1", "proxmox_node": "pve01", "snat_want": 1,
     }}}}]
     result = assess_runtime_result({"kind": "sdn_snat", "enabled": True, "vnet": "r42blue"},
                                    {"subnet": "10.42.70.0/24"}, current, events)
@@ -116,8 +117,36 @@ def test_nat_completion_cannot_report_success_with_pending_or_unverifiable_sdn(p
     current["networks"][0]["configured_snat"] = True
     events = [{"payload": {"res": {"network_delete_extra_snat_rules": {
         "subnet_cidr": "10.42.70.0/24", "snat_after": 1, "snat_host": "r42-proxmox-cli",
+        "snat_rule_matching": "exact_source_nat_target_v1", "proxmox_node": "pve01", "snat_want": 1,
     }}}}]
     result = assess_runtime_result({"kind": "sdn_snat", "enabled": True, "vnet": "r42blue"},
                                    {"subnet": "10.42.70.0/24"}, current, events)
     assert result["live_snat_rule_count"] == 1
+    assert result["desired_reached"] is False
+
+
+def test_legacy_source_rule_count_cannot_be_reported_as_verified_snat():
+    from app.core.runtime_completion import assess_runtime_result
+    current = state()
+    current["networks"][0]["configured_snat"] = True
+    events = [{"payload": {"res": {"network_delete_extra_snat_rules": {
+        "subnet_cidr": "10.42.70.0/24", "snat_after": 1, "snat_host": "r42-proxmox-cli",
+    }}}}]
+    result = assess_runtime_result({"kind": "sdn_snat", "enabled": True, "vnet": "r42blue"},
+                                   {"subnet": "10.42.70.0/24"}, current, events)
+    assert result["live_snat_rule_count"] is None
+    assert result["desired_reached"] is False
+
+
+@pytest.mark.parametrize("field,value", [("proxmox_node", "another-node"), ("snat_want", 0), ("snat_rule_matching", "source_only")])
+def test_nat_readback_must_match_controller_semantics_node_and_requested_state(field, value):
+    from app.core.runtime_completion import assess_runtime_result
+    current = state()
+    current["networks"][0]["configured_snat"] = True
+    report = {"subnet_cidr": "10.42.70.0/24", "snat_after": 1, "snat_host": "r42-proxmox-cli",
+              "snat_rule_matching": "exact_source_nat_target_v1", "proxmox_node": "pve01", "snat_want": 1}
+    report[field] = value
+    result = assess_runtime_result({"kind": "sdn_snat", "enabled": True, "vnet": "r42blue"},
+        {"subnet": "10.42.70.0/24"}, current, [{"payload": {"res": {"network_delete_extra_snat_rules": report}}}])
+    assert result["live_snat_rule_count"] is None
     assert result["desired_reached"] is False

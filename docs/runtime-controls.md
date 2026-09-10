@@ -92,7 +92,14 @@ The installed release needs `RANGE42_BUNDLE_RUNTIME_MANIFEST` generated using
 the exact exported playbooks/controller/catalog/collections and Ansible paths;
 see [bundle attachments](bundle-attachments.md). Its playbooks must include
 `bundles/runtime-capabilities.json`. NAT additionally requires
-`snat_reconciles_all_declared_subnets: true`. Read-only status remains available
+`snat_reconciles_all_declared_subnets: true`. The first controller role selected
+by `ANSIBLE_ROLES_PATH` must also advertise `snat_rule_matching:
+exact_source_nat_target_v1` in its `runtime-capabilities.json`. That version
+counts only actual SNAT/MASQUERADE jumps for the exact non-negated source CIDR;
+ACCEPT/LOG rules and quoted comments cannot satisfy or be removed by NAT
+reconciliation. Completion requires the same semantic marker, requested desired
+state and selected node in the controller's readback. Older source-only counts
+remain unverified. Read-only status remains available
 when runtime mutation capabilities are absent. A changed profile requires a
 new operation request; an already reserved operation cannot silently execute
 against another release.

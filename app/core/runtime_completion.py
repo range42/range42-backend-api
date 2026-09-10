@@ -23,6 +23,9 @@ def assess_runtime_result(request: dict, plan: dict, state: dict, events) -> dic
             sample = response.get("network_delete_extra_snat_rules") or response.get("ansible_facts", {}).get("network_delete_extra_snat_rules")
             if (isinstance(sample, dict) and sample.get("subnet_cidr") == plan["subnet"]
                     and sample.get("snat_host") == "r42-proxmox-cli"
+                    and sample.get("snat_rule_matching") == "exact_source_nat_target_v1"
+                    and sample.get("proxmox_node") == state.get("node_name")
+                    and type(sample.get("snat_want")) is int and sample["snat_want"] == int(request["enabled"])
                     and type(sample.get("snat_after")) is int and 0 <= sample["snat_after"] < 2**31):
                 count = sample["snat_after"]
         result.update(live_snat_rule_count=count, live_forwarding_verified=False)
