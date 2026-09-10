@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
@@ -74,19 +75,23 @@ async def create_source(
 
 
 @router.post("/sources/default", response_model=SourceOut)
-async def register_default_source(session: AsyncSession = Depends(_session)):
-    """Ensure the public Range42 catalog is registered, without cloning it."""
+async def register_default_source(
+    session: AsyncSession = Depends(_session), kind: Literal["catalog", "bundles"] = "catalog",
+):
+    """Register the public catalog or the SDN playbooks library without cloning."""
     try:
-        return await _register_default_source(session)
+        return await _register_default_source(session, kind=kind)
     except IntegrityError:
         # Two first-run clients may register the same default simultaneously.
         # The stable source key / unique repository constraint makes one win;
         # the other reads its completed registration after rolling back.
         await session.rollback()
-        return await _register_default_source(session)
+        return await _register_default_source(session, kind=kind)
 
 
-async def _register_default_source(session: AsyncSession) -> SourceOut:
+async def _register_default_source(session: AsyncSession, *, kind: str = "catalog") -> SourceOut:
+    repository_name, branch = ("range42-playbooks", "feat-sdn-implementation") if kind == "bundles" else ("range42-catalog", "main")
+
     sources = (await session.execute(
         select(Source).options(selectinload(Source.repos))
         .order_by(Source.created_at, Source.id)
@@ -97,23 +102,23 @@ async def _register_default_source(session: AsyncSession) -> SourceOut:
                 or source.base_url.rstrip("/") != "https://github.com" or source.token_ref):
             continue
         catalog_repo = next((repo for repo in source.repos
-                             if repo.owner == "range42" and repo.repo == "range42-catalog"), None)
-        if len(source.repos) == 1 and catalog_repo is not None and catalog_repo.branch == "main":
+                             if repo.owner == "range42" and repo.repo == repository_name), None)
+        if len(source.repos) == 1 and catalog_repo is not None and catalog_repo.branch == branch:
             return _to_out(source)
         if not source.repos and reusable is None:
             reusable = source
     if reusable is None:
         existing_ids = {source.id for source in sources}
-        default_id = "range42-public-catalog"
+        default_id = f"range42-public-{kind}"
         suffix = 0
         while default_id in existing_ids:
             suffix += 1
-            default_id = f"range42-public-catalog-{suffix}"
+            default_id = f"range42-public-{kind}-{suffix}"
         reusable = Source(id=default_id, provider="github",
                           base_url="https://github.com/", auth_kind="none", repos=[])
         session.add(reusable)
     reusable.repos.append(SourceRepo(id=uuid.uuid4().hex[:16], owner="range42",
-                                     repo="range42-catalog", branch="main"))
+                                     repo=repository_name, branch=branch))
     await session.commit()
     await session.refresh(reusable, attribute_names=["created_at", "repos"])
     return _to_out(reusable)

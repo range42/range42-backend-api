@@ -249,3 +249,99 @@ async def test_duplicate_repository_in_source_is_validation_error(tmp_path, monk
             assert response.status_code == 422, response.text
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_default_bundle_source_is_separate_and_tracks_sdn_branch(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            catalog = (await client.post("/v1/catalog/sources/default")).json()
+            first = await client.post("/v1/catalog/sources/default", params={"kind": "bundles"})
+            assert first.status_code == 200
+            bundles = first.json()
+            second = (await client.post("/v1/catalog/sources/default", params={"kind": "bundles"})).json()
+            assert bundles == second
+            assert bundles["id"] != catalog["id"]
+            assert bundles["repos"][0]["repo"] == "range42-playbooks"
+            assert bundles["repos"][0]["branch"] == "feat-sdn-implementation"
+            assert (await client.get("/v1/catalog/sources")).json()["total"] == 2
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_entry_readme_cannot_follow_a_symlink_outside_repository(tmp_path, monkeypatch):
+    tree = tmp_path / "catalog"
+    tree.mkdir()
+    secret = tmp_path / "private.txt"
+    secret.write_text("private-outside-repository")
+    (tree / "entry").mkdir()
+    (tree / "entry/range42.yaml").write_text("kind: lab\nname: Example\n")
+    (tree / "entry/README.md").symlink_to(secret)
+    local = git.Repo.init(tree, initial_branch="main")
+    local.index.add(["entry/range42.yaml", "entry/README.md"])
+    actor = git.Actor("Test", "test@example.invalid")
+    local.index.commit("Untrusted symlink", author=actor, committer=actor)
+    clone_from = git.Repo.clone_from
+    monkeypatch.setattr(git.Repo, "clone_from", lambda url, destination, **kw: clone_from(str(tree), destination, **kw))
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            source = (await client.post("/v1/catalog/sources/default")).json()
+            response = await client.get(f"/v1/catalog/entries/{source['id']}/entry")
+            assert response.status_code == 200
+            assert response.json()["readme_md"] is None
+            assert "private-outside-repository" not in response.text
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["entries", "refresh"])
+async def test_catalog_checkout_does_not_block_other_async_work(tmp_path, monkeypatch, operation):
+    import threading
+    from app.routes.v1.catalog import entries, refresh
+
+    tree = tmp_path / "responsive-catalog"
+    tree.mkdir()
+    (tree / "range42.yaml").write_text("kind: lab\nname: Example\n")
+    local = git.Repo.init(tree, initial_branch="main")
+    local.index.add(["range42.yaml"])
+    actor = git.Actor("Test", "test@example.invalid")
+    local.index.commit("Example", author=actor, committer=actor)
+    entered = threading.Event()
+    release = threading.Event()
+    responsive = threading.Event()
+
+    def slow_checkout(*_args):
+        entered.set()
+        if not release.wait(timeout=0.5):
+            raise AssertionError("Catalog checkout blocked the event loop")
+        return tree if operation == "entries" else 1
+
+    monkeypatch.setattr(entries if operation == "entries" else refresh,
+                        "_clone_repo" if operation == "entries" else "_count_entries_in_repo", slow_checkout)
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            source = (await client.post("/v1/catalog/sources/default")).json()
+            async def other_work():
+                while not entered.is_set():
+                    await asyncio.sleep(0)
+                responsive.set()
+                release.set()
+            observer = asyncio.create_task(other_work())
+            try:
+                if operation == "entries":
+                    response = await client.get("/v1/catalog/entries", params={"source_id": source["id"]})
+                else:
+                    response = await client.post(f"/v1/catalog/sources/{source['id']}/refresh")
+                assert response.status_code == 200, response.text
+                assert responsive.is_set()
+            finally:
+                release.set()
+                observer.cancel()
+                await asyncio.gather(observer, return_exceptions=True)
+    finally:
+        await dbmod.dispose_engine()

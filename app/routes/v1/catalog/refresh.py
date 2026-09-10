@@ -1,6 +1,7 @@
 """/v1/catalog/sources/{id}/refresh — shallow-clone each repo and count manifests."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,7 +54,7 @@ async def refresh_source(
     entries = 0
     for repo in repos:
         try:
-            entries += _count_entries_in_repo(src, repo)
+            entries += await asyncio.to_thread(_count_entries_in_repo, src, repo)
             repo.last_refreshed_at = datetime.now(timezone.utc)
         except Exception as e:
             log.warning(

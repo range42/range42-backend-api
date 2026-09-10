@@ -2,7 +2,9 @@
 
 Each request shallow-clones every registered SourceRepo into a tmpdir,
 walks the trees for catalog manifests, and synthesises catalog entry
-summaries. Three manifest formats are recognised:
+summaries. Native manifests, bundle playbooks and descriptors, Galaxy roles,
+role task entrypoints, Docker assets and gamification manifests are recognised.
+Core metadata formats include:
 
 * ``range42.yaml`` — native Range42 manifest (kind/name/description/tags
   read straight from the document).
@@ -13,17 +15,16 @@ Detail endpoint also reads ``README.md`` alongside.
 """
 from __future__ import annotations
 
-import json
-import logging
+import asyncio
 import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ruamel.yaml import YAML
 import git  # type: ignore
 
+from app.core.catalog_index import detail_at_path as _detail_at_path, discover as _discover, read_readme
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.project import _redact_authed_url, authed_url
@@ -33,8 +34,6 @@ from app.schemas.v1.catalog import CatalogEntryDetail, CatalogEntrySummary
 from app.schemas.v1.common import Page
 
 router = APIRouter()
-_yaml = YAML(typ="safe")
-_log = logging.getLogger(__name__)
 
 
 async def _session() -> AsyncSession:
@@ -64,112 +63,26 @@ def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
     return dest
 
 
-def _entry_from_range42_yaml(p: Path, repo_dir: Path) -> dict | None:
-    try:
-        doc = _yaml.load(p.read_text()) or {}
-    except Exception as e:
-        _log.warning("skipping malformed range42.yaml %s: %s", p, e)
-        return None
-    rel = p.parent.relative_to(repo_dir).as_posix() or "."
-    return {
-        "path": rel,
-        "kind": doc.get("kind", "unknown"),
-        "name": doc.get("name", rel),
-        "description": doc.get("description"),
-        "tags": doc.get("tags") or [],
-    }
+def _entries_for_repo(src: Source, repo: SourceRepo) -> list[CatalogEntrySummary]:
+    # The worker owns the checkout lifetime even if its request is cancelled.
+    with tempfile.TemporaryDirectory() as td:
+        dest = _clone_repo(src, repo, Path(td))
+        with git.Repo(dest) as checkout:
+            sha = checkout.head.commit.hexsha
+        return [CatalogEntrySummary(source_id=src.id, sha=sha, **entry)
+                for entry in _discover(dest)]
 
 
-def _entry_from_meta_json(p: Path, repo_dir: Path) -> dict | None:
-    try:
-        doc = json.loads(p.read_text()) or {}
-    except Exception as e:
-        _log.warning("skipping malformed meta.json %s: %s", p, e)
-        return None
-    rel = p.parent.relative_to(repo_dir).as_posix() or "."
-    x = (doc.get("x_range42") or {}) if isinstance(doc, dict) else {}
-    exercise = x.get("exercise") or {}
-    catalog = x.get("catalog") or {}
-    vuln = x.get("vuln") or {}
-    return {
-        "path": rel,
-        "kind": "container",
-        "name": exercise.get("id") or p.parent.name,
-        "description": vuln.get("title"),
-        "tags": catalog.get("tags") or [],
-    }
-
-
-def _entry_from_meta_main_yml(p: Path, repo_dir: Path) -> dict | None:
-    try:
-        doc = _yaml.load(p.read_text()) or {}
-    except Exception as e:
-        _log.warning("skipping malformed meta/main.yml %s: %s", p, e)
-        return None
-    role_dir = p.parent.parent  # parent of the `meta` directory
-    rel = role_dir.relative_to(repo_dir).as_posix() or "."
-    galaxy = (doc.get("galaxy_info") or {}) if isinstance(doc, dict) else {}
-    return {
-        "path": rel,
-        "kind": "ansible_role",
-        "name": role_dir.name,
-        "description": galaxy.get("description"),
-        "tags": galaxy.get("galaxy_tags") or [],
-    }
-
-
-def _detail_at_path(repo_dir: Path, path: str) -> dict | None:
-    """Resolve a single entry at ``path`` across the three manifest formats.
-
-    Mirrors :func:`_discover`'s recognition so the detail endpoint surfaces
-    every entry the browse endpoint lists — not just ``range42.yaml``.
-    Returns the summary dict plus a parsed ``document``, or ``None`` if no
-    recognised manifest exists at ``path``.
-    """
-    base = repo_dir / path
-    candidates = [
-        (base / "range42.yaml", _entry_from_range42_yaml, _yaml.load),
-        (base / "meta.json", _entry_from_meta_json, json.loads),
-        (base / "meta" / "main.yml", _entry_from_meta_main_yml, _yaml.load),
-    ]
-    for manifest, parse_entry, load_doc in candidates:
-        if not manifest.exists():
-            continue
-        entry = parse_entry(manifest, repo_dir)
+def _detail_for_repo(src: Source, repo: SourceRepo, path: str) -> CatalogEntryDetail | None:
+    with tempfile.TemporaryDirectory() as td:
+        dest = _clone_repo(src, repo, Path(td))
+        entry = _detail_at_path(dest, path)
         if entry is None:
-            continue
-        doc = load_doc(manifest.read_text())
-        # CatalogEntryDetail.document is typed dict; a syntactically valid but
-        # non-mapping top level (e.g. a YAML/JSON list) would otherwise fail
-        # response validation. Coerce it to {} — the entry still resolves.
-        if not isinstance(doc, dict):
-            doc = {}
-        return {**entry, "document": doc}
-    return None
-
-
-def _discover(repo_dir: Path) -> list[dict]:
-    """Walk ``repo_dir`` for the three known manifest types.
-
-    Returns a list of synthesised entry dicts with keys
-    ``path``, ``kind``, ``name``, ``description``, ``tags`` — ready to
-    feed into :class:`CatalogEntrySummary`.
-    Malformed manifests are logged at WARNING and skipped.
-    """
-    out: list[dict] = []
-    for p in repo_dir.rglob("range42.yaml"):
-        entry = _entry_from_range42_yaml(p, repo_dir)
-        if entry is not None:
-            out.append(entry)
-    for p in repo_dir.rglob("meta.json"):
-        entry = _entry_from_meta_json(p, repo_dir)
-        if entry is not None:
-            out.append(entry)
-    for p in repo_dir.rglob("meta/main.yml"):
-        entry = _entry_from_meta_main_yml(p, repo_dir)
-        if entry is not None:
-            out.append(entry)
-    return out
+            return None
+        with git.Repo(dest) as checkout:
+            sha = checkout.head.commit.hexsha
+        return CatalogEntryDetail(source_id=src.id, sha=sha, **entry,
+                                  readme_md=read_readme(dest, entry["path"]))
 
 
 @router.get("/entries", response_model=Page[CatalogEntrySummary])
@@ -186,34 +99,20 @@ async def list_entries(
         sources_q = sources_q.where(Source.id == source_id)
     sources = (await session.execute(sources_q)).scalars().all()
     summaries: list[CatalogEntrySummary] = []
-    with tempfile.TemporaryDirectory() as td:
-        workdir = Path(td)
-        for src in sources:
-            repos = (
-                await session.execute(
-                    select(SourceRepo).where(SourceRepo.source_id == src.id)
-                )
-            ).scalars().all()
-            for repo in repos:
-                dest = _clone_repo(src, repo, workdir)
-                with git.Repo(dest) as checkout:
-                    sha = checkout.head.commit.hexsha
-                for entry in _discover(dest):
-                    if kind and entry["kind"] != kind:
-                        continue
-                    if tag and tag not in (entry.get("tags") or []):
-                        continue
-                    summaries.append(
-                        CatalogEntrySummary(
-                            source_id=src.id,
-                            path=entry["path"],
-                            kind=entry["kind"],
-                            name=entry["name"],
-                            description=entry.get("description"),
-                            tags=entry.get("tags") or [],
-                            sha=sha,
-                        )
-                    )
+    for src in sources:
+        repos = (
+            await session.execute(
+                select(SourceRepo).where(SourceRepo.source_id == src.id)
+            )
+        ).scalars().all()
+        for repo in repos:
+            for entry in await asyncio.to_thread(_entries_for_repo, src, repo):
+                if kind and entry.kind != kind:
+                    continue
+                if tag and tag not in entry.tags:
+                    continue
+                summaries.append(entry)
+    summaries.sort(key=lambda entry: (entry.source_id, entry.path))
     total = len(summaries)
     return Page[CatalogEntrySummary](
         items=summaries[offset : offset + limit],
@@ -244,26 +143,10 @@ async def get_entry(
             select(SourceRepo).where(SourceRepo.source_id == source_id)
         )
     ).scalars().all()
-    with tempfile.TemporaryDirectory() as td:
-        workdir = Path(td)
-        for repo in repos:
-            dest = _clone_repo(src, repo, workdir)
-            entry = _detail_at_path(dest, path)
-            if entry is not None:
-                with git.Repo(dest) as checkout:
-                    sha = checkout.head.commit.hexsha
-                readme = dest / path / "README.md"
-                return CatalogEntryDetail(
-                    source_id=src.id,
-                    path=entry["path"],
-                    kind=entry["kind"],
-                    name=entry["name"],
-                    description=entry.get("description"),
-                    tags=entry.get("tags") or [],
-                    sha=sha,
-                    document=entry["document"],
-                    readme_md=readme.read_text() if readme.exists() else None,
-                )
+    for repo in repos:
+        entry = await asyncio.to_thread(_detail_for_repo, src, repo, path)
+        if entry is not None:
+            return entry
     raise Range42Error(
         error="not_found",
         code="NOT_FOUND",
