@@ -8,12 +8,19 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from app.core.errors import Range42Error
+from app.core.models import ProxmoxHost
 from app.core.bundle_runtime import dependencies, runtime_snapshot
 from app.schemas.v1.runtime import RuntimeOperation
 
 
 def blocked(message: str, code: str = "RUNTIME_OPERATION_BLOCKED") -> Range42Error:
     return Range42Error(status=409, code=code, error="runtime_operation_blocked", message=message)
+
+
+def target_identity(host: ProxmoxHost | None) -> dict[str, str]:
+    if host is None:
+        raise blocked("The deployment's target host is unavailable", "RUNTIME_TARGET_CHANGED")
+    return {"api_url": host.api_url.rstrip("/"), "node_name": host.node_name}
 
 
 def operation_profile(kind: str) -> dict:
@@ -24,7 +31,8 @@ def operation_profile(kind: str) -> dict:
         if marker.is_symlink() or marker.stat().st_size > 8192:
             raise ValueError("invalid capabilities")
         capabilities = json.loads(marker.read_text())
-        if (capabilities.get("version") != 1 or kind not in capabilities.get("operations", [])
+        if (not isinstance(capabilities, dict) or capabilities.get("version") != 1
+                or not isinstance(capabilities.get("operations"), list) or kind not in capabilities["operations"]
                 or (kind == "sdn_snat" and capabilities.get("snat_reconciles_all_declared_subnets") is not True)):
             raise ValueError("unsupported operation")
     except (OSError, ValueError, TypeError):

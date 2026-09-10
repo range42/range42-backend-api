@@ -86,3 +86,43 @@ def test_composite_cannot_start_before_verified_tls_and_exact_ownership(tmp_path
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("matching_node", [False, True])
+async def test_snat_wrapper_checks_actual_ssh_node_before_composite(tmp_path, monkeypatch, matching_node):
+    from types import SimpleNamespace
+    import socket
+    from app.core import runtime_runner
+    binary = Path(sys.executable).parent / "ansible-playbook"
+    if not binary.is_file():
+        pytest.skip("ansible-playbook is not installed")
+    marker = tmp_path / "nat-composite-started"
+    bundles = tmp_path / "bundles"
+    bundle = bundles / "proxmox/sdn_network.internet_on/main.yml"
+    bundle.parent.mkdir(parents=True)
+    bundle.write_text(yaml.safe_dump([{"hosts": "proxmox", "gather_facts": False, "tasks": [{
+        "ansible.builtin.copy": {"content": "would apply SDN", "dest": str(marker), "mode": "0600"},
+    }]}]))
+    monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(bundles))
+    async def verified(*args):
+        return {"vmids": [], "missing_vmids": [], "variables": {}, "bundle": "proxmox/sdn_network.internet_on", "subnet": "10.42.70.0/24"}
+    monkeypatch.setattr(runtime_runner, "_verified_plan", verified)
+    monkeypatch.setattr(runtime_runner, "runtime_targets", lambda path: ([], None))
+    artifact = tmp_path / "runner/attempt"
+    scenario = artifact / "checkout/scenarios/test"
+    scenario.mkdir(parents=True)
+    deployment = SimpleNamespace(id="dep", scenario_label="test", workspace_path=str(tmp_path))
+    attempt = SimpleNamespace(operation={"request": {"kind": "sdn_snat", "enabled": True}})
+    run = await runtime_runner.prepare_runtime_run(deployment, attempt, None, SimpleNamespace(playbook=scenario / "main.yml"), artifact)
+    inventory = tmp_path / "test-hosts.yml"
+    inventory.write_text(yaml.safe_dump({"all": {"vars": {"ansible_connection": "local", "ansible_python_interpreter": str(Path(sys.executable))},
+        "children": {"proxmox": {"hosts": {"api": {}}}, "proxmox_cli": {"hosts": {"r42-proxmox-cli": {}}}}}}))
+    variables = tmp_path / "vars.json"
+    variables.write_text(json.dumps({"proxmox_node": socket.gethostname().split(".")[0] if matching_node else "different-proxmox-node"}))
+    config = tmp_path / "ansible.cfg"
+    config.write_text("[defaults]\nretry_files_enabled=False\n")
+    result = subprocess.run([str(binary), "-i", str(inventory), str(run.playbook), "-e", f"@{variables}"],
+        env={**os.environ, "ANSIBLE_CONFIG": str(config)}, capture_output=True, text=True, timeout=30)
+    assert (result.returncode == 0) is matching_node, result.stdout + result.stderr
+    assert marker.exists() is matching_node

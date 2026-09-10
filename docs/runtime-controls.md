@@ -31,7 +31,12 @@ Other subnets retain their own declared desired state.
 Each accepted request becomes a normal durable attempt with `scope: runtime`.
 The ordinary attempt-create DTO cannot request that scope or supply operation
 metadata. The response exposes read-only `operation` intent containing the
-typed request, pinned project/host identity and installed runtime fingerprint.
+typed request, pinned project/host identity, requested API URL and node name,
+and installed runtime fingerprint. Re-registering a host with another address
+or node invalidates queued operations. Launch reloads the host registration;
+normal and recovered completion cannot verify results against a replacement
+target. Older operations without an explicit target binding must be requested
+again; their recorded history remains readable.
 It uses the same reservation predicate, workspace lock, cancellation, events,
 process identity and restart recovery as deployment attempts. Runtime mutations
 also hold the installation's shared provisioning lock, including in the
@@ -42,7 +47,10 @@ bundle capabilities, exact deployment VM ownership and protected VMID ranges.
 It checks these again after SSH/vault preparation. Ansible then rereads every
 target guest's exact ownership marker, name and template flag before importing
 the reviewed composite. Runtime inventory binds the API and SSH controller to
-the deployment's selected Proxmox host. Scenario sweeps include only verified
+the deployment's selected Proxmox host. Before any SNAT composite starts, a
+read-only delegated hostname check must match the selected Proxmox node; a
+cluster API endpoint pointing at another node is refused. Register the target
+node's own API address for these SSH operations. Scenario sweeps include only verified
 owned guests; confirmed absent IDs remain in the result. Any foreign or
 unreadable guest blocks the sweep before mutation.
 
@@ -68,7 +76,8 @@ Completion rereads state and persists `operation_result` before `attempt_end`:
 - `desired_reached`, `partial`: whether all or some requested targets match.
 - Firewall operations: `matched_vmids`, `mismatched_vmids`, `missing_vmids`.
 - NAT operations: `live_snat_rule_count` from the controller's host-side
-  readback. Matching the API declaration alone cannot produce success.
+  readback. Matching the API declaration alone cannot produce success. Final
+  readback must also confirm no pending or unreadable global SDN changes.
 - `live_forwarding_verified` remains false: rule presence is not an end-to-end
   connectivity test. An unavailable readback carries a safe error and fails the
   attempt rather than inventing success.

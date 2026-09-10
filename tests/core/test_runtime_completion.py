@@ -61,7 +61,8 @@ async def test_verified_partial_result_persists_without_becoming_success(lifecyc
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("missing", [False, True])
-async def test_recovered_operation_persists_readback_before_terminal_event(lifecycle_db, tmp_path, monkeypatch, missing):
+@pytest.mark.parametrize("target_change", [None, "api_url", "node_name", "missing_binding"])
+async def test_recovered_operation_persists_readback_before_terminal_event(lifecycle_db, tmp_path, monkeypatch, missing, target_change):
     from app.core import attempt_lifecycle, orphans, runtime_completion
     from app.core.events import EventsReader, EventsWriter
     from app.core.models import Attempt, Deployment
@@ -86,15 +87,37 @@ async def test_recovered_operation_persists_readback_before_terminal_event(lifec
     async with lifecycle_db() as session:
         attempt = await session.get(Attempt, "att")
         attempt.scope, attempt.state = "runtime", "deploying"
-        attempt.operation = {"request": {"kind": "scenario_firewall", "enabled": True}}
+        attempt.operation = {"request": {"kind": "scenario_firewall", "enabled": True},
+                             "target_identity": {"api_url": "https://pve:8006", "node_name": "pve"}}
+        if target_change == "missing_binding":
+            attempt.operation = {"request": {"kind": "scenario_firewall", "enabled": True}}
+        elif target_change:
+            from app.core.models import ProxmoxHost
+            host = await session.get(ProxmoxHost, "h")
+            setattr(host, target_change, "https://another-node:8006" if target_change == "api_url" else "another-node")
         dep = await session.get(Deployment, "dep")
         await session.commit()
     await orphans._finish_recovered(dep, attempt, artifact, 0)
     async with lifecycle_db() as session:
         attempt = await session.get(Attempt, "att")
-        assert attempt.state == ("partial" if missing else "succeeded")
-        assert attempt.operation_result["desired_reached"] is (not missing)
+        assert attempt.state == ("failed" if target_change else "partial" if missing else "succeeded")
+        assert attempt.operation_result["desired_reached"] is (not missing and target_change is None)
         events = list(EventsReader(tmp_path / "events.jsonl").read_range())
         assert events[-2]["payload"]["runtime_result"] == attempt.operation_result
         assert events[-1]["event_type"] == "attempt_end"
         assert attempt.event_cursor_tip == events[-1]["event_seq"]
+
+
+@pytest.mark.parametrize("pending,errors", [(True, []), (None, []), (False, ["unreadable global state"])])
+def test_nat_completion_cannot_report_success_with_pending_or_unverifiable_sdn(pending, errors):
+    from app.core.runtime_completion import assess_runtime_result
+    current = state()
+    current["sdn"] = {"pending_changes": pending, "errors": errors}
+    current["networks"][0]["configured_snat"] = True
+    events = [{"payload": {"res": {"network_delete_extra_snat_rules": {
+        "subnet_cidr": "10.42.70.0/24", "snat_after": 1, "snat_host": "r42-proxmox-cli",
+    }}}}]
+    result = assess_runtime_result({"kind": "sdn_snat", "enabled": True, "vnet": "r42blue"},
+                                   {"subnet": "10.42.70.0/24"}, current, events)
+    assert result["live_snat_rule_count"] == 1
+    assert result["desired_reached"] is False

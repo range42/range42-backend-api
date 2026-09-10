@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.core.models import Attempt, Deployment
+from app.core.models import Attempt, Deployment, ProxmoxHost
 from app.core.errors import Range42Error
 from tests.core.test_runtime_operations import state
 from tests.fixtures.fake_runner import FakeRunner
@@ -60,9 +60,11 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
         async with dbmod.get_session_factory()() as session:
             dep = await session.get(Deployment, "dep-1")
             dep.current_attempt_id = "runtime"
+            host = await session.get(ProxmoxHost, "h")
             attempt = Attempt(id="runtime", deployment_id=dep.id, scope="runtime", project_sha=sha,
                               state="pending", operation={"request": {"kind": "vm_firewall", "vm_id": 3191, "enabled": True},
-                              "project_sha": sha, "target_host_id": "h", "runtime": profile})
+                              "project_sha": sha, "target_host_id": "h", "runtime": profile,
+                              "target_identity": {"api_url": host.api_url.rstrip("/"), "node_name": host.node_name}})
             session.add(attempt)
             await session.commit()
             if ownership_changed:
@@ -91,4 +93,40 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
             assert attempt.operation_result["matched_vmids"] == [3191]
     finally:
         await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["api_url", "node_name", "missing_binding"])
+async def test_target_reregistration_cannot_redirect_a_queued_operation(tmp_path, monkeypatch, change):
+    from types import SimpleNamespace
+    from app.core import runtime_runner
+    from app.core.models import ProxmoxHost
+    _, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        _, sha = await seed_scenario(dbmod, tmp_path)
+        profile = {"fingerprint": "a" * 64, "dependencies": []}
+        monkeypatch.setattr(runtime_runner, "operation_profile", lambda kind: profile)
+        async def observe(*args, **kwargs):
+            return state()
+        monkeypatch.setattr(runtime_runner, "read_runtime_state", observe)
+        async with dbmod.get_session_factory()() as session:
+            dep = await session.get(Deployment, "dep-1")
+            host = await session.get(ProxmoxHost, "h")
+        operation = {"request": {"kind": "vm_firewall", "vm_id": 3191, "enabled": True},
+            "project_sha": sha, "target_host_id": "h", "runtime": profile,
+            "target_identity": {"api_url": host.api_url.rstrip("/"), "node_name": host.node_name}}
+        if change == "missing_binding":
+            operation.pop("target_identity")
+        else:
+            async with dbmod.get_session_factory()() as session:
+                fresh = await session.get(ProxmoxHost, "h")
+                setattr(fresh, change, "https://other-node:8006" if change == "api_url" else "other-node")
+                await session.commit()
+        # Keep the original detached host object: the final preparation check
+        # must consult the durable registration rather than stale ORM values.
+        with pytest.raises(Range42Error) as error:
+            await runtime_runner._verified_plan(dep, SimpleNamespace(operation=operation, project_sha=sha), host, tmp_path)
+        assert error.value.code == "RUNTIME_TARGET_CHANGED"
+    finally:
         await dbmod.dispose_engine()

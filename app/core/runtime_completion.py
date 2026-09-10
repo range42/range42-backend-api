@@ -10,6 +10,7 @@ from app.core.errors import Range42Error
 from app.core.events import EventsReader
 from app.core.models import Attempt, Deployment, ProxmoxHost
 from app.core.runtime_state import read_runtime_state
+from app.core.runtime_operations import target_identity
 
 
 def assess_runtime_result(request: dict, plan: dict, state: dict, events) -> dict:
@@ -25,7 +26,9 @@ def assess_runtime_result(request: dict, plan: dict, state: dict, events) -> dic
                     and type(sample.get("snat_after")) is int and 0 <= sample["snat_after"] < 2**31):
                 count = sample["snat_after"]
         result.update(live_snat_rule_count=count, live_forwarding_verified=False)
-        result["desired_reached"] = bool(network.get("identity_matches") and network.get("active")
+        result["desired_reached"] = bool(state.get("sdn", {}).get("pending_changes") is False
+                                          and state.get("sdn", {}).get("errors") == []
+                                          and network.get("identity_matches") and network.get("active")
                                           and network.get("configured_snat") is request["enabled"]
                                           and count == int(request["enabled"]))
         return result
@@ -53,6 +56,9 @@ async def observe_runtime_completion(attempt_id: str, writer) -> dict:
         host = await session.get(ProxmoxHost, deployment.target_host_id)
         result = {"desired_reached": False, "partial": False, "error": "Runtime readback is unavailable"}
         try:
+            if not attempt.operation or attempt.operation.get("target_identity") != target_identity(host):
+                result["error"] = "The target API address or node changed; runtime completion cannot be verified against another host"
+                raise ValueError("runtime target changed")
             artifact = Path(deployment.workspace_path) / "runner" / attempt.id
             path = artifact / "runtime/context.yml"
             if path.is_symlink() or path.stat().st_size > 1048576:

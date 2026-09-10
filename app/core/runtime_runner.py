@@ -9,8 +9,10 @@ from pathlib import Path
 
 import yaml
 
+from app.core import db
+from app.core.models import ProxmoxHost
 from app.core.preflight import check_vmids
-from app.core.runtime_operations import blocked, operation_profile, plan_operation
+from app.core.runtime_operations import blocked, operation_profile, plan_operation, target_identity
 from app.core.runtime_state import read_runtime_state, runtime_targets
 
 
@@ -33,8 +35,14 @@ async def _verified_plan(deployment, attempt, host, scenario_dir) -> dict:
     operation = attempt.operation
     if (not operation or operation.get("project_sha") != deployment.project_sha
             or attempt.project_sha != deployment.project_sha
-            or operation.get("target_host_id") != deployment.target_host_id or host.id != deployment.target_host_id):
+            or operation.get("target_host_id") != deployment.target_host_id or host is None
+            or host.id != deployment.target_host_id):
         raise blocked("The deployment target or project revision changed after this operation was requested", "RUNTIME_TARGET_CHANGED")
+    async with db.get_session_factory()() as session:
+        fresh_host = await session.get(ProxmoxHost, deployment.target_host_id)
+    if (operation.get("target_identity") != target_identity(host)
+            or operation.get("target_identity") != target_identity(fresh_host)):
+        raise blocked("The target API address or node changed; review the current host and request a new operation", "RUNTIME_TARGET_CHANGED")
     request = operation["request"]
     profile = await asyncio.to_thread(operation_profile, request["kind"])
     if profile != operation.get("runtime"):
@@ -72,6 +80,21 @@ def _ownership_guard(vms: list[dict], deployment_id: str) -> dict:
     }
 
 
+def _ssh_node_guard() -> dict:
+    """An API entrypoint can proxy another node; SNAT must use the chosen node."""
+    return {
+        "name": "Verify SSH target before shared SDN mutation", "hosts": "proxmox", "gather_facts": False,
+        "tasks": [
+            {"name": "Read the actual SSH node name", "ansible.builtin.command": {"argv": ["hostname", "-s"]},
+             "delegate_to": "r42-proxmox-cli", "changed_when": False, "register": "r42_runtime_ssh_node"},
+            {"name": "Refuse SDN reconciliation on another cluster member", "ansible.builtin.assert": {
+                "that": ["r42_runtime_ssh_node.stdout | trim == proxmox_node"],
+                "fail_msg": "The SSH destination differs from the selected Proxmox node. Register that node's own API address before changing SNAT.",
+            }},
+        ],
+    }
+
+
 async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir: Path) -> RuntimeRun:
     scenario_dir = scenario.playbook.parent
     plan = await _verified_plan(deployment, attempt, host, scenario_dir)
@@ -101,6 +124,8 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
                          "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ deployer_cli_user_ssh_known_hosts | quote }}"}}},
     }}})
     plays = [_ownership_guard(targets, deployment.id)] if targets else []
+    if attempt.operation["request"]["kind"] == "sdn_snat":
+        plays.append(_ssh_node_guard())
     plays.append({"ansible.builtin.import_playbook": str(bundle), "vars": plan["variables"]})
     playbook = directory / "main.yml"
     _private_document(playbook, plays)

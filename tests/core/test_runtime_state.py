@@ -117,3 +117,13 @@ async def test_unrelated_pending_sdn_objects_block_shared_apply(tmp_path):
     result, _ = await read_state(tmp_path, data)
     assert result["sdn"]["pending_changes"] is True
     assert result["sdn"]["errors"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", [{"name": "reassigned"}, {"template": 1}, {"template": "1"}, {"name": None}])
+async def test_fresh_config_identity_overrides_stale_cluster_resource_identity(tmp_path, changed):
+    data = responses()
+    data["/nodes/pve01/qemu/3191/config"].update(changed)
+    result, requests = await read_state(tmp_path, data)
+    assert result["vms"][0]["status"] == "conflict"
+    assert "/nodes/pve01/qemu/3191/firewall/options" not in requests

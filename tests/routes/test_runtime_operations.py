@@ -65,6 +65,10 @@ async def test_runtime_status_and_operation_reservation_use_pinned_deployment(tm
             assert attempt["operation"]["request"] == {"kind": "vm_firewall", "vm_id": 3191, "enabled": True}
             assert attempt["operation"]["runtime"]["fingerprint"] == "a" * 64
             assert attempt["operation_result"] is None
+            from app.core.models import ProxmoxHost
+            async with dbmod.get_session_factory()() as session:
+                host = await session.get(ProxmoxHost, "h")
+            assert attempt["operation"]["target_identity"] == {"api_url": host.api_url.rstrip("/"), "node_name": host.node_name}
             duplicate = await client.post("/v1/deployments/dep-1/operations", json={
                 "kind": "scenario_firewall", "enabled": False,
             })

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Range42Error
 from app.core.models import Deployment, ProxmoxHost
-from app.core.runtime_operations import blocked, operation_profile
+from app.core.runtime_operations import blocked, operation_profile, target_identity
 from app.core.runtime_state import read_runtime_state
 from app.core.scenario import prepare_project_scenario
 from app.routes.v1.deployments.attempts import _session, reserve_attempt
@@ -56,6 +56,7 @@ async def create_operation(deployment_id: str, payload: RuntimeOperation,
                            session: AsyncSession = Depends(_session)):
     deployment = await _deployment(session, deployment_id)
     profile = await asyncio.to_thread(operation_profile, payload.kind)
+    host = await session.get(ProxmoxHost, deployment.target_host_id)
     operation = {"request": payload.model_dump(), "project_sha": deployment.project_sha,
-                 "target_host_id": deployment.target_host_id, "runtime": profile}
+                 "target_host_id": deployment.target_host_id, "target_identity": target_identity(host), "runtime": profile}
     return await reserve_attempt(deployment_id, AttemptCreate(scope="configure"), session, operation=operation)

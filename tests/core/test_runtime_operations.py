@@ -103,3 +103,14 @@ def test_status_advertises_only_installed_capabilities(tmp_path, monkeypatch):
     ))
     (tmp_path / "runtime-capabilities.json").write_text(json.dumps({"version": 1, "operations": ["vm_firewall"]}))
     assert runtime_operations.operation_profile("vm_firewall")["operations"] == ["vm_firewall"]
+
+
+def test_malformed_capability_document_has_actionable_profile_error(tmp_path, monkeypatch):
+    from app.core import runtime_operations
+    monkeypatch.setattr(runtime_operations, "runtime_snapshot", lambda: (
+        {"environment": {"RANGE42_BUNDLE_DIR": str(tmp_path)}, "components": {}}, "f" * 64,
+    ))
+    (tmp_path / "runtime-capabilities.json").write_text("[]")
+    with pytest.raises(Range42Error) as error:
+        runtime_operations.operation_profile("vm_firewall")
+    assert error.value.code == "RUNTIME_CAPABILITY_MISSING"

@@ -88,7 +88,8 @@ async def _guests(client, host, vms, deployment_id, dc_enabled) -> list[dict]:
                 config = await _read(client, host, base + "/config")
                 if not isinstance(config, dict):
                     raise ValueError("invalid guest config")
-                if f"range42-deployment:{deployment_id}" not in str(config.get("description", "")).splitlines():
+                if (config.get("name") != vm["vm_name"] or _flag(config.get("template", 0)) is not False
+                        or f"range42-deployment:{deployment_id}" not in str(config.get("description", "")).splitlines()):
                     row["status"] = "conflict"
                 else:
                     row["status"] = "owned"
