@@ -66,6 +66,10 @@ class Proxmox:
 async def env(tmp_path, monkeypatch):
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'alloc.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    installed = tmp_path / "playbooks"
+    (installed / "scenarios").mkdir(parents=True)
+    (installed / "scenarios" / "_reserved.json").write_text("")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(installed))
     from app.core import config, db
     reload(config)
     reload(db)
@@ -439,3 +443,41 @@ async def test_fresh_active_guest_address_collision_is_reported_on_renew(env):
     response = await client.post(url, json=plan(), headers=HEADERS)
     assert response.status_code == 409
     assert response.json()["code"] == "ALLOCATION_OCCUPIED"
+
+
+@pytest.mark.asyncio
+async def test_installed_scenarios_reserve_absent_vmids_and_secondary_addresses(env, tmp_path, monkeypatch):
+    import json
+    from dataclasses import replace
+    from app.core import config
+    root = tmp_path / "installed"
+    scenarios = root / "scenarios"
+    scenarios.mkdir(parents=True)
+    (scenarios / "_reserved.json").write_text(json.dumps({"vm_id": 2000, "bridge": "labnet", "ip": "10.42.8.2"}) + "\n")
+    directory = scenarios / "new" / "manifest"
+    directory.mkdir(parents=True)
+    (directory / "scenario_vms.json").write_text(json.dumps({"vms": [{"vm_id": 2003,
+        "nics": [{"index": 0, "bridge": "other", "ip": "10.42.9.1"},
+                 {"index": 1, "bridge": "labnet", "ip": "10.42.8.3"}]}], "templates": []}))
+    monkeypatch.setattr(config, "settings", replace(config.settings, wwwapp_playbooks_dir=str(root)))
+    client, pve, _, url = env
+    response = await client.post(url, json=plan(), headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assignment = response.json()["assignments"][0]
+    assert assignment["vm_id"] == 2004
+    assert assignment["nics"][0]["ip"] == "10.42.8.4"
+    assert pve.probes == [2004]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_installed_ledger_does_not_create_reservation(env, monkeypatch):
+    from dataclasses import replace
+    from app.core import config
+    monkeypatch.setattr(config, "settings", replace(config.settings, wwwapp_playbooks_dir=""))
+    client, pve, db, url = env
+    response = await client.post(url, json=plan(), headers=HEADERS)
+    assert response.status_code == 409
+    assert response.json()["code"] == "ALLOCATION_OCCUPANCY_UNAVAILABLE"
+    assert not pve.probes
+    async with db.get_engine().connect() as connection:
+        assert (await connection.execute(text("SELECT COUNT(*) FROM allocation_reservations"))).scalar_one() == 0

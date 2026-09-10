@@ -2,7 +2,7 @@
 
 The authenticated authoring API reserves stable VMIDs and configured IPv4 addresses before the first scenario Git save. A local UI project ID is sufficient; no `projects` database row is required. It performs read-only Proxmox requests and writes an expiring Range42 ledger. It does not create VMs, SDN networks, or DHCP leases.
 
-Run `alembic upgrade head` before starting an upgraded API. Migration `0005_allocation_reservations` follows `0004_runtime_operations`; no new environment variables are required. The SQLite database and its backups contain the reservations.
+Run `alembic upgrade head` before starting an upgraded API. Migration `0005_allocation_reservations` follows `0004_runtime_operations`; the installed playbooks must be configured with `API_BACKEND_WWWAPP_PLAYBOOKS_DIR`. The SQLite database and its backups contain the reservations.
 
 ## API and ownership
 
@@ -45,6 +45,22 @@ Repeated requests with the same project and token are safe after a lost response
 SQLite `BEGIN IMMEDIATE` serializes ledger planning and writes across API workers. HTTP requests never hold that writer lock. If another author claims a candidate during a Proxmox read, the allocator replans and checks its replacement before saving. VMIDs and `(bridge, IPv4 address)` pairs are reserved conservatively across the entire installation, including host aliases. This also prevents reuse across truly separate clusters registered in the same API; explicit cluster identity support is future work.
 
 The allocator excludes default and host-specific protected VMID ranges, visible cluster VMIDs, other active leases, subnet network/broadcast addresses, gateways, explicit `reserved_ips`, host interface addresses, and QEMU cloud-init/LXC NIC addresses. Both current and pending guest configuration views are inspected, including secondary NICs and guests on other cluster nodes. VMID protection cannot be weakened by host overrides. Addresses duplicated across NICs on a bridge are rejected; declared subnets within a request must not overlap.
+
+Before the Proxmox audit, the API reads the installed `scenarios/_reserved.json`
+ledger and every current `*/manifest/scenario_vms.json`. It reserves their union,
+including templates and secondary NIC addresses, even when those guests do not
+exist yet. A stale aggregate cannot release an old reservation or hide a new
+manifest. Missing, malformed, oversized or symlinked reservation files stop a
+new allocation; release remains available. File reads run outside the event
+loop and outside the SQLite writer lock. This covers the installed source
+snapshot, not arbitrary unlinked Git repositories or future external edits.
+
+Each source is limited to 2 MiB, with 16 MiB total, 1024 manifests and 16384
+combined entries. Existing duplicated source declarations remain reserved;
+this union does not certify that the upstream catalog passes its own collision
+checker. The checked SDN integration snapshot currently has a stale aggregate
+and pre-existing VMID/address conflicts at 1186 and 1187. Those source conflicts
+are retained conservatively and require separate upstream cleanup.
 
 Each candidate VMID receives `/cluster/nextid?vmid=...` confirmation. That endpoint checks the cluster inventory regardless of the permission-filtered resource list. Only its exact occupied-VMID response is treated as occupied; unexpected responses and permission/network failures stop allocation. Proxmox itself describes this assertion as availability at the instant of the check, not a reservation. See [the official cluster API implementation](https://raw.githubusercontent.com/proxmox/pve-manager/master/PVE/API2/Cluster.pm).
 

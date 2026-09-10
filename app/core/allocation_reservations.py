@@ -28,6 +28,7 @@ from app.core.models import ProxmoxHost
 from app.schemas.v1.allocation import AllocationLease, AllocationRequest
 
 LIMITATIONS = [
+    "Reservations exclude the installed scenario ledger and current manifests, including undeployed guests. Other unlinked repositories are outside this reservation scope.",
     "Reservations coordinate this Range42 installation only; external Proxmox writers are not locked. Deployment must recheck availability.",
     "Address checks cover visible cloud-init, LXC and host network configuration; guest-static, DHCP and external-device addresses require explicit reserved_ips or external IPAM.",
     "VMIDs and bridge/address pairs are reserved conservatively across all registered hosts, including aliases and separate clusters.",
@@ -160,7 +161,7 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
 
 
 async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, payload: AllocationRequest,
-                  token: str, client: httpx.AsyncClient) -> AllocationLease:
+                  token: str, client: httpx.AsyncClient, *, reserved: Occupancy | None = None) -> AllocationLease:
     token_hash = token_digest(token)
     # Reject a wrong owner before any expensive inventory audit.
     async with factory() as session:
@@ -170,6 +171,9 @@ async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, 
     try:
         async with asyncio.timeout(30):
             occupancy = await read_occupancy(client, host)
+            if reserved is not None:
+                occupancy.vmids.update(reserved.vmids)
+                occupancy.addresses.update(reserved.addresses)
             checked_at = datetime.now(timezone.utc)
             checked_free: set[int] = set()
             probes = 0
