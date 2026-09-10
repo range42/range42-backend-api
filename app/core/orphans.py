@@ -176,11 +176,15 @@ async def _observe(dep: Deployment, attempt: Attempt, artifact: Path, pid: int) 
 
 async def _finish_recovered(dep: Deployment, attempt: Attempt, artifact: Path, rc: int | None) -> None:
     await _drain_events(dep, attempt, artifact)
+    writer = EventsWriter(Path(dep.workspace_path) / "events.jsonl")
+    runtime_result = {}
+    if attempt.scope == "runtime":
+        from app.core.runtime_completion import observe_runtime_completion
+        runtime_result = await observe_runtime_completion(attempt.id, writer)
     state = await finish_attempt(
         attempt_id=attempt.id, rc=rc, unknown=rc is None,
-        error_code="RUNNER_EXIT_UNOBSERVED" if rc is None else None,
+        **({"error_code": "RUNNER_EXIT_UNOBSERVED"} if rc is None else runtime_result),
     )
-    writer = EventsWriter(Path(dep.workspace_path) / "events.jsonl")
     cursor = writer.append({"event_type": "attempt_end", "payload": {
         "terminal_state": state, "rc": rc, "recovered": True,
     }}, attempt_id=attempt.id, deployment_id=dep.id)

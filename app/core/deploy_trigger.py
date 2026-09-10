@@ -73,7 +73,7 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     try:
         dep = await session.get(Deployment, attempt.deployment_id)
         validate_concrete_scope(dep, attempt.scope)
-        if dep.project_sha and attempt.scope == "full":
+        if dep.project_sha and attempt.scope in ("full", "runtime"):
             root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
             with ProvisioningLock(root / ".locks") as lock:
                 await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
@@ -116,6 +116,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     # Resolve scenario_label -> playbook path so the runner (DetachedRunner
     # from T2-T4) can populate project/, env/cmdline, env/envvars from it.
     scenario = None
+    runtime_run = None
     if dep.project_sha:
         scenario = await prepare_project_scenario(
             session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
@@ -128,24 +129,30 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         vmid_check = check_vmids(scenario.vmids, host_overrides=overrides)
         if vmid_check.result == "block":
             raise PreflightBlockedError(message=vmid_check.detail)
-        network_checks = await check_scenario_networks(scenario.playbook.parent, target_host, scope=attempt.scope)
-        blocked = next((check for check in network_checks if check.result == "block"), None)
-        if blocked:
-            raise PreflightBlockedError(message=blocked.detail)
-        resource_checks = await check_scenario_resources(
-            scenario.playbook.parent, target_host, deployment_id=dep.id, scope=attempt.scope,
-        )
-        blocked = next((check for check in resource_checks if check.result == "block"), None)
-        if blocked:
-            raise PreflightBlockedError(message=blocked.detail)
-        playbook_path = scenario.playbook
+        if attempt.scope == "runtime":
+            from app.core.runtime_runner import prepare_runtime_run
+            runtime_run = await prepare_runtime_run(dep, attempt, target_host, scenario, artifact_dir)
+            playbook_path = runtime_run.playbook
+        else:
+            network_checks = await check_scenario_networks(scenario.playbook.parent, target_host, scope=attempt.scope)
+            blocked = next((check for check in network_checks if check.result == "block"), None)
+            if blocked:
+                raise PreflightBlockedError(message=blocked.detail)
+            resource_checks = await check_scenario_resources(
+                scenario.playbook.parent, target_host, deployment_id=dep.id, scope=attempt.scope,
+            )
+            blocked = next((check for check in resource_checks if check.result == "block"), None)
+            if blocked:
+                raise PreflightBlockedError(message=blocked.detail)
+            playbook_path = scenario.playbook
     else:
         playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
 
     writer = EventsWriter(events_jsonl)
     audit = RedactionAuditWriter(redactions_jsonl)
     writer.append({"event_type": "attempt_start",
-                   "payload": {"scope": attempt.scope, "team_id": attempt.team_id}},
+                   "payload": {"scope": attempt.scope, "team_id": attempt.team_id,
+                               **({"operation": attempt.operation} if attempt.operation else {})}},
                   attempt_id=attempt.id, deployment_id=dep.id)
 
     envvars: dict[str, str] = {
@@ -192,8 +199,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         tainted.update((target_host.token_ref, runtime_vars["proxmox_api_token_secret"]))
         tainted.add(runtime_vars["default_admin_vm_ci_password"])
         extravars["r42_project_dir"] = str(scenario.project_root)
-        extravars["r42_inventory_path"] = str(scenario.inventory)
-        envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(ws)
+        extravars["r42_inventory_path"] = str(runtime_run.inventory if runtime_run else scenario.inventory)
+        envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
         # Custom playbooks may use this to keep run output out of the pinned tree.
         extravars["r42_workspace_dir"] = str(ws)
         project = await session.get(Project, dep.project_id)
@@ -233,6 +240,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             os.fsync(stream.fileno())
         if scenario is not None:
             runtime_vault = prepare_runtime_vault(ws)
+        if runtime_run is not None:
+            from app.core.runtime_runner import recheck_runtime_run
+            await recheck_runtime_run(dep, attempt, target_host, runtime_run)
         handle = await runner.start(
             private_data_dir=artifact_dir,
             extravars=extravars,
@@ -289,7 +299,11 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             await task_lock
             # Release shared runtime files before the lock permits another run.
             cleanup_runtime_vault(runtime_vault)
-            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc)
+            runtime_result = {}
+            if runtime_run is not None:
+                from app.core.runtime_completion import observe_runtime_completion
+                runtime_result = await observe_runtime_completion(attempt_id, writer)
+            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, **runtime_result)
             cursor = writer.append({"event_type": "attempt_end",
                                     "payload": {"terminal_state": terminal_state, "rc": rc}},
                                    attempt_id=attempt_id, deployment_id=deployment_id)

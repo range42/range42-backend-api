@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.core.models import Attempt, Deployment, WorkspaceLock
-from tests.core.test_attempt_lifecycle import lifecycle_db  # noqa: F401
+from tests.core.test_attempt_lifecycle import lifecycle_db as lifecycle_db
 from tests.routes.test_project_scenario_execution import _boot, seed_scenario
 from tests.fixtures.fake_runner import FakeRunner
 

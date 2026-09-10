@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint,
+    Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -106,6 +106,8 @@ class Attempt(Base):
     deployment_id: Mapped[str] = mapped_column(ForeignKey("deployments.id"), nullable=False)
     scope: Mapped[str] = mapped_column(String(64), nullable=False)
     project_sha: Mapped[str | None] = mapped_column(String(64))
+    operation: Mapped[dict | None] = mapped_column(JSON)
+    operation_result: Mapped[dict | None] = mapped_column(JSON)
     team_id: Mapped[int | None] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     sub_reason: Mapped[str | None] = mapped_column(String(64))

@@ -46,6 +46,8 @@ class AttemptOut(BaseModel):
     deployment_id: str
     scope: str
     project_sha: str | None = None
+    operation: dict | None = None
+    operation_result: dict | None = None
     team_id: int | None = None
     state: str
     sub_reason: str | None = None

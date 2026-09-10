@@ -76,7 +76,8 @@ async def finish_attempt(*, attempt_id: str, rc: int | None,
                          event_cursor_tip: int | None = None,
                          error_code: str | None = None,
                          cancelled: bool = False,
-                         unknown: bool = False) -> str | None:
+                         unknown: bool = False,
+                         partial: bool = False) -> str | None:
     """Persist completion and release this attempt's lock; return its final state.
 
     Explicit cancellation and previously persisted terminal results win over
@@ -85,7 +86,7 @@ async def finish_attempt(*, attempt_id: str, rc: int | None,
     Only a numeric process result belongs in rc; watcher failures use a stable
     error_code and rc=None. Missing attempts return None without recreating data.
     """
-    terminal_state = "cancelled" if cancelled else "unknown" if unknown else (
+    terminal_state = "cancelled" if cancelled else "unknown" if unknown else "partial" if partial else (
         "succeeded" if rc == 0 and error_code is None else "failed"
     )
     async with get_session_factory()() as session:

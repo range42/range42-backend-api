@@ -45,6 +45,12 @@ async def list_attempts(deployment_id: str,
              status_code=status.HTTP_201_CREATED)
 async def create_attempt(deployment_id: str, payload: AttemptCreate,
                          session: AsyncSession = Depends(_session)):
+    return await reserve_attempt(deployment_id, payload, session)
+
+
+async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
+                          session: AsyncSession, *, operation: dict | None = None):
+    """Reserve all jobs through one lock predicate; runtime intent is server-owned."""
     dep = (await session.execute(
         select(Deployment).where(Deployment.id == deployment_id))).scalar_one_or_none()
     if dep is None:
@@ -52,8 +58,9 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
-    validate_concrete_scope(dep, payload.scope)
-    validate_project_revision(dep, payload.scope, payload.project_sha)
+    scope = "runtime" if operation is not None else payload.scope
+    validate_concrete_scope(dep, scope)
+    validate_project_revision(dep, scope, payload.project_sha)
     if payload.scope == "teardown":
         if payload.confirm_codename != dep.codename:
             raise Range42Error(
@@ -70,7 +77,8 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
     row = Attempt(
         id=uuid.uuid4().hex[:16],
         deployment_id=deployment_id,
-        scope=payload.scope,
+        scope=scope,
+        operation=operation,
         project_sha=(payload.project_sha or dep.project_sha or "").lower() or None,
         team_id=payload.team_id,
         state="pending",
