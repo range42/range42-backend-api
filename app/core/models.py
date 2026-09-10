@@ -150,3 +150,6 @@ class WorkspaceLock(Base):
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     heartbeat_interval_s: Mapped[int] = mapped_column(Integer, default=30)
+
+# Register optional-domain tables in the central Alembic/test metadata.
+from app.core import allocation_models as _allocation_models  # noqa: E402, F401

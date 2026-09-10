@@ -98,7 +98,7 @@ def create_app() -> FastAPI:
             allow_origins=list(settings.cors_origins),
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["Content-Type", "Accept", "Authorization", "Last-Event-ID", "X-Range42-Trace-Id"],
+            allow_headers=["Content-Type", "Accept", "Authorization", "Last-Event-ID", "X-Range42-Trace-Id", "X-Range42-Reservation-Token"],
             expose_headers=["X-Range42-Trace-Id"],
             max_age=600,
         ),

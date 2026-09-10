@@ -1,10 +1,8 @@
-"""Global VMID allocation mutex + SSH ControlMaster namespace helpers.
+"""Legacy pure VMID scans and SSH ControlMaster namespace helpers.
 
-A single asyncio.Lock serialises the range scan so concurrent deploy
-workers cannot hand out the same VMID. Allocation scans upward from
-'start' skipping the union of 'reserved' and the protected ranges.
-
-Spec refs: §7 concurrency discipline, §8 concurrency primitives.
+The in-process lock only serializes scans of the caller's reserved set; it does
+not persist or own reservations. Durable authoring leases are implemented in
+allocation_reservations and exposed by the typed Proxmox reservation API.
 """
 from __future__ import annotations
 
