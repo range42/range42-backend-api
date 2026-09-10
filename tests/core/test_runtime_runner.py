@@ -9,7 +9,7 @@ import yaml
 from app.core.models import Attempt, Deployment, ProxmoxHost
 from app.core.errors import Range42Error
 from tests.core.test_runtime_operations import state
-from tests.fixtures.fake_runner import FakeRunner
+from app.core.runner_detached import DetachedRunner
 from tests.routes.test_project_scenario_execution import _boot, seed_scenario
 
 
@@ -21,13 +21,19 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
     profile = {"fingerprint": "a" * 64, "dependencies": []}
     finished = []
 
-    class Recorder(FakeRunner):
+    executable = tmp_path / 'inert-runner'
+    executable.write_text('#!/bin/sh\nprintf 0 > "$2/rc"\nprintf successful > "$2/status"\n')
+    executable.chmod(0o700)
+
+    class Recorder(DetachedRunner):
         async def start(self, **kwargs):
             self.arguments = kwargs
             finished.append(True)
             return await super().start(**kwargs)
 
-    runner = Recorder()
+    # Keep the real runner's path-containment checks; only replace the external
+    # executable so this integration test cannot mutate Proxmox.
+    runner = Recorder(runner_bin=str(executable))
     try:
         ws, sha = await seed_scenario(dbmod, tmp_path, extra_files={
             "manifest/scenario_vms.json": json.dumps({"version": 2, "vms": [
@@ -44,9 +50,13 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
         monkeypatch.setattr(runtime_runner, "operation_profile", lambda kind: profile)
         calls = 0
 
-        async def observe(*args, **kwargs):
+        async def observe(scenario_dir, *args, **kwargs):
             nonlocal calls
             calls += 1
+            assert Path(scenario_dir) == ws / "runner/runtime/checkout/labs/demo/scenarios/content"
+            assert json.loads((Path(scenario_dir) / "manifest/scenario_vms.json").read_text())["vms"] == [
+                {"vm_id": 3191, "vm_name": "owned-guest"},
+            ]
             current = state()
             current["vms"][0]["firewall_enabled"] = True
             current["vms"][0]["nics"][0]["firewall_enabled"] = True
@@ -77,6 +87,8 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
         wrapper = Path(variables["r42_playbook_path"])
         assert wrapper.is_relative_to(ws / "runner/runtime")
         assert not wrapper.is_relative_to(ws / "runner/runtime/checkout")
+        assert Path(variables["r42_project_dir"]) == wrapper.parent
+        assert (ws / "runner/runtime/project").resolve() == wrapper.parent
         plays = yaml.safe_load(wrapper.read_text())
         assert plays[-1]["ansible.builtin.import_playbook"] == str(bundle)
         assert plays[-1]["vars"] == {"BUNDLE_VM_ID": 3191}

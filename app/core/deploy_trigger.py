@@ -198,7 +198,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         extravars.update(runtime_vars)
         tainted.update((target_host.token_ref, runtime_vars["proxmox_api_token_secret"]))
         tainted.add(runtime_vars["default_admin_vm_ci_password"])
-        extravars["r42_project_dir"] = str(scenario.project_root)
+        extravars["r42_project_dir"] = str(runtime_run.playbook.parent if runtime_run else scenario.project_root)
         extravars["r42_inventory_path"] = str(runtime_run.inventory if runtime_run else scenario.inventory)
         envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
         # Custom playbooks may use this to keep run output out of the pinned tree.
