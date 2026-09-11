@@ -33,6 +33,8 @@ jobs:
       # independent of these paths; they only satisfy import-time reads.
       - name: OpenAPI drift check
         env:
+          # Schema generation imports the app without starting a service.
+          RANGE42_AUTH_MODE: development
           PROJECT_ROOT_DIR: ${{ github.workspace }}
           API_BACKEND_WWWAPP_PLAYBOOKS_DIR: ${{ github.workspace }}
           API_BACKEND_PUBLIC_PLAYBOOKS_DIR: ${{ github.workspace }}

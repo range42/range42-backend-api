@@ -142,6 +142,7 @@ VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
 The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration, and **CI fails if it is out of date** — regenerate and commit it whenever you add or modify a route:
 
 ```bash
+RANGE42_AUTH_MODE=development \
 PROJECT_ROOT_DIR=$PWD \
 API_BACKEND_WWWAPP_PLAYBOOKS_DIR=$PWD \
 API_BACKEND_PUBLIC_PLAYBOOKS_DIR=$PWD \
@@ -153,7 +154,7 @@ print(json.dumps(create_app().openapi(), indent=2))
 " > openapi.json
 ```
 
-The environment variables are only there to satisfy import-time reads — several route modules resolve paths at module scope, so the command dies without them. The generated document does not depend on their values.
+The path variables satisfy import-time reads. The command uses development authentication mode only for schema generation; it does not start an HTTP service or load operator credentials. The generated document does not depend on these values. Production authentication remains required by default.
 
 ---
 
