@@ -23,10 +23,13 @@ async def saved_request(env, tmp_path, monkeypatch):
         "vm_id": vm["vm_id"], "vm_name": "guest", "ip": nic["ip"], "bridge": nic["bridge"],
         "nics": [{key: nic[key] for key in ("index", "ip", "bridge", "prefix")}],
     }]}
+    inventory = {"all": {"children": {"scenario_guests": {
+        "hosts": {"guest": {"ansible_host": nic["ip"]}},
+    }}}}
     repo = tmp_path / "repo"
     sha = make_repository(repo, {
         "scenarios/content/main.yml": "- hosts: guest\n  tasks: []\n",
-        "scenarios/content/hosts.yml": "all:\n  hosts:\n    guest: {}\n",
+        "scenarios/content/hosts.yml": json.dumps(inventory),
         "scenarios/content/manifest/scenario_vms.json": json.dumps(manifest),
     })
     from app.core import scenario
