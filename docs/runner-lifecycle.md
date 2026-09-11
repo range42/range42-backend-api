@@ -98,6 +98,17 @@ result. Release tooling must refuse to replace runtime files while any runner
 is active. Credential files remain private plaintext for the running Ansible
 process and are not described as encrypted execution storage.
 
+After runner exit, terminal cleanup removes raw `job_events/*.json` only when
+this attempt has corresponding source-event receipts in canonical `events.jsonl`.
+It fsyncs that canonical log before deleting its raw inputs. The redundant raw
+`stdout` file is removed only after all job-event entries have been processed.
+Canonical events, redaction audit, return code, status and process identity are
+retained. Linked paths and still-running verified processes are not cleaned.
+Unprocessed raw files/stdout remain private for operator review, with a warning
+containing counts only. Runner `stderr` is retained separately and may contain
+raw diagnostics; this does not claim that every execution artifact is sanitized.
+Unlinking files does not erase older filesystem snapshots or backups.
+
 Full provisioning is serialized across this installation by a filesystem lock.
 The detached runner inherits its descriptor, so an API crash does not allow
 another full run to race the first runner's SDN writes and apply. The lock covers
