@@ -17,6 +17,92 @@ OTHER_TOKEN = "different-owner-token-0123456789abcdef"
 HEADERS = {"X-Range42-Reservation-Token": TOKEN}
 
 
+@pytest.mark.asyncio
+async def test_stable_nic_keys_retain_addresses_when_inserting_a_secondary_nic(env):
+    client, _, db, url = env
+    request = plan()
+    request["vms"][0]["nics"] = [
+        {"index": 0, "nic_key": "primary", "network_id": "lab"},
+        {"index": 1, "nic_key": "secondary-z", "network_id": "lab"},
+    ]
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    before = {nic["nic_key"]: nic["ip"] for nic in first.json()["assignments"][0]["nics"]}
+    request["vms"][0]["nics"][1]["index"] = 2
+    request["vms"][0]["nics"].insert(1, {"index": 1, "nic_key": "secondary-a", "network_id": "lab"})
+    await db.dispose_engine()
+    second = await client.post(url, json=request, headers=HEADERS)
+    assert second.status_code == 200, second.text
+    after = {nic["nic_key"]: nic["ip"] for nic in second.json()["assignments"][0]["nics"]}
+    assert {key: after[key] for key in before} == before
+    assert after["secondary-a"] not in before.values()
+
+
+@pytest.mark.asyncio
+async def test_legacy_nics_adopt_stable_keys_by_unique_network_not_position(env):
+    client, _, _, url = env
+    request = plan()
+    request["networks"].append({"network_id": "other", "bridge": "othernet", "subnet": "10.42.9.0/29"})
+    request["vms"][0]["nics"].append({"index": 1, "network_id": "other"})
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    before = {nic["network_id"]: nic["ip"] for nic in first.json()["assignments"][0]["nics"]}
+    request["vms"][0]["nics"] = [
+        {"index": 0, "nic_key": "other-link", "network_id": "other"},
+        {"index": 1, "nic_key": "lab-link", "network_id": "lab"},
+    ]
+    second = await client.post(url, json=request, headers=HEADERS)
+    assert second.status_code == 200, second.text
+    assert {nic["network_id"]: nic["ip"] for nic in second.json()["assignments"][0]["nics"]} == before
+
+
+@pytest.mark.asyncio
+async def test_parallel_legacy_nics_require_explicit_addresses_to_adopt_keys(env):
+    client, pve, _, url = env
+    request = plan()
+    request["vms"][0]["nics"].append({"index": 1, "network_id": "lab"})
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    original = first.json()
+    for index, nic in enumerate(request["vms"][0]["nics"]):
+        nic["nic_key"] = f"edge-{index}"
+    rejected = await client.post(url, json=request, headers=HEADERS)
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["code"] == "ALLOCATION_NIC_IDENTITY_REQUIRED"
+    current = await client.get(url + '/' + original["reservation_id"], headers=HEADERS)
+    assert current.json()["assignments"] == original["assignments"]
+    assert pve.resources == []
+    for index, nic in enumerate(request["vms"][0]["nics"]):
+        nic["ip"] = original["assignments"][0]["nics"][1 - index]["ip"]
+    adopted = await client.post(url, json=request, headers=HEADERS)
+    assert adopted.status_code == 200, adopted.text
+    assert [nic["ip"] for nic in adopted.json()["assignments"][0]["nics"]] == [nic["ip"] for nic in request["vms"][0]["nics"]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keys", [["same", "same"], ["first", None], ["first", ""]])
+async def test_invalid_or_mixed_nic_keys_are_rejected_before_proxmox_reads(env, keys):
+    client, pve, _, url = env
+    request = plan()
+    request["vms"][0]["nics"] = [{"index": index, "nic_key": key, "network_id": "lab"} for index, key in enumerate(keys)]
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 422, response.text
+    assert not pve.probes
+
+
+@pytest.mark.asyncio
+async def test_stable_nic_identity_cannot_silently_revert_to_position(env):
+    client, _, _, url = env
+    request = plan()
+    request["vms"][0]["nics"][0]["nic_key"] = "edge"
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    request["vms"][0]["nics"][0].pop("nic_key")
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "ALLOCATION_NIC_IDENTITY_REQUIRED"
+
+
 def plan(project="local-draft-1"):
     return {
         "project_key": project, "vmid_start": 2000, "vmid_end": 2100,
