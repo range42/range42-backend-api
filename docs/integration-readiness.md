@@ -50,7 +50,10 @@ scenarios/<scenario_label>/
 
 The manifest uses the existing `{ "vms": [{ "vm_id": 5000, ... }] }` shape.
 VMs are already expanded at authoring time; this path does not multiply them by
-`team_count`. Preflight checks the same scenario files as the runner and checks
+`team_count`. The backend no longer provides the retired topology inventory
+writer or implicit per-team VMID expansion. The internal `vmid.safety` check
+accepts literal `requested` IDs and `host_overrides`; it does not infer them
+from a topology. Preflight checks the same scenario files as the runner and checks
 the manifest's actual VMIDs for duplicates and protected ranges. It validates
 inventory syntax. Generated scenarios also declare networks and source templates:
 preflight checks target network readiness/conflicts, template existence, free VMIDs,
