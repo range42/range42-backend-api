@@ -117,6 +117,7 @@ def _inventory_hosts(inventory: dict) -> dict:
 
 
 def validate_scenario_instances(document: dict, vm_manifest: dict, network_manifest: dict, inventory: dict) -> None:
+    _require(isinstance(network_manifest, dict), "Network manifest must be an object")
     plan = Instances.model_validate(document)
     teams = plan.intent.teams
     _require(sum(len(team.users) for team in teams) <= 64, "Replication rosters support at most 64 users")

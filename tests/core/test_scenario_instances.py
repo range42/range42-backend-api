@@ -295,3 +295,12 @@ def test_actual_ui_compiler_output_matches_backend_contract():
                                yaml.safe_load((directory / "hosts.yml").read_text()))
     assert len(document["instances"]) == 3
     assert len(document["networks"]) == 2
+
+
+def test_nonobject_network_file_returns_a_typed_scenario_error(scenario):
+    *_, save, directory = scenario
+    save()
+    (directory / "manifest/scenario_networks.json").write_text("[]")
+    with pytest.raises(Range42Error) as exc:
+        resolve_project_scenario(directory.parents[1], scenario_label="classroom")
+    assert exc.value.code == "PROJECT_SCENARIO_INVALID"
