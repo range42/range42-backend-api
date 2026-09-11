@@ -1,16 +1,21 @@
-.git
-.gitignore
-.env
-__pycache__
-*.pyc
-.venv
-venv
-*.egg-info
-.pytest_cache
-docs/
-curl_utils/
-tests/
-*.md
+# Allowlist: local state, inventory, Git metadata, credentials and test fixtures
+# never enter the build context. Keep migration files with the application.
+**
+!Dockerfile
+!.dockerignore
 !requirements.txt
 !requirements.yml
-openapi.json
+!container_entrypoint.py
+!alembic.ini
+!alembic/
+!alembic/**
+!app/
+!app/**
+!playbooks/
+!playbooks/**
+**/__pycache__
+**/*.pyc
+**/.env*
+**/*private_key*
+**/*.pem
+**/*.key
