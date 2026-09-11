@@ -95,7 +95,7 @@ def _identities(document: Instances, scopes: dict[str, Scope], rows: list, kind:
         _require(row.instance_key == f"{kind}-{digest}", "Instance keys must match their stable source and cohort")
 
 
-def _inventory_hosts(inventory: dict) -> dict:
+def _inventory_hosts(inventory: dict, *, max_hosts: int) -> dict:
     """Visit bounded groups and reject aliases that can overwrite a literal host."""
     hosts = {}
 
@@ -107,13 +107,29 @@ def _inventory_hosts(inventory: dict) -> dict:
         for name, values in entries.items():
             _require(name not in hosts and isinstance(values, dict), "Inventory hosts must have one literal definition")
             hosts[name] = values
-            _require(len(hosts) <= 66, "Inventory exceeds supported host bounds")
+            _require(len(hosts) <= max_hosts, "Inventory exceeds declared host bounds")
         for child in children.values():
             visit(child, depth + 1)
 
     for group in inventory.values():
         visit(group, 0)
     return hosts
+
+
+def validate_vm_inventory(vm_manifest: dict, inventory: dict) -> None:
+    """Bind every current concrete VM to one literal management inventory host."""
+    if vm_manifest.get("version") != 3:
+        return  # Older manifests may carry VMIDs without guest names/addresses.
+    vms = [Vm.model_validate(vm) for vm in vm_manifest["vms"]]
+    all_hosts = _inventory_hosts(inventory, max_hosts=len(vms) + 2)
+    guests = inventory.get("all", {}).get("children", {}).get("scenario_guests", {}).get("hosts", {})
+    names = {vm.vm_name for vm in vms}
+    _require(isinstance(guests, dict) and set(guests) == names
+             and set(all_hosts) - {"r42-proxmox", "r42-proxmox-cli"} == names,
+             "Inventory must contain exactly the declared scenario guests")
+    for vm in vms:
+        _require(guests[vm.vm_name].get("ansible_host") == str(vm.ip),
+                 "Inventory management addresses must match their VM manifest")
 
 
 def validate_scenario_instances(document: dict, vm_manifest: dict, network_manifest: dict, inventory: dict) -> None:
@@ -173,14 +189,7 @@ def validate_scenario_instances(document: dict, vm_manifest: dict, network_manif
             source_links.append((nic.index, nic.nic_key, network.source_node_id))
         previous = source_nics.setdefault(instance.source_node_id, source_links)
         _require(source_links == previous, "All replicas must preserve source NIC identities and connections")
-    all_hosts = _inventory_hosts(inventory)
-    guests = inventory.get("all", {}).get("children", {}).get("scenario_guests", {}).get("hosts", {})
-    names = {vm.hostname for vm in plan.instances}
-    _require(set(guests) == names and set(all_hosts) - {"r42-proxmox", "r42-proxmox-cli"} == names,
-             "Inventory must contain exactly the declared scenario guests")
-    for instance in plan.instances:
-        _require(guests[instance.hostname].get("ansible_host") == str(by_id[instance.vm_id].ip),
-                 "Inventory management addresses must match their VM instances")
+    validate_vm_inventory(vm_manifest, inventory)
 
 
 def _read_document(path: Path, scenario_dir: Path) -> dict:

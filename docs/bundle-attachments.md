@@ -38,6 +38,15 @@ Install component trees read-only for the API service and change releases while 
 
 ## Saved scenario contract
 
+For every concrete scenario with VM manifest version 3, the backend checks
+`hosts.yml` against the declared guest names and management IPs before any full,
+configure, teardown or runtime operation. Every guest must have one literal host
+definition in `all.children.scenario_guests.hosts`; extra guests, duplicate host
+definitions and changed addresses are rejected even without bundle or replication
+attachments. Nonreplicated scenarios retain their existing VM capacity; the
+64-instance replication limit applies only to replication manifests. Legacy VM
+manifest versions 1 and 2 retain their existing validation.
+
 The UI stores a VM attachment's complete resolution and caller parameters. The emitter writes `manifest/scenario_bundles.json`:
 
 ```json
