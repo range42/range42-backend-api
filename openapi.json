@@ -5122,6 +5122,37 @@
         }
       }
     },
+    "/v1/admin/maintenance": {
+      "get": {
+        "tags": [
+          "v1 admin"
+        ],
+        "summary": "Maintenance Capability",
+        "operationId": "maintenance_capability_v1_admin_maintenance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceCapability"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "summary": "Liveness",
@@ -7962,6 +7993,68 @@
         "title": "HostOut",
         "description": "Response shape for a registered host.\n\nDeliberately does NOT inherit from ``HostIn``: that would carry\n``token_ref`` \u2014 the live ``PVEAPIToken`` secret \u2014 into every response\n(#100). Only whether a token is stored is exposed."
       },
+      "MaintenanceCapability": {
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "flock-http-v1",
+            "title": "Protocol"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessIdentity"
+          },
+          "lock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaintenanceLockIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "protocol",
+          "enabled",
+          "process",
+          "lock"
+        ],
+        "title": "MaintenanceCapability"
+      },
+      "MaintenanceLockIdentity": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "device": {
+            "type": "integer",
+            "title": "Device"
+          },
+          "inode": {
+            "type": "integer",
+            "title": "Inode"
+          },
+          "uid": {
+            "type": "integer",
+            "title": "Uid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "device",
+          "inode",
+          "uid"
+        ],
+        "title": "MaintenanceLockIdentity"
+      },
       "MemoryCapacity": {
         "properties": {
           "total_bytes": {
@@ -8860,6 +8953,29 @@
           "checks"
         ],
         "title": "PreflightResponse"
+      },
+      "ProcessIdentity": {
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "title": "Pid"
+          },
+          "start_time": {
+            "type": "string",
+            "title": "Start Time"
+          },
+          "boot_id": {
+            "type": "string",
+            "title": "Boot Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pid",
+          "start_time",
+          "boot_id"
+        ],
+        "title": "ProcessIdentity"
       },
       "ProjectIn": {
         "properties": {

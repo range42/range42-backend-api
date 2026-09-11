@@ -35,6 +35,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PROJECT_ROOT_DIR=/app \
     RANGE42_WORKSPACE_ROOT=/var/lib/range42/workspaces \
+    RANGE42_MAINTENANCE_LOCK_FILE=/var/lib/range42/maintenance.lock \
     RANGE42_AUTH_MODE=required \
     ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections
 

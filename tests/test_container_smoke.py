@@ -6,6 +6,7 @@ from contextlib import closing
 import os
 from pathlib import Path
 import secrets
+import selectors
 import shutil
 import subprocess
 import time
@@ -173,12 +174,40 @@ workspace.rmdir()
         health = inspection["Config"]["Healthcheck"]["Test"]
         assert health[0] == "CMD-SHELL"
         compose("exec", "-T", "api", "sh", "-c", health[1])
-        compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate")
+        with closing(wait_ready()) as client:
+            capability = client.get("/v1/admin/maintenance", headers=headers)
+            assert capability.status_code == 200
+            proof = capability.json()
+            assert proof["protocol"] == "flock-http-v1" and proof["enabled"] is True
+            guard = subprocess.Popen([*command, "exec", "-T", "api", "python", "-m", "app.core.maintenance_guard"],
+                                     env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
+            try:
+                guard.stdin.write(json.dumps(proof) + "\n")
+                guard.stdin.flush()
+                with selectors.DefaultSelector() as selector:
+                    selector.register(guard.stdout, selectors.EVENT_READ)
+                    assert selector.select(timeout=10), "maintenance helper must acknowledge held locks"
+                    acknowledgement = json.loads(guard.stdout.readline())
+                assert acknowledgement["status"] == "idle"
+                assert guard.poll() is None
+                assert client.post("/v0/admin/run/bundles/test/run", headers=headers).status_code == 503
+                assert client.post("/v1/catalog/sources/default", headers=headers).status_code == 503
+                assert client.get("/v1/health").status_code == 200
+                compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate")
+            finally:
+                guard.stdin.close()
+                guard.wait(timeout=15)
+                guard.stdout.close()
+                guard.stderr.close()
         with closing(wait_ready()) as client:
             ready = client.get("/v1/health/ready", headers=headers)
             assert ready.json()["ready"] is True
             sources = client.get("/v1/catalog/sources", headers=headers).json()["items"]
             assert sources[0]["id"] == source_id and sources[0]["has_token"] is True
+            new_proof = client.get("/v1/admin/maintenance", headers=headers).json()
+            assert new_proof["lock"] == proof["lock"]
+            assert new_proof["process"] != proof["process"]
         assert compose("exec", "-T", "api", "python", "-c",
                        "from pathlib import Path; assert (Path.home()/'.ssh/range42/container-smoke').read_text() == 'persistent control state'") == ""
         assert token not in compose("logs", "--no-color", "api")

@@ -21,6 +21,7 @@ from app.core.auth import BearerAuthMiddleware, configured_api_token
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware_trace import TraceIdMiddleware
+from app.core.maintenance import MaintenanceGate, MaintenanceMiddleware
 from app.core.runner import vault_manager
 from app.routes import router as api_router
 from app.routes.ws_status import router as ws_router
@@ -76,6 +77,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.shutdown(wait=False)
+        await app.state.maintenance_gate.drain()
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         from app.core.orphans import stop_observers
@@ -91,6 +93,9 @@ def create_app() -> FastAPI:
     if settings.auth_mode == "required":
         from app.core.credential_store import credential_cipher
         credential_cipher(settings)
+    maintenance_gate = MaintenanceGate(
+        Path(settings.maintenance_lock_file) if settings.maintenance_lock_file else None
+    )
     middleware = [
         Middleware(
             CORSMiddleware,
@@ -104,6 +109,7 @@ def create_app() -> FastAPI:
         ),
         Middleware(TraceIdMiddleware),
         Middleware(BearerAuthMiddleware, token=token),
+        Middleware(MaintenanceMiddleware, gate=maintenance_gate),
     ]
 
     _app = FastAPI(
@@ -119,6 +125,7 @@ def create_app() -> FastAPI:
     )
 
     install_exception_handlers(_app)
+    _app.state.maintenance_gate = maintenance_gate
     _app.include_router(api_router)
     _app.include_router(ws_router)
 

@@ -113,6 +113,10 @@ class Settings:
         )
     )
 
+    maintenance_lock_file: str = field(
+        default_factory=lambda: os.getenv("RANGE42_MAINTENANCE_LOCK_FILE", "")
+    )
+
     # v1 redaction
     redaction_denylist: tuple = field(
         default_factory=lambda: tuple(

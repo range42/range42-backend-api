@@ -104,6 +104,8 @@ Require successful profile generation before starting. The profile records compo
 
 Drain all attempts to terminal state before stopping, recreating or upgrading this container. [Docker stops the container's main process and ultimately terminates its process namespace](https://docs.docker.com/reference/cli/docker/container/stop/); detached Ansible and SSH-agent processes cannot survive container removal. The verified systemd API-only restart recovery does not imply container-recreation recovery. The 60-second stop grace period permits API shutdown and database cleanup; it is not a guarantee that a long deployment finishes. Preserve state for diagnosis after an unexpected container termination and verify actual owned resources before retrying.
 
+The image also enables a persistent HTTP admission lock. A protocol-aware installer can hold the [maintenance drain guard](container-maintenance.md) through controlled replacement, covering finite legacy requests and durable detached attempts together. Merely observing terminal rows without holding this guard does not close the race with a new request.
+
 SSH-agent sockets must fit Linux's Unix-domain socket pathname bound: the full encoded socket pathname must be shorter than 108 bytes. With the default workspace root and current `.agent-<8-character>/s` suffix, the combined `<codename>-<scenario>` directory name must be at most 61 ASCII bytes; non-ASCII names consume more bytes. Longer paths fail explicitly rather than placing a socket in transient `/tmp`. Choose short names or a shorter persistent workspace mount when provisioning a deployment.
 
 ## Repeatable packaging acceptance
