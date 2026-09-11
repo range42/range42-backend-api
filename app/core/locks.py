@@ -1,8 +1,8 @@
 """Deployment-scoped lock with heartbeat.
 
-Stale after 3 * heartbeat_interval_s. Cleanup runs both on acquire() (if
-a stale lock exists, it is evicted in the same transaction) and from
-apscheduler every interval.
+A heartbeat expires after 3 * heartbeat_interval_s, but a verified live
+runner retains its lock even during API downtime or pending cancellation.
+Cleanup runs on acquire() and from apscheduler every interval.
 
 Spec refs: §7 concurrency, §8 concurrency primitives.
 """
@@ -17,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Range42Error
-from app.core.models import WorkspaceLock
+from app.core.models import Attempt, Deployment, WorkspaceLock
+from app.core.runner_detached import process_matches
 
 
 class LockHeldError(Range42Error):
@@ -69,6 +70,35 @@ def _is_stale(lock: WorkspaceLock) -> bool:
     return (now - hb) > timedelta(seconds=3 * lock.heartbeat_interval_s)
 
 
+async def _runner_alive(session: AsyncSession, lock: WorkspaceLock) -> bool:
+    """Verify this workspace's process, including the spawn-to-DB crash gap.
+
+    Cancellation is recorded before the subprocess exits. Terminal state or
+    an expired observer heartbeat alone therefore cannot relinquish ownership.
+    A PID only counts with the matching persisted boot ID and start time.
+    """
+    if not lock.owner.startswith("attempt-"):
+        return False
+    attempt = await session.get(Attempt, lock.owner.removeprefix("attempt-"))
+    if attempt is None or attempt.deployment_id != lock.deployment_id:
+        return False
+    deployment = await session.get(Deployment, lock.deployment_id)
+    if deployment is None:
+        return False
+    workspace = Path(deployment.workspace_path)
+    artifact = workspace / "runner" / attempt.id
+    try:
+        resolved = artifact.resolve()
+        if artifact.is_symlink() or not resolved.is_relative_to(workspace.resolve()):
+            return False
+        if attempt.artifact_dir and Path(attempt.artifact_dir).resolve() != resolved:
+            return False
+        pid = attempt.pid or int((artifact / "pid").read_text())
+        return process_matches(artifact, pid)
+    except (OSError, ValueError, RuntimeError):
+        return False
+
+
 async def acquire_lock(
     session: AsyncSession,
     *,
@@ -84,7 +114,7 @@ async def acquire_lock(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        if _is_stale(existing):
+        if _is_stale(existing) and not await _runner_alive(session, existing):
             await session.delete(existing)
             await session.flush()
         else:
@@ -145,7 +175,9 @@ async def cleanup_stale_locks(session: AsyncSession, *, deployment_id: str | Non
     if deployment_id is not None:
         query = query.where(WorkspaceLock.deployment_id == deployment_id)
     rows = (await session.execute(query)).scalars().all()
-    stale = [r for r in rows if _is_stale(r)]
-    for r in stale:
-        await session.delete(r)
-    return len(stale)
+    removed = 0
+    for row in rows:
+        if _is_stale(row) and not await _runner_alive(session, row):
+            await session.delete(row)
+            removed += 1
+    return removed
