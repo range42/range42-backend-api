@@ -14,6 +14,7 @@ class DeploymentCreate(BaseModel):
     team_count: int = Field(ge=1, le=64)
     catalog_sha: str | None = None
     project_sha: str | None = None
+    allocation_reservation_id: str | None = Field(default=None, min_length=1, max_length=64)
     secrets: dict[str, str] | None = None
 
     @field_validator("scenario_label")
@@ -55,6 +56,15 @@ class AttemptOut(BaseModel):
     ended_at: datetime | None = None
     rc: int | None = None
     event_cursor_tip: int
+
+
+class DeploymentAllocationOut(BaseModel):
+    deployment_id: str
+    project_sha: str
+    host_id: str
+    node_name: str
+    assignments: list[dict]
+    created_at: datetime
 
 
 class AttemptCreate(BaseModel):

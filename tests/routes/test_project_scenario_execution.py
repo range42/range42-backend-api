@@ -160,6 +160,10 @@ async def test_attempt_runs_pinned_project_playbook_with_its_inventory_and_asset
             assert attempt.rc == 0
             assert attempt.ended_at is not None
             assert (await session.execute(select(WorkspaceLock))).scalar_one_or_none() is None
+            from app.core.allocation_models import DeploymentAllocation
+            claim = await session.scalar(select(DeploymentAllocation).where(DeploymentAllocation.deployment_id == "dep-1"))
+            assert claim.project_sha == sha
+            assert claim.assignments == [{"vm_id": 5000, "vm_name": None, "nics": []}]
     finally:
         await asyncio.gather(*list(_BACKGROUND_TASKS), return_exceptions=True)
         await dbmod.dispose_engine()

@@ -2,7 +2,7 @@
 
 The authenticated authoring API reserves stable VMIDs and configured IPv4 addresses before the first scenario Git save. A local UI project ID is sufficient; no `projects` database row is required. It performs read-only Proxmox requests and writes an expiring Range42 ledger. It does not create VMs, SDN networks, or DHCP leases.
 
-Run `alembic upgrade head` before starting an upgraded API. Migration `0005_allocation_reservations` follows `0004_runtime_operations`; the installed playbooks must be configured with `API_BACKEND_WWWAPP_PLAYBOOKS_DIR`. The SQLite database and its backups contain the reservations.
+Run `alembic upgrade head` before starting an upgraded API. Migration `0006_deployment_allocations` follows `0005_allocation_reservations` and adds [persistent deployment handoff](deployment-allocations.md); the installed playbooks must be configured with `API_BACKEND_WWWAPP_PLAYBOOKS_DIR`. The SQLite database and its backups contain both draft reservations and committed deployment assignments.
 
 ## API and ownership
 
@@ -72,7 +72,7 @@ Errors use the normal Range42 envelope. `ALLOCATION_OWNERSHIP` is 403; strict sc
 
 ## Operational limits
 
-The lease coordinates authors using this API. It does not lock Proxmox, independent CLI writers, other Range42 installations, or manual scenario files. Deployment preflight remains responsible for checking current VMID ownership and availability. Release an authoring lease after a successful deployment or let it expire; renewing it once its VMs exist returns an occupancy conflict.
+The lease coordinates authors using this API. It does not lock Proxmox, independent CLI writers, other Range42 installations, or manual scenario files. Deployment preflight remains responsible for checking current VMID ownership and availability. The paired UI transfers a reviewed lease into a separate persistent deployment record when creating a pinned deployment. That consumes the draft lease; its later expiry does not free the deployment's assignments. Clients that do not transfer their lease must release it before a full attempt can claim the same resources. Renewing a lease once its VMs exist returns an occupancy conflict.
 
 Address checks inspect configuration, not live guest traffic. Static addresses configured inside guests, custom cloud-init network files, DHCP ranges, access-restricted guests, and external devices may be absent from that view. Use declared `reserved_ips` and authoritative external IPAM for those addresses. A successful response must not be presented as proof that an address is globally unused. Existing deployments need their normal ownership-aware configure/teardown workflow; this API allocates new authoring resources.
 

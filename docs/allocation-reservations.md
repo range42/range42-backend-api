@@ -30,8 +30,9 @@ Keys are stored inside the existing assignments JSON; no database migration is
 required. They are public authored identifiers, not ownership tokens. The
 reservation token remains separate and must never be published to project Git.
 
-These are expiring draft reservations. Stable NIC keys do not add durable
-deployment binding, contiguous scenario blocks, optimistic edit concurrency,
+These are expiring draft reservations. [Deployment handoff](deployment-allocations.md)
+can consume a reviewed lease into a separate nonexpiring deployment record.
+Stable NIC keys alone do not add contiguous scenario blocks, optimistic edit concurrency,
 deployed-VM reuse, grow/resume or deletion authorization. The installation still
 rechecks visible and hidden VM occupancy and installed scenario reservations;
 external Proxmox writers and unobserved guest/DHCP addresses remain outside its

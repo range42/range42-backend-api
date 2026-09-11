@@ -68,14 +68,14 @@ print(json.dumps({'count': db.execute('SELECT COUNT(*) FROM container_probe').fe
     for count in (1, 2):
         result = start(container_environment, code)
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == {"count": count, "revision": "0005_allocation_reservations"}
+        assert json.loads(result.stdout) == {"count": count, "revision": "0006_deployment_allocations"}
     home = Path(container_environment["HOME"])
     workspace = Path(container_environment["RANGE42_WORKSPACE_ROOT"])
     for directory in (home, home / ".ssh", home / ".ssh" / "range42", home / ".ansible", workspace):
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
     assert stat.S_IMODE((workspace / ".range42.db").stat().st_mode) == 0o600
     with sqlite3.connect(workspace / ".range42.db") as db:
-        assert {"proxmox_hosts", "allocation_reservations", "attempts"}.issubset(
+        assert {"proxmox_hosts", "allocation_reservations", "deployment_allocations", "attempts"}.issubset(
             {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")})
 
 

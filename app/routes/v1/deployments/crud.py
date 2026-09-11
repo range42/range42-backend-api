@@ -8,17 +8,21 @@ the deployment still persists and preflight surfaces AUTH_FAILED later.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.deployment_allocations import bind, manifest_assignments
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, WorkspaceNonLocalFsError
 from app.core.logging import get_logger
 from app.core.models import Deployment, Project, ProxmoxHost
+from app.core.scenario import prepare_project_scenario
 from app.core.workspace import Workspace, WorkspaceError
 from app.core.workspace_secrets import (
     VaultSeedError,
@@ -51,6 +55,7 @@ async def list_deployments(session: AsyncSession = Depends(_session),
 
 @router.post("/", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED)
 async def create_deployment(payload: DeploymentCreate,
+                            x_range42_reservation_token: str | None = Header(default=None, max_length=128),
                             session: AsyncSession = Depends(_session)):
     # (codename, scenario_label) is unique and also names the workspace
     # directory, so a duplicate would reuse an existing deployment's
@@ -94,6 +99,22 @@ async def create_deployment(payload: DeploymentCreate,
                 message=f"{model.__name__} {value} not found",
                 details=[{"field": field, "reason": "no such row"}],
             )
+
+    assignments = None
+    checked_target = None
+    if payload.allocation_reservation_id:
+        if not payload.project_sha:
+            raise Range42Error(code="ALLOCATION_INVALID", status=422,
+                               message="A reservation can be transferred only to a saved, pinned scenario.")
+        host = await session.get(ProxmoxHost, payload.target_host_id)
+        checked_target = (host.api_url, host.node_name, host.protected_vmids_override_json)
+        # Checkout is read-only and isolated; never hold the SQLite writer
+        # transaction while accessing a Git provider.
+        candidate = Deployment(project_id=payload.project_id, project_sha=payload.project_sha,
+                               scenario_label=payload.scenario_label)
+        with TemporaryDirectory(prefix="r42-allocation-checkout-") as directory:
+            scenario = await prepare_project_scenario(session, candidate, dest=Path(directory) / "checkout")
+            assignments = manifest_assignments(scenario.playbook.parent)
 
     try:
         ws = Workspace.create(
@@ -155,6 +176,14 @@ async def create_deployment(payload: DeploymentCreate,
             message="Deployment could not be persisted",
             details=[{"field": "payload", "reason": detail}],
         ) from e
+
+    if assignments is not None:
+        host = await session.get(ProxmoxHost, payload.target_host_id, populate_existing=True)
+        if host is None or checked_target != (host.api_url, host.node_name, host.protected_vmids_override_json):
+            raise Range42Error(code="ALLOCATION_TARGET_CHANGED", status=409,
+                               message="The target changed while validating the saved allocation; review it and retry.")
+        await bind(session, row, host, assignments, reservation_id=payload.allocation_reservation_id,
+                   token=x_range42_reservation_token)
 
     # The password is durable iff the row is — vault_seed reverts the file
     # if the commit does not happen. See app/core/workspace_secrets.

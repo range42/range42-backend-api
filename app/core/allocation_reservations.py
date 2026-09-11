@@ -21,7 +21,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.allocation import _is_protected
-from app.core.allocation_models import AllocationReservation
+from app.core.allocation_models import AllocationReservation, DeploymentAllocation
 from app.core.allocation_occupancy import Occupancy, read_occupancy, vmid_is_free
 from app.core.errors import Range42Error
 from app.core.models import ProxmoxHost
@@ -29,7 +29,7 @@ from app.schemas.v1.allocation import AllocationLease, AllocationRequest, Alloca
 
 LIMITATIONS = [
     "Reservations exclude the installed scenario ledger and current manifests, including undeployed guests. Other unlinked repositories are outside this reservation scope.",
-    "Reservations coordinate this Range42 installation only; external Proxmox writers are not locked. Deployment must recheck availability.",
+    "Reservations exclude persistent deployment assignments and coordinate this Range42 installation only; external Proxmox writers are not locked. Deployment must recheck availability.",
     "Address checks cover visible cloud-init, LXC and host network configuration; guest-static, DHCP and external-device addresses require explicit reserved_ips or external IPAM.",
     "VMIDs and bridge/address pairs are reserved conservatively across all registered hosts, including aliases and separate clusters.",
 ]
@@ -231,12 +231,14 @@ async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, 
                     fresh_host = await session.get(ProxmoxHost, host.id)
                     if fresh_host is None or (fresh_host.api_url, fresh_host.node_name, fresh_host.protected_vmids_override_json) != (host.api_url, host.node_name, host.protected_vmids_override_json):
                         raise _error("INVALID", "The target host registration changed during allocation; retry against its current configuration.")
-                    assignments = _plan(payload, host, rows, current, occupancy)
+                    claims = list((await session.scalars(select(DeploymentAllocation))).all())
+                    assignments = _plan(payload, host, [*rows, *claims], current, occupancy)
                     pending = sorted({vm["vm_id"] for vm in assignments} - checked_free)
                     if not pending:
                         row = current or AllocationReservation(id=uuid.uuid4().hex, project_key=payload.project_key,
                             host_id=host.id, node_name=host.node_name, token_hash=token_hash)
                         row.assignments = assignments
+                        row.api_url = host.api_url
                         row.checked_at = checked_at
                         row.expires_at = now + timedelta(seconds=payload.lease_seconds)
                         session.add(row)

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.allocation import ssh_controlmaster_env
 from app.core.attempt_lifecycle import advance_attempt_cursor, finish_attempt, keep_attempt_lock, mark_attempt_running
 from app.core.config import settings
+from app.core.db import get_session_factory
 from app.core.errors import PreflightBlockedError, Range42Error
 from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
@@ -32,6 +33,7 @@ from app.core.preflight import check_vmids
 from app.core.scenario import prepare_project_scenario, validate_concrete_scope
 from app.core.scenario_networks import check_scenario_networks
 from app.core.scenario_resources import check_scenario_resources
+from app.core.deployment_allocations import ensure_for_attempt
 from app.core.scenario_runtime import cleanup_runtime_vault, prepare_runtime_vault, target_runtime_variables
 from app.core.redaction import (
     ConfigDenylistLayer,
@@ -147,6 +149,12 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             playbook_path = scenario.playbook
     else:
         playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
+
+    if scenario is not None:
+        # Expiring draft leases cannot authorize execution or release a
+        # deployment's assignments. Claim/check before SSH or runner launch.
+        await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
+                                 create=attempt.scope == "full", checked_host=target_host)
 
     writer = EventsWriter(events_jsonl)
     audit = RedactionAuditWriter(redactions_jsonl)

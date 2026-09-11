@@ -150,7 +150,7 @@ p = Path.home() / '.ssh/range42/container-smoke'
 p.write_text('persistent control state')
 assert stat.S_IMODE(p.parent.stat().st_mode) == 0o700
 db = sqlite3.connect('/var/lib/range42/workspaces/.range42.db')
-assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0005_allocation_reservations'
+assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0006_deployment_allocations'
 value = db.execute('SELECT token_ref FROM sources LIMIT 1').fetchone()[0]
 assert value.startswith('range42:fernet:v1:')
 assert os.getuid() != 0
