@@ -44,10 +44,21 @@ malformed or escaped files produce a generic error without echoing their content
 These declarations are public authored identities, **not allocation ownership**.
 They do not authorize VM reuse, release a reservation, or prove that an existing
 guest belongs to this deployment. Durable committed assignments, additive growth
-and partial-deployment resume remain separate work. Explicit per-instance network,
-VMID and address assignments are needed until that allocation integration exists.
+and partial-deployment resume remain separate work. The paired UI now submits all
+literal VM/NIC rows to the draft reservation API and maps reviewed assignments
+back into source authoring. Instance subnets and VNet names remain explicit;
+the reservation does not claim either resource or authorize reuse of a guest.
 
 The tests include real output from the UI compiler with three users across two
 teams and two isolated team networks, plus rejected cardinality, identity, NIC,
-inventory and cross-cohort mutations. Shared runtime deployment of replication
-still requires the corresponding UI authoring release and end-to-end acceptance.
+inventory and cross-cohort mutations.
+
+The shared installation now pairs API `052e089` with UI `45a4f04`. Real GitHub
+and GitLab publication/reopening each passed 13 acceptance assertions for the
+replicated source forms and literal identities. The shared HTTP browser then
+reserved all three literal VMs, applied the mapping, reloaded the original
+source authoring and released the lease (lease GET 200, DELETE 204). The lease
+was confirmed removed and the original 47-guest set remained unchanged. These
+checks created no guests or SDN resources; replicated guest deployment remains
+separate acceptance. Detailed provider and browser reports are retained with
+the paired UI's `docs/acceptance/replication-*-20260911.json` evidence.
