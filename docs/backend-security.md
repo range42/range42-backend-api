@@ -26,3 +26,15 @@ Git URL validation runs at source/project ingress and again before catalog, lega
 The bearer token is a shared operator credential. This provides an application access boundary; user accounts, per-project authorization and individual operator attribution are not implemented by this change. Serve the UI and API behind TLS or through the authenticated lab network, and keep the token out of public UI configuration.
 
 Implementation references: [HTTPX certificate verification](https://www.python-httpx.org/advanced/ssl/) and [cryptography Fernet](https://cryptography.io/en/latest/fernet/).
+
+Concrete deployments enable Ansible host-key checking and use the inventory's
+workspace `ssh_keys/known_hosts` for the Proxmox node and guest connections.
+The connection-reuse arguments never force `StrictHostKeyChecking=no` or
+discard keys through `/dev/null`. Generated inventories use `accept-new`:
+unknown keys are recorded on first connection, and a changed saved key stops
+the connection. This is trust on first use; initial keys are independently
+verified only when an operator supplies a verified known-hosts template.
+Do not remove a changed key to bypass the failure; establish why it changed
+and verify its replacement first. Legacy inventories retain their own host
+configuration. See [OpenSSH host-key policy and option precedence](https://man.openbsd.org/ssh_config#StrictHostKeyChecking)
+and [Ansible SSH connection settings](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/ssh_connection.html).
