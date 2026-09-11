@@ -13,7 +13,7 @@ from starlette.responses import JSONResponse
 from app.core.runner_detached import _process_identity
 
 
-PROTOCOL = "flock-http-v1"
+PROTOCOL = "flock-http-intent-v2"
 _EVENT_STREAM = re.compile(r"/v1/deployments/[^/]+/events")
 
 
@@ -64,6 +64,15 @@ class MaintenanceGate:
         except BlockingIOError:
             os.close(descriptor)
             return None
+        try:
+            # A crashed installer loses flock, but its intent survives on this
+            # same persistent inode. Any nonempty value fails closed.
+            if os.fstat(descriptor).st_size:
+                os.close(descriptor)
+                return None
+        except BaseException:
+            os.close(descriptor)
+            raise
         return descriptor
 
     def track(self, task: asyncio.Task, descriptor: int) -> None:

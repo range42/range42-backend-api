@@ -178,7 +178,7 @@ workspace.rmdir()
             capability = client.get("/v1/admin/maintenance", headers=headers)
             assert capability.status_code == 200
             proof = capability.json()
-            assert proof["protocol"] == "flock-http-v1" and proof["enabled"] is True
+            assert proof["protocol"] == "flock-http-intent-v2" and proof["enabled"] is True
             guard = subprocess.Popen([*command, "exec", "-T", "api", "python", "-m", "app.core.maintenance_guard"],
                                      env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True)

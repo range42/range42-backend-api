@@ -8175,7 +8175,7 @@
         "properties": {
           "protocol": {
             "type": "string",
-            "const": "flock-http-v1",
+            "const": "flock-http-intent-v2",
             "title": "Protocol"
           },
           "enabled": {

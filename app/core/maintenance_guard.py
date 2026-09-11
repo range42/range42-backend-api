@@ -118,6 +118,8 @@ def hold_maintenance(proof: dict, *, gate_path: Path, database: Path, workspace_
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError("Finite HTTP handlers are still active; retry after they drain") from None
+        if os.fstat(descriptor).st_size:
+            raise ValueError('Unfinished maintenance intent requires explicit recovery')
         _proof_matches(proof, gate)
         if (database != database.resolve() or not database.is_file()
                 or workspace_root != workspace_root.resolve() or not workspace_root.is_dir()):

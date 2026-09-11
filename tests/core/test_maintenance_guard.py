@@ -158,3 +158,12 @@ def test_invalid_database_is_not_reinitialized_and_releases_gate(installed):
     descriptor = gate.acquire_shared()
     assert descriptor is not None
     os.close(descriptor)
+
+
+def test_preexisting_durable_intent_refuses_helper_without_clearing_it(installed):
+    _, _, gate, _ = installed
+    gate.path.write_bytes(b'previous cutover requires recovery\n')
+    with pytest.raises(ValueError, match='intent|recovery'):
+        with held(installed):
+            pytest.fail('unfinished intent admitted a new maintenance helper')
+    assert gate.path.read_bytes() == b'previous cutover requires recovery\n'

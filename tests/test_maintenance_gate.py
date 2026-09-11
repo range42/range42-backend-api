@@ -139,7 +139,7 @@ print(json.dumps(gate.capability()))
     second = json.loads(result.stdout)
     assert second["process"]["pid"] != first["process"]["pid"]
     assert second["lock"] == first["lock"]
-    assert first["protocol"] == "flock-http-v1"
+    assert first["protocol"] == "flock-http-intent-v2"
 
 
 def test_replaced_lock_path_cannot_open_an_unlocked_gate(tmp_path):
@@ -182,7 +182,7 @@ def test_real_api_capability_requires_auth_and_reports_exact_process_and_lock(mo
     response = client.get(path, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     proof = response.json()
-    assert proof["protocol"] == "flock-http-v1" and proof["enabled"] is True
+    assert proof["protocol"] == "flock-http-intent-v2" and proof["enabled"] is True
     assert proof["process"]["pid"] == os.getpid()
     assert proof["lock"] == {"path": str(lock), "device": lock.stat().st_dev,
                              "inode": lock.stat().st_ino, "uid": os.getuid()}
@@ -202,3 +202,54 @@ def test_unconfigured_api_does_not_claim_a_maintenance_gate(monkeypatch):
     assert response.status_code == 200
     assert response.json()["enabled"] is False
     assert response.json()["lock"] is None
+
+
+@pytest.mark.parametrize('marker', [b'pending installer cutover\n', b'\x00', b'partial'])
+async def test_nonempty_original_inode_blocks_requests_after_holder_exit_and_api_restart(tmp_path, marker):
+    app, gate = guarded_app(tmp_path)
+    gate.capability()
+    with exclusive(gate.path):
+        with gate.path.open('r+b') as stream:
+            stream.write(marker)
+            stream.flush()
+            os.fsync(stream.fileno())
+    for application in [app, guarded_app(tmp_path)[0]]:
+        called = []
+        application.post('/v0/unsafe')(lambda: called.append(True))
+        application.get('/v1/health')(lambda: {'status': 'ok'})
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
+            response = await client.post('/v0/unsafe')
+            assert response.status_code == 503
+            assert response.json()['code'] == 'MAINTENANCE_ACTIVE'
+            assert (await client.get('/v1/health')).status_code == 200
+        assert called == []
+    assert gate.path.read_bytes() == marker
+
+
+def test_intent_capability_is_distinct_from_v1_and_does_not_truncate_marker(tmp_path):
+    gate = gate_module().MaintenanceGate(tmp_path / 'maintenance.lock')
+    gate.capability()
+    gate.path.write_bytes(b'pending')
+    inode = gate.path.stat().st_ino
+    assert gate.capability()['protocol'] == 'flock-http-intent-v2'
+    assert gate.path.read_bytes() == b'pending'
+    assert gate.path.stat().st_ino == inode
+
+
+def test_marker_survives_writer_process_exit_and_new_api_process(tmp_path):
+    gate = gate_module().MaintenanceGate(tmp_path / 'maintenance.lock')
+    gate.capability()
+    write = '''import fcntl,os,sys
+fd=os.open(sys.argv[1],os.O_RDWR)
+fcntl.flock(fd,fcntl.LOCK_EX)
+os.write(fd,b'pending cutover\\n');os.fsync(fd)
+os._exit(0)
+'''
+    subprocess.run([sys.executable, '-c', write, str(gate.path)], check=True)
+    read = '''import sys
+from pathlib import Path
+from app.core.maintenance import MaintenanceGate
+assert MaintenanceGate(Path(sys.argv[1])).acquire_shared() is None
+'''
+    result = subprocess.run([sys.executable, '-c', read, str(gate.path)], capture_output=True)
+    assert result.returncode == 0, 'restarted API admitted work after installer death'

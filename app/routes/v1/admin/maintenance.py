@@ -23,7 +23,7 @@ class MaintenanceLockIdentity(BaseModel):
 
 
 class MaintenanceCapability(BaseModel):
-    protocol: Literal["flock-http-v1"]
+    protocol: Literal["flock-http-intent-v2"]
     enabled: bool
     process: ProcessIdentity
     lock: MaintenanceLockIdentity | None
