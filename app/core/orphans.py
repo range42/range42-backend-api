@@ -162,15 +162,16 @@ async def _observe(dep: Deployment, attempt: Attempt, artifact: Path, pid: int) 
         while process_matches(artifact, pid):
             await asyncio.sleep(0.25)
         stop.set()
-        await asyncio.gather(*tasks)
+        for task in tasks:
+            await asyncio.shield(task)
         await _finish_recovered(dep, attempt, artifact, _read_rc(artifact))
     finally:
         # Cancelling an adopted observer on API shutdown leaves the independently
         # running process and its credentials intact for the next API instance.
         stop.set()
-        for task in tasks:
-            if not task.done():
-                task.cancel()
+        # Workers observe stop after their current short transaction. Immediate
+        # cancellation can leave SQLAlchemy's shielded session close running
+        # beyond engine disposal and event-loop shutdown.
         await asyncio.gather(*tasks, return_exceptions=True)
 
 

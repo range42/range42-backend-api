@@ -42,7 +42,11 @@ lock. Existing or replaced user vaults are preserved.
 ## Restart recovery and infrastructure serialization
 
 Graceful API shutdown stops local observation while retaining the independent
-runner, its credentials and workspace ownership. The Cancel API separately
+runner, its credentials and workspace ownership. Observers signal their
+heartbeat and event workers to stop, then await
+in-flight database operations and session closure before engine disposal. This
+also applies if shutdown arrives while terminal events are being drained.
+The Cancel API separately
 signals the runner and persists `cancelled`. A shutdown overlapping process
 launch waits for its PID publication, so recovery can find it even before its
 database running-state update. After a restart, `orphans.py` reads database attempts and

@@ -308,8 +308,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         try:
             rc = await handle.wait()
             stop.set()
-            await task_watch
-            await task_lock
+            await asyncio.shield(task_watch)
+            await asyncio.shield(task_lock)
             # Release shared runtime files before the lock permits another run.
             cleanup()
             runtime_result = {}
@@ -335,9 +335,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                            exception_type=type(exc).__name__)
         finally:
             stop.set()
-            for task in (task_watch, task_lock):
-                if not task.done():
-                    task.cancel()
+            # Both workers observe stop. Let any active database transaction
+            # and its session close before the API disposes the engine.
             await asyncio.gather(task_watch, task_lock, return_exceptions=True)
             if not detached:
                 cleanup()
