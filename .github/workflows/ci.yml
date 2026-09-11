@@ -9,7 +9,7 @@ jobs:
     name: Ruff + Pytest
     runs-on: ubuntu-latest
     container:
-      # Matches the runtime stage of the production image (Dockerfile).
+      # Check Python 3.13 compatibility; Docker and the shared host use 3.12.
       image: python:3.13-slim
     steps:
       # git: the suite builds throwaway repos to exercise the project checkout.

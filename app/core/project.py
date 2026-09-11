@@ -18,6 +18,7 @@ import yaml
 from app.core.errors import ProjectCheckoutError, Range42Error
 from app.core.repository_urls import GIT_HTTP_ENV
 from app.core.scenario_manifest import validate_vm_manifest
+from app.core.scenario_instances import validate_instance_files
 
 
 _AUTHED_URL_RE = re.compile(r'https://[^@]+@')
@@ -88,6 +89,10 @@ def resolve_project_scenario(
             raise ValueError("expected an Ansible inventory mapping")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise invalid("Invalid hosts.yml: expected an Ansible inventory mapping") from exc
+    try:
+        validate_instance_files(scenario, manifest, hosts)
+    except (OSError, ValueError, TypeError, KeyError, RecursionError):
+        raise invalid("Invalid manifest/scenario_instances.json: replication intent, VM/NIC/network identities and inventory must agree") from None
     return ProjectScenario(root, playbook, inventory, [vm["vm_id"] for vm in vms])
 
 

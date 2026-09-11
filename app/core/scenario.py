@@ -40,7 +40,7 @@ def validate_project_revision(deployment: Deployment, scope: str, project_sha: s
         )
 
 
-def _configuration_targets(scenario: ProjectScenario) -> tuple[str, str | None, str]:
+def _configuration_targets(scenario: ProjectScenario) -> tuple[str, str | None, str | None, str]:
     """Canonical target files prevent a content revision from retargeting hosts."""
     def manifest(name: str, *, optional: bool = False):
         path = scenario.playbook.parent / "manifest" / name
@@ -52,6 +52,7 @@ def _configuration_targets(scenario: ProjectScenario) -> tuple[str, str | None, 
 
     try:
         return (manifest("scenario_vms.json"), manifest("scenario_networks.json", optional=True),
+                manifest("scenario_instances.json", optional=True),
                 yaml.safe_dump(yaml.safe_load(scenario.inventory.read_text()), sort_keys=True))
     except (OSError, ValueError, yaml.YAMLError):
         raise Range42Error(code="PROJECT_SCENARIO_INVALID", error="project_scenario_invalid",
