@@ -38,3 +38,9 @@ Do not remove a changed key to bypass the failure; establish why it changed
 and verify its replacement first. Legacy inventories retain their own host
 configuration. See [OpenSSH host-key policy and option precedence](https://man.openbsd.org/ssh_config#StrictHostKeyChecking)
 and [Ansible SSH connection settings](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/ssh_connection.html).
+
+Canonical `host_unreachable` events include a stable diagnostic code and safe
+operator guidance for SSH host-key rejection, public-key authentication failure,
+or general connectivity failure. Raw SSH diagnostic text is not copied into the
+event; censored Ansible results retain only the generic diagnosis. These are
+classifications of the reported connection error, not independent network tests.

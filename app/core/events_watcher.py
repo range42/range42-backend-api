@@ -66,6 +66,24 @@ def _translate(ansible_event: dict[str, Any]) -> dict[str, Any]:
         payload["to"] = data.get("name")
     elif r42_type == "host_unreachable":
         payload["host"] = data.get("host")
+        # Preserve an actionable diagnosis without copying SSH stderr, which
+        # can include credentials, commands or private workspace paths.
+        result = data.get("res")
+        message = result.get("msg") if isinstance(result, dict) and not result.get("_ansible_no_log") else ""
+        message = message.casefold() if isinstance(message, str) else ""
+        if "host key verification failed" in message or "remote host identification has changed" in message:
+            payload.update(code="SSH_HOST_KEY_REJECTED", detail=(
+                "SSH rejected the host key. Verify the node or guest key independently "
+                "before updating the workspace known_hosts file."
+            ))
+        elif "permission denied" in message and "publickey" in message:
+            payload.update(code="SSH_AUTHENTICATION_FAILED", detail=(
+                "SSH authentication failed. Check the target user and workspace SSH credentials."
+            ))
+        else:
+            payload.update(code="HOST_UNREACHABLE", detail=(
+                "The host could not be reached. Check the target address, network access and SSH credentials."
+            ))
     else:
         payload["text"] = ansible_event.get("stdout") or data.get("stdout") or ""
         payload["ansible_event"] = et

@@ -6,7 +6,31 @@ from app.core.redaction import (
     RedactionAuditWriter, ConfigDenylistLayer, VaultTaggedLayer,
     TaintedStringLayer,
 )
-from app.core.events_watcher import EventsWatcher
+from app.core.events_watcher import EventsWatcher, _translate
+
+
+@pytest.mark.parametrize(("message", "code", "detail"), [
+    ("WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! private-diagnostic", "SSH_HOST_KEY_REJECTED", "Verify"),
+    ("Host key verification failed. private-diagnostic", "SSH_HOST_KEY_REJECTED", "Verify"),
+    ("Permission denied (publickey). private-diagnostic", "SSH_AUTHENTICATION_FAILED", "credentials"),
+    ("Connection timed out private-diagnostic", "HOST_UNREACHABLE", "network"),
+])
+def test_unreachable_events_explain_connection_failures_without_raw_diagnostics(message, code, detail):
+    event = _translate({"event": "runner_on_unreachable", "event_data": {
+        "host": "owned-guest", "res": {"msg": message},
+    }})
+    assert event["event_type"] == "host_unreachable"
+    assert event["payload"]["host"] == "owned-guest"
+    assert event["payload"]["code"] == code
+    assert detail in event["payload"]["detail"]
+    assert "private-diagnostic" not in json.dumps(event)
+
+
+def test_unreachable_no_log_result_keeps_only_generic_diagnostic():
+    event = _translate({"event": "runner_on_unreachable", "event_data": {
+        "host": "owned-guest", "res": {"_ansible_no_log": True, "msg": "Host key verification failed."},
+    }})
+    assert event["payload"]["code"] == "HOST_UNREACHABLE"
 
 
 @pytest.mark.asyncio
