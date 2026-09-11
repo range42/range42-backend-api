@@ -8,6 +8,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Key = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")]
+NicKey = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.-]+$")]
 Bridge = Annotated[str, Field(min_length=1, max_length=15, pattern=r"^[A-Za-z][A-Za-z0-9_.-]*$")]
 Vmid = Annotated[int, Field(ge=100, le=999999999)]
 
@@ -37,6 +38,7 @@ class AllocationNetwork(StrictModel):
 
 class AllocationNic(StrictModel):
     index: int = Field(ge=0, le=31)
+    nic_key: NicKey | None = None
     network_id: Key
     ip: str | None = Field(default=None, max_length=15)
 
@@ -50,6 +52,9 @@ class AllocationVm(StrictModel):
     def contiguous_nics(self):
         if sorted(nic.index for nic in self.nics) != list(range(len(self.nics))):
             raise ValueError("NIC indexes must be unique and contiguous, beginning at zero")
+        keys = [nic.nic_key for nic in self.nics if nic.nic_key is not None]
+        if keys and (len(keys) != len(self.nics) or len(set(keys)) != len(keys)):
+            raise ValueError("Stable NIC keys must be unique and supplied for every NIC in a VM")
         return self
 
 
@@ -86,6 +91,7 @@ class AllocationRequest(StrictModel):
 
 class AllocatedNic(StrictModel):
     index: int
+    nic_key: NicKey | None = None
     network_id: str
     bridge: str
     subnet: str

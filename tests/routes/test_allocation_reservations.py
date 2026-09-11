@@ -103,6 +103,102 @@ async def test_stable_nic_identity_cannot_silently_revert_to_position(env):
     assert response.json()["code"] == "ALLOCATION_NIC_IDENTITY_REQUIRED"
 
 
+@pytest.mark.asyncio
+async def test_stable_nic_keys_match_the_ui_source_identifier_contract(env):
+    client, _, _, url = env
+    request = plan()
+    request["vms"][0]["nics"][0]["nic_key"] = "_primary-edge"
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert response.json()["assignments"][0]["nics"][0]["nic_key"] == "_primary-edge"
+
+
+@pytest.mark.asyncio
+async def test_keyed_nic_identity_survives_unsorted_request_and_removed_interface(env):
+    client, _, _, url = env
+    request = plan()
+    request["vms"][0]["nics"] = [{"index": i, "nic_key": f"edge-{i}", "network_id": "lab"} for i in range(3)]
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    old = {nic["nic_key"]: nic["ip"] for nic in first.json()["assignments"][0]["nics"]}
+    request["vms"][0]["nics"] = [
+        {"index": 1, "nic_key": "edge-2", "network_id": "lab"},
+        {"index": 0, "nic_key": "edge-0", "network_id": "lab"},
+    ]
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert [(nic["index"], nic["ip"]) for nic in response.json()["assignments"][0]["nics"]] == [(0, old["edge-0"]), (1, old["edge-2"])]
+
+
+@pytest.mark.asyncio
+async def test_one_explicit_parallel_legacy_address_identifies_the_remaining_nic(env):
+    client, _, _, url = env
+    request = plan()
+    request["vms"][0]["nics"].append({"index": 1, "network_id": "lab"})
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    old = first.json()["assignments"][0]["nics"]
+    request["vms"][0]["nics"] = [
+        {"index": 0, "nic_key": "first", "network_id": "lab", "ip": old[1]["ip"]},
+        {"index": 1, "nic_key": "second", "network_id": "lab"},
+    ]
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert [nic["ip"] for nic in response.json()["assignments"][0]["nics"]] == [old[1]["ip"], old[0]["ip"]]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_new_parallel_keys_do_not_consume_a_legacy_lease(env):
+    client, _, _, url = env
+    first = await client.post(url, json=plan(), headers=HEADERS)
+    original = first.json()
+    request = plan()
+    request["vms"][0]["nics"] = [{"index": i, "nic_key": f"edge-{i}", "network_id": "lab"} for i in range(2)]
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 409, response.text
+    retained = await client.get(url + '/' + original["reservation_id"], headers=HEADERS)
+    assert retained.json()["assignments"] == original["assignments"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", ["subnet", "bridge", "gateway", "reserved", "occupied"])
+async def test_stable_keys_do_not_bypass_fresh_network_or_address_checks(env, changed):
+    client, pve, _, url = env
+    request = plan()
+    request["vms"][0]["nics"][0]["nic_key"] = "edge"
+    first = await client.post(url, json=request, headers=HEADERS)
+    assert first.status_code == 200, first.text
+    previous_ip = first.json()["assignments"][0]["nics"][0]["ip"]
+    if changed == "subnet":
+        request["networks"][0].update(subnet="10.42.10.0/29", gateway="10.42.10.1")
+    elif changed == "bridge":
+        request["networks"][0].update(bridge="othernet", reserved_ips=[previous_ip])
+    elif changed == "gateway":
+        request["networks"][0]["gateway"] = previous_ip
+    elif changed == "reserved":
+        request["networks"][0]["reserved_ips"] = [previous_ip]
+    else:
+        pve.networks.append({"iface": "labnet", "cidr": previous_ip + '/29'})
+    response = await client.post(url, json=request, headers=HEADERS)
+    if changed in ("subnet", "bridge"):
+        assert response.status_code == 200, response.text
+        assert response.json()["assignments"][0]["nics"][0]["ip"] != previous_ip
+    else:
+        assert response.status_code == 409, response.text
+        retained = await client.get(url + '/' + first.json()["reservation_id"], headers=HEADERS)
+        assert retained.json()["assignments"] == first.json()["assignments"]
+
+
+@pytest.mark.asyncio
+async def test_nic_keys_are_unique_within_each_vm_only(env):
+    client, _, _, url = env
+    request = plan()
+    request["vms"] = [{"node_id": f"vm-{i}", "nics": [{"index": 0, "nic_key": "primary", "network_id": "lab"}]} for i in range(2)]
+    response = await client.post(url, json=request, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert len({vm["nics"][0]["ip"] for vm in response.json()["assignments"]}) == 2
+
+
 def plan(project="local-draft-1"):
     return {
         "project_key": project, "vmid_start": 2000, "vmid_end": 2100,

@@ -25,7 +25,7 @@ from app.core.allocation_models import AllocationReservation
 from app.core.allocation_occupancy import Occupancy, read_occupancy, vmid_is_free
 from app.core.errors import Range42Error
 from app.core.models import ProxmoxHost
-from app.schemas.v1.allocation import AllocationLease, AllocationRequest
+from app.schemas.v1.allocation import AllocationLease, AllocationRequest, AllocationVm
 
 LIMITATIONS = [
     "Reservations exclude the installed scenario ledger and current manifests, including undeployed guests. Other unlinked repositories are outside this reservation scope.",
@@ -77,6 +77,41 @@ def _protected(host: ProxmoxHost) -> list[list[int]]:
         raise _error("INVALID", "The target host's protected VMID ranges are invalid; correct its registration first.") from exc
 
 
+def _retained_nics(vm: AllocationVm, old: dict, networks: dict) -> dict[int, dict]:
+    """Match authored NIC identity, with explicit disambiguation of legacy rows."""
+    previous = old.get("nics", [])
+    if not previous:
+        return {}
+    keys = [nic.get("nic_key") for nic in previous if nic.get("nic_key") is not None]
+    if keys and (len(keys) != len(previous) or len(set(keys)) != len(keys)):
+        raise _error("NIC_IDENTITY_REQUIRED", "Stored NIC identities are inconsistent; review the reservation before renewing it.")
+    if vm.nics[0].nic_key is None:
+        if keys:
+            raise _error("NIC_IDENTITY_REQUIRED", "This reservation uses stable NIC keys. Keep those keys when renewing it.")
+        return {nic["index"]: nic for nic in previous}
+    if keys:
+        by_key = {nic["nic_key"]: nic for nic in previous}
+        return {nic.index: by_key.get(nic.nic_key, {}) for nic in vm.nics}
+
+    # Old rows did not record edge keys. Network identity is enough only when
+    # it names one unmatched old NIC and one new NIC. Explicit addresses settle
+    # parallel-link ambiguity without silently swapping their assignments.
+    explicit = {(nic.network_id, nic.ip) for nic in vm.nics if nic.ip is not None}
+    retained = {}
+    for nic in vm.nics:
+        if nic.ip is not None:
+            continue
+        network = networks[nic.network_id]
+        candidates = [item for item in previous if (item["network_id"], item["ip"]) not in explicit
+                      and all(item.get(key) == getattr(network, key) for key in ("network_id", "bridge", "subnet"))]
+        if candidates:
+            unresolved = sum(item.network_id == nic.network_id and item.ip is None for item in vm.nics)
+            if len(candidates) != 1 or unresolved != 1:
+                raise _error("NIC_IDENTITY_REQUIRED", "Keep existing NIC addresses explicit when assigning stable keys to parallel legacy interfaces.")
+            retained[nic.index] = candidates[0]
+    return retained
+
+
 def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationReservation], current: AllocationReservation | None,
           occupancy: Occupancy) -> list[dict]:
     overrides = _protected(host)
@@ -111,7 +146,7 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
                 raise _error("OCCUPIED", f"VMID {fixed_id} is occupied or already reserved. Choose another ID.")
             fixed_ids[vm.node_id] = fixed_id
             claimed_ids.add(fixed_id)
-        old_nics = {nic["index"]: nic for nic in old.get("nics", [])}
+        old_nics = _retained_nics(vm, old, networks)
         for nic in vm.nics:
             network = networks[nic.network_id]
             old_nic = old_nics.get(nic.index, {})
@@ -154,7 +189,8 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
                 if address is None:
                     raise _error("POOL_EXHAUSTED", f"No address remains in {network.subnet} on {network.bridge} (scan limit 4096 addresses).")
                 claimed_ips.add((network.bridge, address))
-            nics.append({"index": nic.index, "network_id": network.network_id, "bridge": network.bridge,
+            nics.append({"index": nic.index, **({"nic_key": nic.nic_key} if nic.nic_key is not None else {}),
+                         "network_id": network.network_id, "bridge": network.bridge,
                          "subnet": network.subnet, "ip": address, "prefix": subnet.prefixlen, "gateway": network.gateway})
         assignments.append({"node_id": vm.node_id, "vm_id": vmid, "nics": nics})
     return assignments
