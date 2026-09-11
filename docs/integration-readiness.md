@@ -7,9 +7,9 @@ backend runner.
 
 ## Direction: concrete scenario directories
 
-`_universal` is being retired. Its absence is not a deployment prerequisite to
-fix, and the old `feature/network-provisioning` branch is not the recommended
-deployment path. The accepted direction is for the UI to author concrete
+`_universal` is retired. New deployment creation, preflight and execution reject
+it with guidance to save a concrete scenario. Stored deployments retain their
+history and logs. The UI authors concrete
 `scenarios/<name>/` directories using the current bundle contract, including
 `manifest/scenario_vms.json`, stage playbooks, `main.yml`, and a rendered
 `hosts.yml`. The normal scenario runner and deployer CLI should consume the same
@@ -107,8 +107,8 @@ as literal values so characters resembling Jinja expressions cannot change them.
 
 Unpinned installed scenarios retain the configured
 `API_BACKEND_WWWAPP_PLAYBOOKS_DIR/scenarios/<label>/main.yml` path and workspace
-inventory. The `_universal` compatibility path has not been extended; it is still
-scheduled for retirement. Browser projects register their selected Source,
+inventory. This installed-scenario path excludes retired `_universal` scenarios.
+Browser projects register their selected Source,
 repository and optional subdirectory through idempotent `PUT /v1/projects/{id}`.
 The backend rejects credentials in this payload and prevents changing a binding
 used by an existing deployment. Renaming the project remains supported.
