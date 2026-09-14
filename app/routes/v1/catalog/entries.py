@@ -25,10 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import git  # type: ignore
 
 from app.core.catalog_snapshots import catalog_snapshots, repository_key
+from app.core.credential_store import GitSource, resolved_git_source
 from app.core.catalog_index import detail_at_path as _detail_at_path, discover as _discover, read_readme
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
-from app.core.project import _redact_authed_url, authed_url
+from app.core.project import authed_url
 from app.core.models import Source, SourceRepo
 from app.core.repository_urls import GIT_HTTP_ENV, require_repository_url
 from app.schemas.v1.catalog import CatalogEntryDetail, CatalogEntrySummary
@@ -42,7 +43,8 @@ async def _session() -> AsyncSession:
         yield session
 
 
-def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
+def _clone_repo(src: Source | GitSource, repo: SourceRepo, workdir: Path) -> Path:
+    src = resolved_git_source(src)
     url = authed_url(
         require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"),
         src.token_ref,
@@ -51,20 +53,19 @@ def _clone_repo(src: Source, repo: SourceRepo, workdir: Path) -> Path:
     if not dest.exists():
         try:
             git.Repo.clone_from(url, str(dest), depth=1, branch=repo.branch, env=GIT_HTTP_ENV)
-        except Exception as e:
+        except Exception:
             raise SourceUnreachableError(
                 details=[
                     {
                         "field": "source_id",
-                        "reason": _redact_authed_url(
-                            f"{repo.owner}/{repo.repo}: {e}"),
+                        "reason": "The registered repository could not be read with its configured authentication.",
                     }
                 ]
-            )
+            ) from None
     return dest
 
 
-def _entries_for_repo(src: Source, repo: SourceRepo) -> list[CatalogEntrySummary]:
+def _entries_for_repo(src: Source | GitSource, repo: SourceRepo) -> list[CatalogEntrySummary]:
     # The worker owns the checkout lifetime even if its request is cancelled.
     with tempfile.TemporaryDirectory() as td:
         dest = _clone_repo(src, repo, Path(td))
@@ -74,7 +75,7 @@ def _entries_for_repo(src: Source, repo: SourceRepo) -> list[CatalogEntrySummary
                 for entry in _discover(dest)]
 
 
-def _detail_for_repo(src: Source, repo: SourceRepo, path: str) -> CatalogEntryDetail | None:
+def _detail_for_repo(src: Source | GitSource, repo: SourceRepo, path: str) -> CatalogEntryDetail | None:
     with tempfile.TemporaryDirectory() as td:
         dest = _clone_repo(src, repo, Path(td))
         entry = _detail_at_path(dest, path)
@@ -103,6 +104,7 @@ async def list_entries(
     cache = catalog_snapshots(request)
     loads = []
     for src in sources:
+        snapshot = resolved_git_source(src)
         repos = (
             await session.execute(
                 select(SourceRepo).where(SourceRepo.source_id == src.id)
@@ -111,7 +113,7 @@ async def list_entries(
         for repo in repos:
             # Recheck operator URL policy on cache hits as well as fresh clones.
             require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git")
-            loads.append((repository_key(src, repo), src, repo))
+            loads.append((repository_key(snapshot, repo), snapshot, repo))
     batches = await asyncio.gather(*(cache.get(key, lambda src=src, repo=repo: _entries_for_repo(src, repo))
                                      for key, src, repo in loads))
     summaries = [entry for batch in batches for entry in batch
@@ -147,8 +149,9 @@ async def get_entry(
             select(SourceRepo).where(SourceRepo.source_id == source_id)
         )
     ).scalars().all()
+    snapshot = resolved_git_source(src)
     for repo in repos:
-        entry = await asyncio.to_thread(_detail_for_repo, src, repo, path)
+        entry = await asyncio.to_thread(_detail_for_repo, snapshot, repo, path)
         if entry is not None:
             return entry
     raise Range42Error(

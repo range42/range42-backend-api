@@ -27,7 +27,7 @@ from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
 from app.core.locks import ProvisioningLock, acquire_lock
 from app.core.logging import get_logger
-from app.core.models import Attempt, Deployment, Project, ProxmoxHost, Source
+from app.core.models import Attempt, Deployment, ProxmoxHost
 from app.core.orphans import track_attempt, untrack_attempt
 from app.core.preflight import check_vmids
 from app.core.scenario import prepare_project_scenario, validate_concrete_scope
@@ -211,10 +211,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
         # Custom playbooks may use this to keep run output out of the pinned tree.
         extravars["r42_workspace_dir"] = str(ws)
-        project = await session.get(Project, dep.project_id)
-        source = await session.get(Source, project.source_id)
-        if source.token_ref:
-            tainted.add(str(source.token_ref))
+        if scenario.checkout_credential:
+            from urllib.parse import quote
+            tainted.update((scenario.checkout_credential, quote(scenario.checkout_credential, safe="")))
     else:
         # Legacy path: pre-rendered inventory (e.g. demo_lab) lives under
         # <ws>/inventory/; do not clone or generate anything.

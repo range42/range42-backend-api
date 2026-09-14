@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.bundle_attachments import resolve_bundle
+from app.core.credential_store import resolve_git_credential
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
 from app.core.models import Source, SourceRepo
@@ -45,7 +46,7 @@ def _resolve_source_bundle(source: Source, repo: SourceRepo, request: BundleReso
     # Worker owns the complete checkout lifetime, including cancellation cleanup.
     with tempfile.TemporaryDirectory() as directory:
         root = checkout_repository(repo_url=url, sha=request.sha, dest=Path(directory) / 'source',
-                                   token=source.token_ref if source.auth_kind == 'pat' else None)
+                                   token=resolve_git_credential(source.token_ref) if source.auth_kind == 'pat' else None)
         return resolve_bundle(root, source_id=source.id, sha=request.sha, path=request.path)
 
 

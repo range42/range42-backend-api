@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.catalog_snapshots import catalog_snapshots
+from app.core.credential_store import GitSource, resolved_git_source
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.logging import get_logger
@@ -53,14 +54,15 @@ async def refresh_source(
             message="Register a repository for this source before refreshing its catalog.",
             details=[{"field": "repos", "reason": "No repositories registered"}],
         )
+    snapshot = resolved_git_source(src)
     entries = 0
     for repo in repos:
         try:
-            entries += await asyncio.to_thread(_count_entries_in_repo, src, repo)
+            entries += await asyncio.to_thread(_count_entries_in_repo, snapshot, repo)
             repo.last_refreshed_at = datetime.now(timezone.utc)
-        except Exception as e:
+        except Exception:
             log.warning(
-                "source refresh failure", source_id=source_id, err=str(e)
+                "source refresh failure", source_id=source_id
             )
             raise SourceUnreachableError(
                 details=[
@@ -69,7 +71,7 @@ async def refresh_source(
                         "reason": f"{src.provider}:{repo.owner}/{repo.repo} unreachable",
                     }
                 ]
-            )
+            ) from None
     await session.commit()
     catalog_snapshots(request).invalidate()
     return SourceRefreshResult(
@@ -93,13 +95,14 @@ def _count_manifests(root: Path) -> int:
     return len(_discover(root))
 
 
-def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
+def _count_entries_in_repo(src: Source | GitSource, repo: SourceRepo) -> int:
     import tempfile
 
     import git  # type: ignore
 
-    from app.core.project import _redact_authed_url, authed_url
+    from app.core.project import authed_url
 
+    src = resolved_git_source(src)
     url = authed_url(
         require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git"),
         src.token_ref,
@@ -107,10 +110,9 @@ def _count_entries_in_repo(src: Source, repo: SourceRepo) -> int:
     with tempfile.TemporaryDirectory() as td:
         try:
             git.Repo.clone_from(url, td, depth=1, branch=repo.branch, env=GIT_HTTP_ENV)
-        except Exception as e:
+        except Exception:
             raise SourceUnreachableError(
                 details=[{"field": "source_id",
-                          "reason": _redact_authed_url(
-                              f"{repo.owner}/{repo.repo}: {e}")}]
-            )
+                          "reason": "The registered repository could not be read with its configured authentication."}]
+            ) from None
         return _count_manifests(Path(td))

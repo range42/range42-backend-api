@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ProjectCheckoutError, Range42Error
+from app.core.credential_store import resolve_git_credential
 from app.core.models import Deployment, Project, Source
 from app.core.project import ProjectScenario, checkout_repository, resolve_project_scenario
 from app.core.repository_urls import require_repository_url
@@ -78,7 +80,7 @@ async def prepare_project_scenario(
     repo_url = f"{source.base_url.rstrip('/')}/{project.repo_owner}/{project.repo_name}.git"
     require_repository_url(repo_url)
     effective_sha = project_sha or deployment.project_sha or ""
-    token = source.token_ref if source.auth_kind == "pat" else None
+    token = resolve_git_credential(source.token_ref) if source.auth_kind == "pat" else None
     root = await asyncio.to_thread(
         checkout_repository, repo_url=repo_url, sha=effective_sha, dest=dest, token=token,
     )
@@ -101,4 +103,6 @@ async def prepare_project_scenario(
                 code="PROJECT_CONFIGURATION_TOPOLOGY_CHANGED", error="configuration_topology_changed",
                 message="Configure revisions must preserve hosts.yml and the VM/network manifests of the original deployment",
             )
-    return scenario
+    # Keep the fetch credential private for this attempt's redactor. Looking
+    # up the reference again could resolve a different secret after rotation.
+    return replace(scenario, checkout_credential=token)

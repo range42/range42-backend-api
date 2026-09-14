@@ -13,12 +13,14 @@ from time import monotonic
 from starlette.requests import Request
 
 from app.core.models import Source, SourceRepo
+from app.core.credential_store import GitSource, resolved_git_source
 from app.schemas.v1.catalog import CatalogEntrySummary
 
 
-def repository_key(source: Source, repo: SourceRepo) -> str:
+def repository_key(source: Source | GitSource, repo: SourceRepo) -> str:
     """Credential changes and cross-worker refresh timestamps select new snapshots."""
-    identity = [source.id, source.created_at, source.provider, source.base_url,
+    source = resolved_git_source(source)
+    identity = [source.id, source.created_at, source.provider, source.base_url, source.reference_sha256,
                 source.auth_kind, hashlib.sha256((source.token_ref or "").encode()).hexdigest(),
                 repo.id, repo.owner, repo.repo, repo.branch, repo.manifest_path, repo.last_refreshed_at]
     return hashlib.sha256(json.dumps(identity, default=str).encode()).hexdigest()

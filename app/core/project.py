@@ -9,7 +9,7 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
@@ -30,6 +30,7 @@ class ProjectScenario:
     playbook: Path
     inventory: Path
     vmids: list[int]
+    checkout_credential: str | None = field(default=None, repr=False, compare=False)
 
 
 def resolve_project_scenario(
@@ -117,7 +118,7 @@ def authed_url(url: str, token: str | None) -> str:
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    """Run a git command, raising ProjectCheckoutError with redacted stderr on failure."""
+    """Git stderr is untrusted and may echo credentials outside an auth URL."""
     try:
         return subprocess.run(
             ["git", *args],
@@ -128,14 +129,12 @@ def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        safe_args = [_redact_authed_url(a) for a in args]
-        safe_stderr = _redact_authed_url(e.stderr.strip())
         raise ProjectCheckoutError(
-            message=f"git {' '.join(safe_args)} failed: {safe_stderr}",
-            details=[{"stderr": safe_stderr, "returncode": str(e.returncode)}],
-        ) from e
-    except FileNotFoundError as e:
-        raise ProjectCheckoutError(message="git not installed") from e
+            message="Git repository operation failed.",
+            details=[{"returncode": str(e.returncode)}],
+        ) from None
+    except FileNotFoundError:
+        raise ProjectCheckoutError(message="git not installed") from None
 
 
 def _current_sha(repo: Path) -> str | None:
