@@ -21,6 +21,7 @@ class Nic(BaseModel):
 
 class ResourceOverrides(BaseModel):
     model_config = ConfigDict(extra="allow")
+    storage: str | None = Field(default=None, strict=True, pattern=r"^[A-Za-z][A-Za-z0-9._-]{0,63}$")
     cores: Annotated[StrictInt, Field(ge=1, le=128)] | None = None
     memory_mb: Annotated[StrictInt, Field(ge=128, le=1048576)] | None = None
     disk_gb: Annotated[StrictInt, Field(ge=1, le=65536)] | None = None
@@ -50,6 +51,14 @@ def validate_vm_manifest(document: dict) -> dict:
     """Validate v3 without rewriting it; older concrete manifests remain valid."""
     if not isinstance(document, dict):
         raise ValueError("VM manifest must be an object")
+    preferences = document.get("guest_preferences_version")
+    rows = document.get("vms")
+    explicit_storage = isinstance(rows, list) and any(isinstance(vm, dict) and "storage" in vm for vm in rows)
+    if preferences is not None or explicit_storage:
+        if type(preferences) is not int or preferences != 1 or document.get("version") != 3:
+            raise ValueError("Explicit storage requires guest preferences version 1 and VM manifest version 3")
+        if not isinstance(document.get("vms"), list) or any(not isinstance(vm, dict) or "storage" not in vm for vm in document["vms"]):
+            raise ValueError("Every VM must declare selected or inherited storage")
     if document.get("version", 2) in (1, 2):
         for vm in document.get("vms", []):
             ResourceOverrides.model_validate(vm)

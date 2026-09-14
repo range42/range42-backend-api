@@ -391,3 +391,41 @@ async def test_live_runner_survives_shutdown_and_recovery_keeps_user_cancel(tmp_
         await orphans.stop_observers()
         agent.close()
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_full_attempt_passes_only_validated_manifest_storage_to_runner(tmp_path, monkeypatch):
+    from app.core import deploy_trigger
+    from tests.core.test_scenario_manifest import manifest
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    value = manifest()
+    value['guest_preferences_version'] = 1
+    value['vms'][0]['storage'] = 'reviewed-pool'
+    class RecordingRunner(FakeRunner):
+        async def start(self, **kwargs):
+            self.arguments = kwargs
+            return await super().start(**kwargs)
+    runner = RecordingRunner(script=[])
+    async def admitted(*args, **kwargs):
+        # Destination capacity and permission admission has independent GET-only tests.
+        return [PreflightCheck(check='scenario_resources', result='pass')]
+    monkeypatch.setattr(deploy_trigger, 'check_scenario_resources', admitted)
+    try:
+        await seed_scenario(dbmod, tmp_path, vmids=(3101,), extra_files={
+            'manifest/scenario_vms.json': json.dumps(value),
+            'hosts.yml': yaml.safe_dump({'all': {'children': {'scenario_guests': {'hosts': {
+                'router': {'ansible_host': '10.42.1.10', 'ansible_user': 'alice'},
+            }}}}}),
+        })
+        async with dbmod.get_session_factory()() as session:
+            attempt = Attempt(id='attempt-storage', deployment_id='dep-1', scope='full', state='pending')
+            session.add(attempt)
+            await session.commit()
+            await deploy_trigger.start_attempt(session, attempt=attempt, runner=runner)
+        await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
+        variables = runner.arguments['extravars']
+        assert variables['r42_guest_storage'] == {'3101': 'reviewed-pool'}
+        assert variables['proxmox_dest_vm_storage_name'] == '{{ r42_guest_storage[global_vm_id | string] | default(omit, true) }}'
+    finally:
+        await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
+        await dbmod.dispose_engine()

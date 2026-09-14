@@ -46,3 +46,28 @@ def test_collisions_include_secondary_nics_of_other_vms():
     value["vms"].append(second)
     with pytest.raises(ValueError, match="address"):
         validate_vm_manifest(value)
+
+
+@pytest.mark.parametrize('storage', ['../pool', '{{ pool }}', 'bad pool', 'a' * 65, 42])
+def test_reviewed_storage_rejects_invalid_pool_identifiers(storage):
+    from app.core.scenario_manifest import validate_vm_manifest
+    value = manifest()
+    value['guest_preferences_version'] = 1
+    value['vms'][0]['storage'] = storage
+    with pytest.raises(ValueError):
+        validate_vm_manifest(value)
+
+
+def test_storage_requires_complete_explicit_versioned_preferences():
+    from app.core.scenario_manifest import validate_vm_manifest
+    value = manifest()
+    value['vms'][0]['storage'] = 'fast-pool'
+    with pytest.raises(ValueError, match='preferences'):
+        validate_vm_manifest(value)
+    value['guest_preferences_version'] = 1
+    assert validate_vm_manifest(value) == value
+    value['vms'][0]['storage'] = None
+    assert validate_vm_manifest(value) == value
+    del value['vms'][0]['storage']
+    with pytest.raises(ValueError, match='storage'):
+        validate_vm_manifest(value)

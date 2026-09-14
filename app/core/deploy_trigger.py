@@ -204,6 +204,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     if scenario is not None:
         runtime_vars = target_runtime_variables(target_host, ws)
         extravars.update(runtime_vars)
+        if attempt.scope == "full":
+            from app.core.scenario_preferences import storage_runtime_variables
+            extravars.update(storage_runtime_variables(scenario.playbook.parent))
         tainted.update((target_host.token_ref, runtime_vars["proxmox_api_token_secret"]))
         tainted.add(runtime_vars["default_admin_vm_ci_password"])
         extravars["r42_project_dir"] = str(runtime_run.playbook.parent if runtime_run else scenario.project_root)
