@@ -7,7 +7,7 @@ import httpx
 
 from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -69,7 +69,11 @@ async def readiness(session: AsyncSession = Depends(_session)):
         "ok": all(x["ok"] for x in host_results) if host_results else True,
         "hosts": host_results,
     }
-    sources = (await session.execute(select(Source))).scalars().all()
-    checks["git"] = {"ok": True, "sources_registered": len(sources)}
-    overall = all(c.get("ok") for c in checks.values())
+    source_count = (await session.execute(select(func.count()).select_from(Source))).scalar_one()
+    # Registration does not establish repository connectivity or credentials.
+    checks["git"] = {
+        "ok": None, "required": False, "connectivity": "not_checked",
+        "sources_registered": source_count,
+    }
+    overall = all(c.get("ok") is True for c in checks.values() if c.get("required", True))
     return {"ready": overall, "checks": checks, "timestamp": _now()}

@@ -25,6 +25,15 @@ Git URL validation runs at source/project ingress and again before catalog, lega
 
 The bearer token is a shared operator credential. This provides an application access boundary; user accounts, per-project authorization and individual operator attribution are not implemented by this change. Serve the UI and API behind TLS or through the authenticated lab network, and keep the token out of public UI configuration.
 
+Authenticated `/v1/health/ready` requires the database WAL, workspace writability
+and registered Proxmox-host checks to succeed. Its Git entry is advisory:
+`{ok: null, required: false, connectivity: "not_checked", sources_registered: N}`.
+The count includes registered source records without loading their credentials;
+readiness makes no Git-provider request. A ready backend therefore does not prove
+repository reachability, PAT validity or checkout permission. Clients must show
+Git connectivity as unchecked, including when the count is zero, and must not
+render registration as a successful connection check.
+
 Implementation references: [HTTPX certificate verification](https://www.python-httpx.org/advanced/ssl/) and [cryptography Fernet](https://cryptography.io/en/latest/fernet/).
 
 Concrete deployments enable Ansible host-key checking and use the inventory's

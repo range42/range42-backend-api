@@ -61,8 +61,10 @@ The provisioning flock is held through these checks. HTTP reads occur outside
 the SQLite writer transaction; the record, target and current attempt are checked
 again under writer serialization before deletion. Timeout, permission failure,
 remaining VM, changed attempt or target retains all assignments. This endpoint
-does not delete guests, networks, files, history or snapshots. There is not yet a
-dedicated release control in the UI; operators can use the authenticated endpoint.
+does not delete guests, networks, files, history or snapshots. The UI deployment
+detail shows the durable claim and provides an explicit review/confirm release
+control. It displays backend refusals and retains the claim until release
+succeeds; operators can also use the authenticated endpoint.
 
 ## Limits
 
@@ -84,5 +86,8 @@ make guest-static/DHCP/external addresses observable.
 Regression coverage uses real pinned Git checkout and SQLite, independent
 concurrent requests, failed commits, process-free fake PVE occupancy, a release
 check racing a new attempt, and existing real local Ansible execution/configure
-tests. The existing single-guest and shared browser release evidence predates
-this change; this document does not claim a new shared deployment acceptance.
+tests. Actual shared browser acceptance covered claim transfer, busy release
+refusal and explicit release after owned teardown; see the
+[claim controls report](../../range42-deployment/docs/12-shared-claim-controls-results.md).
+The full three-guest attempt failed separately, so successful cleanup and claim
+release do not establish successful provisioning or content execution.
