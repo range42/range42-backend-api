@@ -5152,6 +5152,205 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/review": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Review Hardware",
+        "operationId": "review_hardware_v1_proxmox_hosts__host_id__vms__vmid__hardware_review_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999999999,
+              "minimum": 100,
+              "title": "Vmid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/nics/{nic_id}": {
+      "put": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Update Nic",
+        "operationId": "update_nic_v1_proxmox_hosts__host_id__vms__vmid__hardware_nics__nic_id__put",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999999999,
+              "minimum": 100,
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "nic_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^net(?:[0-9]|[12][0-9]|3[01])$",
+              "title": "Nic Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NicUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/disks/{disk_id}/grow": {
+      "put": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Grow Disk",
+        "operationId": "grow_disk_v1_proxmox_hosts__host_id__vms__vmid__hardware_disks__disk_id__grow_put",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999999999,
+              "minimum": 100,
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "disk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:ide[0-3]|scsi(?:[0-9]|[12][0-9]|30)|virtio(?:[0-9]|1[0-5])|sata[0-5])$",
+              "title": "Disk Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiskGrowth"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts/{host_id}/storage/{store}/content": {
       "get": {
         "tags": [
@@ -7489,6 +7688,79 @@
         ],
         "title": "DeploymentOut"
       },
+      "DiskGrowth": {
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Digest"
+          },
+          "size_gb": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 1.0,
+            "title": "Size Gb"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "digest",
+          "size_gb"
+        ],
+        "title": "DiskGrowth"
+      },
+      "DiskView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "pool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool"
+          },
+          "volume_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Fingerprint"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "DiskView"
+      },
       "DownloadUrlIn": {
         "properties": {
           "content": {
@@ -9050,6 +9322,141 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HardwareResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "configured",
+              "accepted",
+              "unconfirmed"
+            ],
+            "title": "Status"
+          },
+          "upid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upid"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HardwareReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "write_outcome_unknown",
+                  "unexpected_write_response",
+                  "readback_unavailable",
+                  "readback_mismatch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HardwareResult"
+      },
+      "HardwareReview": {
+        "properties": {
+          "host_id": {
+            "type": "string",
+            "title": "Host Id"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "vmid": {
+            "type": "integer",
+            "title": "Vmid"
+          },
+          "vmtype": {
+            "type": "string",
+            "const": "qemu",
+            "title": "Vmtype",
+            "default": "qemu"
+          },
+          "digest": {
+            "type": "string",
+            "title": "Digest"
+          },
+          "target_digest": {
+            "type": "string",
+            "title": "Target Digest"
+          },
+          "current": {
+            "$ref": "#/components/schemas/HardwareValues"
+          },
+          "configured": {
+            "$ref": "#/components/schemas/HardwareValues"
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host_id",
+          "node",
+          "vmid",
+          "digest",
+          "target_digest",
+          "current",
+          "configured",
+          "pending"
+        ],
+        "title": "HardwareReview"
+      },
+      "HardwareValues": {
+        "properties": {
+          "nics": {
+            "items": {
+              "$ref": "#/components/schemas/NicView"
+            },
+            "type": "array",
+            "title": "Nics"
+          },
+          "disks": {
+            "items": {
+              "$ref": "#/components/schemas/DiskView"
+            },
+            "type": "array",
+            "title": "Disks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nics",
+          "disks"
+        ],
+        "title": "HardwareValues"
+      },
       "HostCapacity": {
         "properties": {
           "host_id": {
@@ -9443,6 +9850,151 @@
         },
         "type": "object",
         "title": "MemoryCapacity"
+      },
+      "NicChanges": {
+        "properties": {
+          "bridge": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,14}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4094.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "firewall": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firewall"
+          },
+          "link_down": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Down"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NicChanges"
+      },
+      "NicUpdate": {
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Digest"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/NicChanges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "digest",
+          "changes"
+        ],
+        "title": "NicUpdate"
+      },
+      "NicView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac"
+          },
+          "bridge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "firewall": {
+            "type": "boolean",
+            "title": "Firewall",
+            "default": false
+          },
+          "link_down": {
+            "type": "boolean",
+            "title": "Link Down",
+            "default": false
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "NicView"
       },
       "NodeNetworkAddItemReply": {
         "properties": {
