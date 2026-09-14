@@ -3947,6 +3947,496 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/snapshot-sets": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "List Snapshot Sets",
+        "operationId": "list_snapshot_sets_v1_deployments__deployment_id__snapshot_sets_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SnapshotSetOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/retention/plan": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Plan Retention",
+        "operationId": "plan_retention_v1_deployments__deployment_id__snapshot_sets_retention_plan_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotRetentionReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/plan": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Plan Snapshot Set",
+        "operationId": "plan_snapshot_set_v1_deployments__deployment_id__snapshot_sets_plan_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotSetPlanIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Get Snapshot Set",
+        "operationId": "get_snapshot_set_v1_deployments__deployment_id__snapshot_sets__set_id__get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}/execute": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Execute Snapshot Set",
+        "operationId": "execute_snapshot_set_v1_deployments__deployment_id__snapshot_sets__set_id__execute_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotSetExecuteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}/reconcile": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Reconcile Snapshot Set",
+        "operationId": "reconcile_snapshot_set_v1_deployments__deployment_id__snapshot_sets__set_id__reconcile_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}/rollback/plan": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Plan Rollback",
+        "operationId": "plan_rollback_v1_deployments__deployment_id__snapshot_sets__set_id__rollback_plan_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}/delete/plan": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Plan Delete",
+        "operationId": "plan_delete_v1_deployments__deployment_id__snapshot_sets__set_id__delete_plan_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}/plans/{operation_id}": {
+      "delete": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Cancel Snapshot Plan",
+        "operationId": "cancel_snapshot_plan_v1_deployments__deployment_id__snapshot_sets__set_id__plans__operation_id__delete",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          },
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Operation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts": {
       "get": {
         "tags": [
@@ -4152,6 +4642,72 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Page_VmSummary_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/status": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Vm Observed Status",
+        "operationId": "vm_observed_status_v1_proxmox_hosts__host_id__vms__vmid__status_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "vmtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "qemu",
+                "lxc"
+              ],
+              "type": "string",
+              "default": "qemu",
+              "title": "Vmtype"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VmObservedStatus"
                 }
               }
             }
@@ -5274,6 +5830,256 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/sdn/zones": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Zones",
+        "operationId": "zones_v1_proxmox_hosts__host_id__sdn_zones_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "running",
+                "pending"
+              ],
+              "type": "string",
+              "default": "running",
+              "title": "View"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdnPage_SdnZone_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/sdn/vnets": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Vnets",
+        "operationId": "vnets_v1_proxmox_hosts__host_id__sdn_vnets_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "running",
+                "pending"
+              ],
+              "type": "string",
+              "default": "running",
+              "title": "View"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdnPage_SdnVnet_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/sdn/vnets/{vnet}/subnets": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Subnets",
+        "operationId": "subnets_v1_proxmox_hosts__host_id__sdn_vnets__vnet__subnets_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vnet",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "title": "Vnet"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "running",
+                "pending"
+              ],
+              "type": "string",
+              "default": "running",
+              "title": "View"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdnPage_SdnSubnet_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/stats": {
       "get": {
         "tags": [
@@ -5319,7 +6125,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RetentionPolicy"
+                  "$ref": "#/components/schemas/RetentionPolicyStatus"
                 }
               }
             }
@@ -5359,7 +6165,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RetentionPolicy"
+                  "$ref": "#/components/schemas/RetentionPolicyStatus"
                 }
               }
             }
@@ -5444,6 +6250,87 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "summary": "Identity",
+        "operationId": "identity_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/audit": {
+      "get": {
+        "summary": "Audit Records",
+        "operationId": "audit_records_v1_admin_audit_get",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
               }
             }
           },
@@ -5981,6 +6868,96 @@
           "event_cursor_tip"
         ],
         "title": "AttemptOut"
+      },
+      "AuditItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "actor_id",
+          "role",
+          "method",
+          "route",
+          "state",
+          "status_code",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "AuditItem"
+      },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AuditPage"
       },
       "BundleResolveRequest": {
         "properties": {
@@ -8332,6 +9309,40 @@
         "title": "HostOut",
         "description": "Response shape for a registered host.\n\nDeliberately does NOT inherit from ``HostIn``: that would carry\n``token_ref`` \u2014 the live ``PVEAPIToken`` secret \u2014 into every response\n(#100). Only whether a token is stored is exposed."
       },
+      "IdentityOut": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "operator",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "scope": {
+            "type": "string",
+            "const": "installation",
+            "title": "Scope",
+            "default": "installation"
+          },
+          "audit_enabled": {
+            "type": "boolean",
+            "title": "Audit Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "actor_id",
+          "role",
+          "audit_enabled"
+        ],
+        "title": "IdentityOut"
+      },
       "MaintenanceCapability": {
         "properties": {
           "protocol": {
@@ -9095,6 +10106,37 @@
           "total"
         ],
         "title": "Page[SnapshotOut]"
+      },
+      "Page_SnapshotSetOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotSetOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "Page[SnapshotSetOut]"
       },
       "Page_SourceOut_": {
         "properties": {
@@ -9932,22 +10974,60 @@
         "properties": {
           "keep_count": {
             "type": "integer",
+            "maximum": 10000.0,
             "minimum": 0.0,
             "title": "Keep Count",
-            "description": "Keep at least N most-recent snapshots",
+            "description": "Keep at least N most-recent completed sets per deployment",
             "default": 5
           },
           "keep_days": {
             "type": "integer",
+            "maximum": 36500.0,
             "minimum": 0.0,
             "title": "Keep Days",
-            "description": "Keep snapshots younger than D days",
+            "description": "Keep completed sets younger than D days",
             "default": 7
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "RetentionPolicy",
-        "description": "Snapshot retention policy \u2014 enforced by the snapshot pipeline."
+        "description": "Selection policy for explicit reviewed snapshot-set deletion."
+      },
+      "RetentionPolicyStatus": {
+        "properties": {
+          "keep_count": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Keep Count",
+            "description": "Keep at least N most-recent completed sets per deployment",
+            "default": 5
+          },
+          "keep_days": {
+            "type": "integer",
+            "maximum": 36500.0,
+            "minimum": 0.0,
+            "title": "Keep Days",
+            "description": "Keep completed sets younger than D days",
+            "default": 7
+          },
+          "automatic_enforcement": {
+            "type": "boolean",
+            "const": false,
+            "title": "Automatic Enforcement",
+            "default": false
+          },
+          "execution": {
+            "type": "string",
+            "const": "reviewed_snapshot_sets_only",
+            "title": "Execution",
+            "default": "reviewed_snapshot_sets_only"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RetentionPolicyStatus"
       },
       "RollbackRequest": {
         "properties": {
@@ -10005,6 +11085,144 @@
         ],
         "title": "ScenarioFirewall"
       },
+      "SdnPage_SdnSubnet_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SdnSubnet"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "running",
+              "pending"
+            ],
+            "title": "View"
+          },
+          "visibility": {
+            "type": "string",
+            "const": "credential_filtered",
+            "title": "Visibility",
+            "default": "credential_filtered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "view"
+        ],
+        "title": "SdnPage[SdnSubnet]"
+      },
+      "SdnPage_SdnVnet_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SdnVnet"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "running",
+              "pending"
+            ],
+            "title": "View"
+          },
+          "visibility": {
+            "type": "string",
+            "const": "credential_filtered",
+            "title": "Visibility",
+            "default": "credential_filtered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "view"
+        ],
+        "title": "SdnPage[SdnVnet]"
+      },
+      "SdnPage_SdnZone_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SdnZone"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "running",
+              "pending"
+            ],
+            "title": "View"
+          },
+          "visibility": {
+            "type": "string",
+            "const": "credential_filtered",
+            "title": "Visibility",
+            "default": "credential_filtered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "view"
+        ],
+        "title": "SdnPage[SdnZone]"
+      },
       "SdnSnat": {
         "properties": {
           "enabled": {
@@ -10035,6 +11253,145 @@
           "acknowledge_shared_scope"
         ],
         "title": "SdnSnat"
+      },
+      "SdnSubnet": {
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "has_pending": {
+            "type": "boolean",
+            "title": "Has Pending",
+            "default": false
+          },
+          "subnet": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Subnet"
+          },
+          "vnet": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "title": "Vnet"
+          },
+          "cidr": {
+            "type": "string",
+            "title": "Cidr"
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway"
+          },
+          "snat": {
+            "type": "boolean",
+            "title": "Snat",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "subnet",
+          "vnet",
+          "cidr"
+        ],
+        "title": "SdnSubnet"
+      },
+      "SdnVnet": {
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "has_pending": {
+            "type": "boolean",
+            "title": "Has Pending",
+            "default": false
+          },
+          "vnet": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "title": "Vnet"
+          },
+          "zone": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "title": "Zone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vnet",
+          "zone"
+        ],
+        "title": "SdnVnet"
+      },
+      "SdnZone": {
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "has_pending": {
+            "type": "boolean",
+            "title": "Has Pending",
+            "default": false
+          },
+          "zone": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "title": "Zone"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "nodes": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone",
+          "type"
+        ],
+        "title": "SdnZone"
       },
       "SnapshotCreate": {
         "properties": {
@@ -10519,6 +11876,243 @@
           "vm_id": "1111"
         }
       },
+      "SnapshotMember": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "vm_name": {
+            "type": "string",
+            "title": "Vm Name"
+          },
+          "uuid": {
+            "type": "string",
+            "title": "Uuid"
+          },
+          "config_digest": {
+            "type": "string",
+            "title": "Config Digest"
+          },
+          "restore_digest": {
+            "type": "string",
+            "title": "Restore Digest"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped"
+            ],
+            "title": "Status"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "upid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upid"
+          },
+          "dispatched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatched At"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotProof"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "vm_id",
+          "vm_name",
+          "uuid",
+          "config_digest",
+          "restore_digest",
+          "status"
+        ],
+        "title": "SnapshotMember"
+      },
+      "SnapshotObservedMember": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "vm_name": {
+            "type": "string",
+            "title": "Vm Name"
+          },
+          "uuid": {
+            "type": "string",
+            "title": "Uuid"
+          },
+          "config_digest": {
+            "type": "string",
+            "title": "Config Digest"
+          },
+          "restore_digest": {
+            "type": "string",
+            "title": "Restore Digest"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vm_id",
+          "vm_name",
+          "uuid",
+          "config_digest",
+          "restore_digest",
+          "status"
+        ],
+        "title": "SnapshotObservedMember"
+      },
+      "SnapshotOperationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "create",
+              "rollback",
+              "delete"
+            ],
+            "title": "Kind"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "running",
+              "needs_review",
+              "succeeded",
+              "partial",
+              "failed",
+              "cancelled",
+              "superseded"
+            ],
+            "title": "State"
+          },
+          "recovery": {
+            "type": "string",
+            "enum": [
+              "operator_required",
+              "poll_saved_tasks",
+              "none"
+            ],
+            "title": "Recovery"
+          },
+          "plan_digest": {
+            "type": "string",
+            "title": "Plan Digest"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotOutcome"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "reviewed_members": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotObservedMember"
+            },
+            "type": "array",
+            "title": "Reviewed Members"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotRetentionPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "recovery",
+          "plan_digest",
+          "expires_at",
+          "members",
+          "reviewed_members",
+          "attempt_id",
+          "retention"
+        ],
+        "title": "SnapshotOperationOut"
+      },
       "SnapshotOut": {
         "properties": {
           "id": {
@@ -10573,6 +12167,145 @@
           "expired"
         ],
         "title": "SnapshotOut"
+      },
+      "SnapshotOutcome": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "title": "Vm Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "dispatching",
+              "accepted",
+              "unconfirmed",
+              "not_started",
+              "failed",
+              "succeeded"
+            ],
+            "title": "State"
+          },
+          "upid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upid"
+          },
+          "dispatched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatched At"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotProof"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "vm_id",
+          "state"
+        ],
+        "title": "SnapshotOutcome"
+      },
+      "SnapshotProof": {
+        "properties": {
+          "snaptime": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Snaptime"
+          },
+          "config_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Config Digest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snaptime",
+          "config_digest"
+        ],
+        "title": "SnapshotProof"
+      },
+      "SnapshotRetentionPolicy": {
+        "properties": {
+          "keep_count": {
+            "type": "integer",
+            "title": "Keep Count"
+          },
+          "keep_days": {
+            "type": "integer",
+            "title": "Keep Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keep_count",
+          "keep_days"
+        ],
+        "title": "SnapshotRetentionPolicy"
+      },
+      "SnapshotRetentionReview": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/SnapshotRetentionPolicy"
+          },
+          "automatic_enforcement": {
+            "type": "boolean",
+            "const": false,
+            "title": "Automatic Enforcement"
+          },
+          "eligible_count": {
+            "type": "integer",
+            "title": "Eligible Count"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotSetOut"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy",
+          "automatic_enforcement",
+          "eligible_count",
+          "candidates"
+        ],
+        "title": "SnapshotRetentionReview"
       },
       "SnapshotRevertItemReply": {
         "properties": {
@@ -10678,6 +12411,148 @@
           "vm_id": "1111",
           "vm_snapshot_name": "CCCC"
         }
+      },
+      "SnapshotSetExecuteIn": {
+        "properties": {
+          "plan_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Plan Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_digest"
+        ],
+        "title": "SnapshotSetExecuteIn"
+      },
+      "SnapshotSetOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "creating",
+              "rolling_back",
+              "deleting",
+              "needs_review",
+              "complete",
+              "partial",
+              "failed",
+              "deleted"
+            ],
+            "title": "State"
+          },
+          "project_sha": {
+            "type": "string",
+            "title": "Project Sha"
+          },
+          "host_id": {
+            "type": "string",
+            "title": "Host Id"
+          },
+          "target_digest": {
+            "type": "string",
+            "title": "Target Digest"
+          },
+          "native_name": {
+            "type": "string",
+            "title": "Native Name"
+          },
+          "atomic": {
+            "type": "boolean",
+            "const": false,
+            "title": "Atomic"
+          },
+          "vmstate": {
+            "type": "boolean",
+            "const": false,
+            "title": "Vmstate"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotMember"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/SnapshotOperationOut"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotOperationOut"
+            },
+            "type": "array",
+            "title": "Operations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "deployment_id",
+          "name",
+          "description",
+          "state",
+          "project_sha",
+          "host_id",
+          "target_digest",
+          "native_name",
+          "atomic",
+          "vmstate",
+          "created_at",
+          "members",
+          "operation",
+          "operations"
+        ],
+        "title": "SnapshotSetOut"
+      },
+      "SnapshotSetPlanIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "default": "Snapshot set"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Description",
+            "default": ""
+          },
+          "vmstate": {
+            "type": "boolean",
+            "const": false,
+            "title": "Vmstate",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SnapshotSetPlanIn"
       },
       "SourceCredentialsIn": {
         "properties": {
@@ -14056,6 +15931,45 @@
           "proxmox_node": "px-testing",
           "vm_id": "1001"
         }
+      },
+      "VmObservedStatus": {
+        "properties": {
+          "vmid": {
+            "type": "integer",
+            "title": "Vmid"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "qemu",
+              "lxc"
+            ],
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped",
+              "paused",
+              "unknown"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vmid",
+          "node",
+          "type",
+          "status"
+        ],
+        "title": "VmObservedStatus",
+        "description": "Fresh run state from the selected guest's status/current endpoint."
       },
       "VmSetTagItemReply": {
         "properties": {

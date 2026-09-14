@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 
+from alembic.script import ScriptDirectory
 from cryptography.fernet import Fernet
 import pytest
 
@@ -65,17 +66,19 @@ db.commit()
 print(json.dumps({'count': db.execute('SELECT COUNT(*) FROM container_probe').fetchone()[0],
                   'revision': db.execute('SELECT version_num FROM alembic_version').fetchone()[0]}))
 """
+    expected_revision = ScriptDirectory(str(ROOT / "alembic")).get_current_head()
     for count in (1, 2):
         result = start(container_environment, code)
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == {"count": count, "revision": "0006_deployment_allocations"}
+        assert json.loads(result.stdout) == {"count": count, "revision": expected_revision}
     home = Path(container_environment["HOME"])
     workspace = Path(container_environment["RANGE42_WORKSPACE_ROOT"])
     for directory in (home, home / ".ssh", home / ".ssh" / "range42", home / ".ansible", workspace):
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
     assert stat.S_IMODE((workspace / ".range42.db").stat().st_mode) == 0o600
     with sqlite3.connect(workspace / ".range42.db") as db:
-        assert {"proxmox_hosts", "allocation_reservations", "deployment_allocations", "attempts"}.issubset(
+        assert {"proxmox_hosts", "allocation_reservations", "deployment_allocations", "attempts",
+                "snapshot_sets", "snapshot_operations", "audit_records"}.issubset(
             {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")})
 
 
