@@ -1,8 +1,8 @@
 """/v1/catalog/entries — cross-source browse + single-entry detail.
 
-Each request shallow-clones every registered SourceRepo into a tmpdir,
-walks the trees for catalog manifests, and synthesises catalog entry
-summaries. Native manifests, bundle playbooks and descriptors, Galaxy roles,
+Catalog summaries use a bounded 30-second app-local snapshot cache. Cold
+loads shallow-clone registered repositories concurrently into owned tmpdirs;
+detail reads still clone the requested source afresh. Native manifests, bundle playbooks and descriptors, Galaxy roles,
 role task entrypoints, Docker assets and gamification manifests are recognised.
 Core metadata formats include:
 
@@ -19,11 +19,12 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import git  # type: ignore
 
+from app.core.catalog_snapshots import catalog_snapshots, repository_key
 from app.core.catalog_index import detail_at_path as _detail_at_path, discover as _discover, read_readme
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
@@ -87,6 +88,7 @@ def _detail_for_repo(src: Source, repo: SourceRepo, path: str) -> CatalogEntryDe
 
 @router.get("/entries", response_model=Page[CatalogEntrySummary])
 async def list_entries(
+    request: Request,
     session: AsyncSession = Depends(_session),
     kind: str | None = Query(None),
     source_id: str | None = Query(None),
@@ -98,7 +100,8 @@ async def list_entries(
     if source_id:
         sources_q = sources_q.where(Source.id == source_id)
     sources = (await session.execute(sources_q)).scalars().all()
-    summaries: list[CatalogEntrySummary] = []
+    cache = catalog_snapshots(request)
+    loads = []
     for src in sources:
         repos = (
             await session.execute(
@@ -106,12 +109,13 @@ async def list_entries(
             )
         ).scalars().all()
         for repo in repos:
-            for entry in await asyncio.to_thread(_entries_for_repo, src, repo):
-                if kind and entry.kind != kind:
-                    continue
-                if tag and tag not in entry.tags:
-                    continue
-                summaries.append(entry)
+            # Recheck operator URL policy on cache hits as well as fresh clones.
+            require_repository_url(f"{str(src.base_url).rstrip('/')}/{repo.owner}/{repo.repo}.git")
+            loads.append((repository_key(src, repo), src, repo))
+    batches = await asyncio.gather(*(cache.get(key, lambda src=src, repo=repo: _entries_for_repo(src, repo))
+                                     for key, src, repo in loads))
+    summaries = [entry for batch in batches for entry in batch
+                 if (not kind or entry.kind == kind) and (not tag or tag in entry.tags)]
     summaries.sort(key=lambda entry: (entry.source_id, entry.path))
     total = len(summaries)
     return Page[CatalogEntrySummary](

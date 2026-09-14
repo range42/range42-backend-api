@@ -4,12 +4,13 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.catalog_snapshots import catalog_snapshots
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
 from app.core.models import Source, SourceRepo
@@ -58,7 +59,7 @@ async def list_sources(
 
 @router.post("/sources", response_model=SourceOut, status_code=status.HTTP_201_CREATED)
 async def create_source(
-    payload: SourceIn, session: AsyncSession = Depends(_session)
+    payload: SourceIn, request: Request, session: AsyncSession = Depends(_session)
 ):
     row = Source(
         id=uuid.uuid4().hex[:16],
@@ -71,14 +72,17 @@ async def create_source(
     session.add(row)
     await session.commit()
     await session.refresh(row, attribute_names=["created_at", "repos"])
+    catalog_snapshots(request).invalidate()
     return _to_out(row)
 
 
 @router.post("/sources/default", response_model=SourceOut)
 async def register_default_source(
+    request: Request,
     session: AsyncSession = Depends(_session), kind: Literal["catalog", "bundles"] = "catalog",
 ):
     """Register the public catalog or the SDN playbooks library without cloning."""
+    catalog_snapshots(request).invalidate()
     try:
         return await _register_default_source(session, kind=kind)
     except IntegrityError:
@@ -126,7 +130,7 @@ async def _register_default_source(session: AsyncSession, *, kind: str = "catalo
 
 @router.patch("/sources/{source_id}", response_model=SourceOut)
 async def update_source_credentials(
-    source_id: str, payload: SourceCredentialsIn,
+    source_id: str, payload: SourceCredentialsIn, request: Request,
     session: AsyncSession = Depends(_session),
 ):
     row = (await session.execute(
@@ -138,12 +142,13 @@ async def update_source_credentials(
     row.auth_kind = payload.auth_kind
     row.token_ref = payload.token_ref
     await session.commit()
+    catalog_snapshots(request).invalidate()
     return _to_out(row)
 
 
 @router.delete("/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_source(
-    source_id: str, session: AsyncSession = Depends(_session)
+    source_id: str, request: Request, session: AsyncSession = Depends(_session)
 ):
     row = (
         await session.execute(select(Source).where(Source.id == source_id))
@@ -157,4 +162,5 @@ async def delete_source(
         )
     await session.delete(row)
     await session.commit()
+    catalog_snapshots(request).invalidate()
     return None

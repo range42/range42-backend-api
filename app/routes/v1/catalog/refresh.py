@@ -5,10 +5,11 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.catalog_snapshots import catalog_snapshots
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error, SourceUnreachableError
 from app.core.logging import get_logger
@@ -27,7 +28,7 @@ async def _session() -> AsyncSession:
 
 @router.post("/sources/{source_id}/refresh", response_model=SourceRefreshResult)
 async def refresh_source(
-    source_id: str, session: AsyncSession = Depends(_session)
+    source_id: str, request: Request, session: AsyncSession = Depends(_session)
 ):
     src = (
         await session.execute(select(Source).where(Source.id == source_id))
@@ -39,6 +40,7 @@ async def refresh_source(
             status=404,
             message=f"Source {source_id} not found",
         )
+    catalog_snapshots(request).invalidate()
     started = datetime.now(timezone.utc)
     repos = (
         await session.execute(
@@ -69,6 +71,7 @@ async def refresh_source(
                 ]
             )
     await session.commit()
+    catalog_snapshots(request).invalidate()
     return SourceRefreshResult(
         source_id=source_id,
         repos_seen=len(repos),
