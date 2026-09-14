@@ -4233,6 +4233,82 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Update Vm Config",
+        "description": "Apply a reviewed partial edit once. Unconfirmed outcomes must be refreshed,\nnever blindly retried. QEMU resource edits use its asynchronous API.",
+        "operationId": "update_vm_config_v1_proxmox_hosts__host_id__vms__vmid__config_put",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999999999,
+              "minimum": 100,
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "vmtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "qemu",
+                "lxc"
+              ],
+              "type": "string",
+              "default": "qemu",
+              "title": "Vmtype"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VmConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VmConfigUpdateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/proxmox/hosts/{host_id}/vms/{vmid}/status/{action}": {
@@ -4409,6 +4485,23 @@
               "type": "string",
               "title": "Upid"
             }
+          },
+          {
+            "name": "expected_target_digest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Target Digest"
+            }
           }
         ],
         "responses": {
@@ -4418,6 +4511,74 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/vms/{vmid}/config/review": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Review Vm Config",
+        "description": "Review five editable fields; current is PVE configuration, not guest telemetry.",
+        "operationId": "review_vm_config_v1_proxmox_hosts__host_id__vms__vmid__config_review_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999999999,
+              "minimum": 100,
+              "title": "Vmid"
+            }
+          },
+          {
+            "name": "vmtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "qemu",
+                "lxc"
+              ],
+              "type": "string",
+              "default": "qemu",
+              "title": "Vmtype"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VmConfigReview"
                 }
               }
             }
@@ -11948,6 +12109,77 @@
           "vm_new_id": "3000"
         }
       },
+      "VmConfigChanges": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8192
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "cores": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 128.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cores"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4194304.0,
+                "minimum": 16.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory",
+            "description": "MiB"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VmConfigChanges"
+      },
       "VmConfigResult": {
         "properties": {
           "vmid": {
@@ -11981,6 +12213,217 @@
         ],
         "title": "VmConfigResult",
         "description": "Raw PVE guest config (net0/net1/ipconfig*, cores, memory, ...). The UI\nimport flow parses net* to reconstruct per-NIC bridge/network edges (#79)."
+      },
+      "VmConfigReview": {
+        "properties": {
+          "host_id": {
+            "type": "string",
+            "title": "Host Id"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "vmid": {
+            "type": "integer",
+            "title": "Vmid"
+          },
+          "vmtype": {
+            "type": "string",
+            "enum": [
+              "qemu",
+              "lxc"
+            ],
+            "title": "Vmtype"
+          },
+          "digest": {
+            "type": "string",
+            "title": "Digest"
+          },
+          "target_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Target Digest",
+            "description": "Stable registered target binding; unchanged by guest configuration edits"
+          },
+          "current": {
+            "$ref": "#/components/schemas/VmConfigValues"
+          },
+          "configured": {
+            "$ref": "#/components/schemas/VmConfigValues"
+          },
+          "pending": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "description",
+                "cores",
+                "memory",
+                "tags"
+              ]
+            },
+            "type": "array",
+            "title": "Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host_id",
+          "node",
+          "vmid",
+          "vmtype",
+          "digest",
+          "target_digest",
+          "current",
+          "configured",
+          "pending"
+        ],
+        "title": "VmConfigReview"
+      },
+      "VmConfigUpdate": {
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Digest",
+            "description": "Opaque target-bound digest from config/review"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/VmConfigChanges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "digest",
+          "changes"
+        ],
+        "title": "VmConfigUpdate"
+      },
+      "VmConfigUpdateResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "configured",
+              "accepted",
+              "unconfirmed"
+            ],
+            "title": "Status"
+          },
+          "upid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upid"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VmConfigReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "write_outcome_unknown",
+                  "unexpected_write_response",
+                  "readback_unavailable",
+                  "readback_mismatch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "VmConfigUpdateResult"
+      },
+      "VmConfigValues": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "cores": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cores"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "cores",
+          "memory",
+          "tags"
+        ],
+        "title": "VmConfigValues"
       },
       "VmCreateItemReply": {
         "properties": {

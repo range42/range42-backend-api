@@ -5,7 +5,9 @@ sibling modules reuse one copy instead of cross-importing privates.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 
 import httpx
 from sqlalchemy import select
@@ -40,6 +42,29 @@ async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:
 
 def _auth_headers(row: ProxmoxHost) -> dict[str, str]:
     return {"Authorization": f"PVEAPIToken={row.token_ref}"}
+
+
+def _config_target_digest(row: ProxmoxHost, vmid: int, vmtype: str) -> str:
+    """Stable across guest config changes, invalidated by target re-registration.
+
+    Include credential/protection changes without exposing either value. This
+    is a context guard, not authorization or a durable task ownership record.
+    """
+    binding = (row.id, row.api_url.rstrip("/"), row.node_name, row.token_ref,
+               row.protected_vmids_override_json, vmid, vmtype)
+    return hashlib.sha256(json.dumps(binding, separators=(",", ":")).encode()).hexdigest()
+
+
+def _config_task_vmid(upid: str, node: str) -> int | None:
+    """Only the QEMU configuration worker has this guarded polling contract."""
+    if not isinstance(upid, str) or len(upid) > 512:
+        return None
+    match = re.fullmatch(
+        rf"UPID:{re.escape(node)}:[A-Fa-f0-9]+:[A-Fa-f0-9]+:[A-Fa-f0-9]+:qmconfig:([0-9]{{3,9}}):[^:\s]+:", upid,
+    )
+    if match and 100 <= int(match[1]) <= 999999999:
+        return int(match[1])
+    return None
 
 
 def _assert_vmid_safe(row: ProxmoxHost, vmid: int, action: str) -> None:

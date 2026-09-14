@@ -69,6 +69,7 @@ async def create_snapshot(
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
+    _assert_vmid_safe(row, vmid, "snapshot create")
     form: dict[str, str | int] = {"snapname": body.snapname}
     if body.description is not None:
         form["description"] = body.description
@@ -97,6 +98,7 @@ async def delete_snapshot(
     session: AsyncSession = Depends(_session),
 ):
     row = await _get_host(host_id, session)
+    _assert_vmid_safe(row, vmid, "snapshot delete")
     url = f"{_snap_base(row, vmtype, vmid)}/{name}"
     try:
         async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:

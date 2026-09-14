@@ -6,13 +6,14 @@ VM listing and start/stop/pause/resume.
 """
 from __future__ import annotations
 
-from typing import Literal
+import hmac
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 import httpx
 
 from app.core.proxmox_tls import proxmox_verify
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AuthFailedError, Range42Error
@@ -20,6 +21,8 @@ from app.core.logging import get_logger
 from app.routes.v1.proxmox._helpers import (
     _assert_vmid_safe,
     _auth_headers,
+    _config_target_digest,
+    _config_task_vmid,
     _get_host,
     _session,
     _unreachable,
@@ -208,8 +211,18 @@ async def vm_delete(
 
 
 @router.get("/hosts/{host_id}/tasks/{upid:path}/status", response_model=TaskStatus)
-async def task_status(host_id: str, upid: str, session: AsyncSession = Depends(_session)):
+async def task_status(
+    host_id: str, upid: str, session: AsyncSession = Depends(_session),
+    expected_target_digest: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
+):
     row = await _get_host(host_id, session)
+    if expected_target_digest is not None:
+        vmid = _config_task_vmid(upid, row.node_name)
+        if vmid is None or not hmac.compare_digest(expected_target_digest, _config_target_digest(row, vmid, "qemu")):
+            raise Range42Error(
+                error="conflict", code="VM_CONFIG_TARGET_CHANGED", status=409,
+                message="The configuration task no longer matches its reviewed registered target. Do not confirm or retry the edit from this result.",
+            )
     base = row.api_url.rstrip("/")
     enc = quote(upid, safe="")
     url = f"{base}/api2/json/nodes/{row.node_name}/tasks/{enc}/status"
