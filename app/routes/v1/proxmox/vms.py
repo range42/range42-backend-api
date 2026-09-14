@@ -13,7 +13,7 @@ from urllib.parse import quote
 import httpx
 
 from app.core.proxmox_tls import proxmox_verify
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AuthFailedError, Range42Error
@@ -33,6 +33,7 @@ from app.schemas.v1.proxmox import (
     VmActionResult,
     VmConfigResult,
     VmSummary,
+    VmObservedStatus,
 )
 
 router = APIRouter()
@@ -84,6 +85,56 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
     return Page[VmSummary](
         items=items, total=len(items), offset=0, limit=len(items)
     )
+
+
+def _observed_state(vmtype: str, data: dict) -> str:
+    status = data.get("status")
+    if status == "stopped":
+        return "stopped"
+    if status != "running":
+        return "unknown"
+    if vmtype == "lxc":
+        return "running"
+    # QEMU's process can be running while the guest is suspended or paused.
+    qmp = data.get("qmpstatus")
+    if qmp in ("paused", "suspended"):
+        return "paused"
+    return "running" if qmp == "running" else "unknown"
+
+
+@router.get("/hosts/{host_id}/vms/{vmid}/status", response_model=VmObservedStatus)
+async def vm_observed_status(
+    host_id: str,
+    vmid: Annotated[int, Path(ge=1)],
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
+            r = await cli.get(
+                f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/current",
+                headers=_auth_headers(row),
+            )
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(details=[{
+            "field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})",
+        }])
+    if r.status_code != 200:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message=f"Proxmox returned {r.status_code} for guest status")
+    try:
+        data = r.json()["data"]
+        if not isinstance(data, dict):
+            raise ValueError("Invalid status object")
+    except (ValueError, KeyError, TypeError) as e:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message="Proxmox returned an invalid guest status") from e
+    return VmObservedStatus(vmid=vmid, node=row.node_name, type=vmtype,
+                            status=_observed_state(vmtype, data))
 
 
 @router.get(

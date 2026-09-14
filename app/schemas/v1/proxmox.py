@@ -60,6 +60,15 @@ class VmSummary(BaseModel):
     tags: str | None = None
 
 
+class VmObservedStatus(BaseModel):
+    """Fresh run state from the selected guest's status/current endpoint."""
+
+    vmid: int
+    node: str
+    type: Literal["qemu", "lxc"]
+    status: Literal["running", "stopped", "paused", "unknown"]
+
+
 class VmActionResult(BaseModel):
     status: str = "accepted"
     upid: str | None = None
