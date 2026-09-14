@@ -121,7 +121,7 @@ async def test_refresh_unknown_source_returns_not_found(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_refresh_source_with_no_repos_is_ok(tmp_path, monkeypatch):
+async def test_refresh_source_without_repos_requests_registration(tmp_path, monkeypatch):
     app, dbmod = await _boot(tmp_path, monkeypatch)
     try:
         async with AsyncClient(
@@ -137,10 +137,8 @@ async def test_refresh_source_with_no_repos_is_ok(tmp_path, monkeypatch):
             )
             sid = r.json()["id"]
             r = await c.post(f"/v1/catalog/sources/{sid}/refresh")
-            assert r.status_code == 200, r.text
-            body = r.json()
-            assert body["source_id"] == sid
-            assert body["repos_seen"] == 0
-            assert body["entries_indexed"] == 0
+            assert r.status_code == 400, r.text
+            assert r.json()["code"] == "SOURCE_REPOS_REQUIRED"
+            assert "repository" in r.json()["message"].lower()
     finally:
         await dbmod.dispose_engine()

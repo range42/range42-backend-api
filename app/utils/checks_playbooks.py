@@ -168,6 +168,8 @@ def resolve_scenarios_playbook(action_name: str, playbooks_dir_type: str) -> Pat
         or a path traversal is detected.
     """
 
+    if action_name == "_universal":
+        raise HTTPException(status_code=400, detail="_universal is retired; use a concrete scenario")
     playbooks_dir = _warmup_checks(playbooks_dir_type)
     scenarios_dir = (playbooks_dir / "scenarios").resolve()
 

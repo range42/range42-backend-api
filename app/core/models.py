@@ -8,9 +8,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint,
+    Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from app.core.credential_store import EncryptedCredential
 
 
 def _utcnow() -> datetime:
@@ -27,7 +29,7 @@ class Source(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
     auth_kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    token_ref: Mapped[str | None] = mapped_column(String(128))
+    token_ref: Mapped[str | None] = mapped_column(EncryptedCredential())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     repos: Mapped[list["SourceRepo"]] = relationship(back_populates="source", cascade="all, delete-orphan")
 
@@ -51,7 +53,7 @@ class ProxmoxHost(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     api_url: Mapped[str] = mapped_column(String(512), nullable=False)
     node_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    token_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_ref: Mapped[str] = mapped_column(EncryptedCredential(), nullable=False)
     token_scope: Mapped[str | None] = mapped_column(String(256))
     default_bridge: Mapped[str] = mapped_column(String(32), default="vmbr0")
     protected_vmids_override_json: Mapped[str | None] = mapped_column(Text)
@@ -103,6 +105,9 @@ class Attempt(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     deployment_id: Mapped[str] = mapped_column(ForeignKey("deployments.id"), nullable=False)
     scope: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_sha: Mapped[str | None] = mapped_column(String(64))
+    operation: Mapped[dict | None] = mapped_column(JSON)
+    operation_result: Mapped[dict | None] = mapped_column(JSON)
     team_id: Mapped[int | None] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     sub_reason: Mapped[str | None] = mapped_column(String(64))
@@ -145,3 +150,8 @@ class WorkspaceLock(Base):
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     heartbeat_interval_s: Mapped[int] = mapped_column(Integer, default=30)
+
+# Register optional-domain tables in the central Alembic/test metadata.
+from app.core import allocation_models as _allocation_models  # noqa: E402, F401
+from app.core import snapshot_models as _snapshot_models  # noqa: E402, F401
+from app.core import audit as _audit  # noqa: E402, F401

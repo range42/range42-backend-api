@@ -18,10 +18,10 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
 from app.core.logging import get_logger
 
@@ -34,10 +34,17 @@ DEFAULT_RETENTION: dict[str, int] = {"keep_count": 5, "keep_days": 7}
 
 
 class RetentionPolicy(BaseModel):
-    """Snapshot retention policy — enforced by the snapshot pipeline."""
+    """Selection policy for explicit reviewed snapshot-set deletion."""
 
-    keep_count: Annotated[int, Field(ge=0, description="Keep at least N most-recent snapshots")] = 5
-    keep_days: Annotated[int, Field(ge=0, description="Keep snapshots younger than D days")] = 7
+    model_config = ConfigDict(extra="forbid")
+
+    keep_count: Annotated[int, Field(ge=0, le=10000, strict=True, description="Keep at least N most-recent completed sets per deployment")] = 5
+    keep_days: Annotated[int, Field(ge=0, le=36500, strict=True, description="Keep completed sets younger than D days")] = 7
+
+
+class RetentionPolicyStatus(RetentionPolicy):
+    automatic_enforcement: Literal[False] = False
+    execution: Literal["reviewed_snapshot_sets_only"] = "reviewed_snapshot_sets_only"
 
 
 def _retention_path() -> Path:
@@ -52,13 +59,23 @@ def _read() -> dict[str, int]:
         return dict(DEFAULT_RETENTION)
     try:
         data = json.loads(p.read_text())
-        return {
-            "keep_count": int(data.get("keep_count", DEFAULT_RETENTION["keep_count"])),
-            "keep_days": int(data.get("keep_days", DEFAULT_RETENTION["keep_days"])),
-        }
+        return RetentionPolicy.model_validate(data).model_dump()
     except (OSError, ValueError, TypeError) as exc:
         logger.warning("retention.read_failed", error=str(exc), path=str(p))
         return dict(DEFAULT_RETENTION)
+
+
+def read_for_deletion() -> dict[str, int]:
+    """Never select destructive work using a corrupt persisted policy."""
+    from app.core.errors import Range42Error
+    path = _retention_path()
+    try:
+        if not path.exists():
+            return dict(DEFAULT_RETENTION)
+        return RetentionPolicy.model_validate_json(path.read_text()).model_dump()
+    except (OSError, ValueError, ValidationError):
+        raise Range42Error(status=409, code="RETENTION_POLICY_UNAVAILABLE", error="retention_policy_unavailable",
+                           message="Save a valid retention policy before reviewing deletion.") from None
 
 
 def _write(policy: dict[str, int]) -> None:
@@ -82,14 +99,14 @@ def _write(policy: dict[str, int]) -> None:
         raise
 
 
-@router.get("", response_model=RetentionPolicy)
-async def get_retention() -> RetentionPolicy:
-    return RetentionPolicy(**_read())
+@router.get("", response_model=RetentionPolicyStatus)
+async def get_retention() -> RetentionPolicyStatus:
+    return RetentionPolicyStatus(**_read())
 
 
-@router.put("", response_model=RetentionPolicy)
-async def put_retention(policy: RetentionPolicy) -> RetentionPolicy:
+@router.put("", response_model=RetentionPolicyStatus)
+async def put_retention(policy: RetentionPolicy) -> RetentionPolicyStatus:
     data = policy.model_dump()
     _write(data)
     logger.info("retention.updated", keep_count=data["keep_count"], keep_days=data["keep_days"])
-    return RetentionPolicy(**data)
+    return RetentionPolicyStatus(**data)

@@ -1,0 +1,62 @@
+{
+  "scenario": "replicated",
+  "version": 3,
+  "vms": [
+    {
+      "vm_id": 3101,
+      "vm_name": "workstation-8d4b18f26b61",
+      "ip": "10.42.10.11",
+      "role": "vm",
+      "bridge": "blue1",
+      "template_vm_id": 9901,
+      "nics": [
+        {
+          "index": 0,
+          "ip": "10.42.10.11",
+          "bridge": "blue1",
+          "prefix": 24,
+          "gateway": "10.42.10.1"
+        }
+      ]
+    },
+    {
+      "vm_id": 3102,
+      "vm_name": "workstation-f41ec66e19c3",
+      "ip": "10.42.10.12",
+      "role": "vm",
+      "bridge": "blue1",
+      "template_vm_id": 9901,
+      "nics": [
+        {
+          "index": 0,
+          "ip": "10.42.10.12",
+          "bridge": "blue1",
+          "prefix": 24,
+          "gateway": "10.42.10.1"
+        }
+      ]
+    },
+    {
+      "vm_id": 3103,
+      "vm_name": "workstation-982df81e340f",
+      "ip": "10.42.11.11",
+      "role": "vm",
+      "bridge": "red1",
+      "template_vm_id": 9901,
+      "nics": [
+        {
+          "index": 0,
+          "ip": "10.42.11.11",
+          "bridge": "red1",
+          "prefix": 24,
+          "gateway": "10.42.11.1"
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "vm_id": 9901
+    }
+  ]
+}

@@ -33,7 +33,7 @@ def build_engine(url: str | None = None) -> AsyncEngine:
     if resolved.startswith("sqlite+aiosqlite:///"):
         db_path = Path(resolved.replace("sqlite+aiosqlite:///", "", 1))
         db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_async_engine(resolved, echo=False, future=True)
+    engine = create_async_engine(resolved, echo=False, future=True, hide_parameters=True)
     event.listen(engine.sync_engine, "connect", _apply_pragmas)
     return engine
 

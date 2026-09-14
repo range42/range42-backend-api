@@ -2,6 +2,30 @@ import pytest
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [([100], "block"), ([5000, 5000], "block"), ([5000, 5010], "pass")],
+)
+async def test_declarative_vmid_safety_checks_literal_assignments(requested, expected):
+    """VMID checks use saved assignments, independent of retired topology expansion."""
+    from app.core.preflight import run_declarative_checks
+
+    checks = await run_declarative_checks(
+        ["vmid.safety"],
+        context={
+            "requested": requested,
+            "host_overrides": None,
+            "topology": {"nodes": []},
+            "team_count": 99,
+        },
+    )
+
+    assert len(checks) == 1
+    assert checks[0].check == "vmid_collision"
+    assert checks[0].result == expected
+
+
+@pytest.mark.asyncio
 async def test_check_topology_assets_passes_when_all_resolved(tmp_path):
     """All attachments resolve → all checks pass."""
     project_dir = tmp_path / "project"
@@ -125,68 +149,6 @@ async def test_check_topology_assets_catalog_warn_when_no_catalog_dir(tmp_path):
     checks = await check_topology_assets(project_dir, None, topology)
     # No catalog_dir provided → warn (cannot verify), not block
     assert any(c.result == "warn" and "CATALOG" in (c.code or "") for c in checks)
-
-
-@pytest.mark.asyncio
-async def test_vmid_safety_blocks_protected_vmids():
-    """Topology that computes a VMID into the protected range must block."""
-    from app.core.preflight import check_vmid_safety_for_topology
-
-    topology = {
-        "nodes": [
-            {"id": "vm-bad", "kind": "vm", "role": "admin",
-             "replication": {"scope": "shared"},
-             "template_vmid": 9001, "vmid_base": 100},  # 100 is protected
-        ]
-    }
-    check = await check_vmid_safety_for_topology(topology, team_count=1, host_overrides=None)
-    assert check.result == "block"
-    assert "protected" in check.detail.lower() or "100" in check.detail
-
-
-@pytest.mark.asyncio
-async def test_vmid_safety_blocks_duplicate_vmids():
-    """Two per-team VMs whose computed VMIDs collide must block."""
-    from app.core.preflight import check_vmid_safety_for_topology
-
-    # team_count=2, vms_per_team=2:
-    # node-a (base=5000) team 1 seq 0 → 5000 + 1*2 + 0 = 5002
-    # node-b (base=4999) team 1 seq 1 → 4999 + 1*2 + 1 = 5002  (collides)
-    topology = {
-        "nodes": [
-            {"id": "vm-a", "kind": "vm", "role": "trainee",
-             "replication": {"scope": "per_team"},
-             "vmid_base": 5000},
-            {"id": "vm-b", "kind": "vm", "role": "trainee",
-             "replication": {"scope": "per_team"},
-             "vmid_base": 4999},
-        ]
-    }
-    check = await check_vmid_safety_for_topology(topology, team_count=2, host_overrides=None)
-    assert check.result == "block"
-    assert "duplicate" in check.detail.lower()
-
-
-@pytest.mark.asyncio
-async def test_vmid_safety_passes_for_safe_topology():
-    """Safe topology with shared and per-team VMs at vmid_base=5000 → pass."""
-    from app.core.preflight import check_vmid_safety_for_topology
-
-    topology = {
-        "nodes": [
-            {"id": "vm-shared", "kind": "vm", "role": "admin",
-             "replication": {"scope": "shared"},
-             "vmid_base": 5000},
-            {"id": "vm-team-a", "kind": "vm", "role": "trainee",
-             "replication": {"scope": "per_team"},
-             "vmid_base": 5100},
-            {"id": "vm-team-b", "kind": "lxc", "role": "trainee",
-             "replication": {"scope": "per_team"},
-             "vmid_base": 5200},
-        ]
-    }
-    check = await check_vmid_safety_for_topology(topology, team_count=2, host_overrides=None)
-    assert check.result == "pass", f"expected pass, got {check.result}: {check.detail}"
 
 
 def test_check_topology_node_role_blocks_missing_role():

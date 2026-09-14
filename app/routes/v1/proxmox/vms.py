@@ -6,18 +6,24 @@ VM listing and start/stop/pause/resume.
 """
 from __future__ import annotations
 
-from typing import Literal
+import hmac
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends
+
+from app.core.proxmox_tls import proxmox_verify
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AuthFailedError, Range42Error
 from app.core.logging import get_logger
 from app.routes.v1.proxmox._helpers import (
+    _mutation_session,
     _assert_vmid_safe,
     _auth_headers,
+    _config_target_digest,
+    _config_task_vmid,
     _get_host,
     _session,
     _unreachable,
@@ -28,6 +34,7 @@ from app.schemas.v1.proxmox import (
     VmActionResult,
     VmConfigResult,
     VmSummary,
+    VmObservedStatus,
 )
 
 router = APIRouter()
@@ -46,7 +53,7 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
     headers = _auth_headers(row)
     items: list[VmSummary] = []
     try:
-        async with httpx.AsyncClient(verify=False, timeout=10) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
             for vm_type in ("qemu", "lxc"):
                 r = await cli.get(
                     f"{base}/api2/json/nodes/{row.node_name}/{vm_type}", headers=headers
@@ -81,6 +88,56 @@ async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session))
     )
 
 
+def _observed_state(vmtype: str, data: dict) -> str:
+    status = data.get("status")
+    if status == "stopped":
+        return "stopped"
+    if status != "running":
+        return "unknown"
+    if vmtype == "lxc":
+        return "running"
+    # QEMU's process can be running while the guest is suspended or paused.
+    qmp = data.get("qmpstatus")
+    if qmp in ("paused", "suspended"):
+        return "paused"
+    return "running" if qmp == "running" else "unknown"
+
+
+@router.get("/hosts/{host_id}/vms/{vmid}/status", response_model=VmObservedStatus)
+async def vm_observed_status(
+    host_id: str,
+    vmid: Annotated[int, Path(ge=1)],
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
+            r = await cli.get(
+                f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/current",
+                headers=_auth_headers(row),
+            )
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(details=[{
+            "field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})",
+        }])
+    if r.status_code != 200:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message=f"Proxmox returned {r.status_code} for guest status")
+    try:
+        data = r.json()["data"]
+        if not isinstance(data, dict):
+            raise ValueError("Invalid status object")
+    except (ValueError, KeyError, TypeError) as e:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message="Proxmox returned an invalid guest status") from e
+    return VmObservedStatus(vmid=vmid, node=row.node_name, type=vmtype,
+                            status=_observed_state(vmtype, data))
+
+
 @router.get(
     "/hosts/{host_id}/vms/{vmid}/config", response_model=VmConfigResult
 )
@@ -97,7 +154,7 @@ async def vm_config(
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/config"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -128,7 +185,7 @@ async def vm_status_action(
     vmid: int,
     action: str,
     vmtype: Literal["qemu", "lxc"] = "qemu",
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     if action not in _ALLOWED_ACTIONS:
         raise Range42Error(
@@ -144,7 +201,7 @@ async def vm_status_action(
     base = row.api_url.rstrip("/")
     url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/{action}"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.post(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -172,7 +229,7 @@ async def vm_delete(
     vmid: int,
     vmtype: Literal["qemu", "lxc"] = "qemu",
     purge: bool = True,
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     row = await _get_host(host_id, session)
     _assert_vmid_safe(row, vmid, "delete")
@@ -183,7 +240,7 @@ async def vm_delete(
         params["purge"] = 1
         params["destroy-unreferenced-disks"] = 1
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.delete(url, headers=_auth_headers(row), params=params)
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -206,13 +263,23 @@ async def vm_delete(
 
 
 @router.get("/hosts/{host_id}/tasks/{upid:path}/status", response_model=TaskStatus)
-async def task_status(host_id: str, upid: str, session: AsyncSession = Depends(_session)):
+async def task_status(
+    host_id: str, upid: str, session: AsyncSession = Depends(_session),
+    expected_target_digest: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
+):
     row = await _get_host(host_id, session)
+    if expected_target_digest is not None:
+        vmid = _config_task_vmid(upid, row.node_name, kinds=('qmconfig', 'resize'))
+        if vmid is None or not hmac.compare_digest(expected_target_digest, _config_target_digest(row, vmid, "qemu")):
+            raise Range42Error(
+                error="conflict", code="VM_CONFIG_TARGET_CHANGED", status=409,
+                message="The configuration task no longer matches its reviewed registered target. Do not confirm or retry the edit from this result.",
+            )
     base = row.api_url.rstrip("/")
     enc = quote(upid, safe="")
     url = f"{base}/api2/json/nodes/{row.node_name}/tasks/{enc}/status"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e

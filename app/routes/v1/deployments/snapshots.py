@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
 from app.core.models import Attempt, Deployment, Snapshot
+from app.core.scenario import validate_concrete_scope
 from app.schemas.v1.common import Page
 from app.schemas.v1.deployments import (
     AttemptOut,
@@ -45,6 +46,7 @@ async def snapshot(deployment_id: str, payload: SnapshotCreate,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
+    validate_concrete_scope(dep, "snapshot")
     att = Attempt(
         id=uuid.uuid4().hex[:16],
         deployment_id=deployment_id,
@@ -70,6 +72,7 @@ async def rollback(deployment_id: str, payload: RollbackRequest,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
+    validate_concrete_scope(dep, "rollback")
     # Refuse rollback when required snapshot is missing or expired (§18.6).
     q = select(Snapshot).where(Snapshot.deployment_id == deployment_id)
     if payload.scope == "team":
@@ -139,6 +142,9 @@ async def cancel_current_attempt(deployment_id: str,
                       "reason": "deployment has no current_attempt_id"}],
         )
     att = await session.get(Attempt, dep.current_attempt_id)
+    if att is not None and att.scope == "snapshot_set" and att.state not in {"succeeded", "partial", "failed"}:
+        raise Range42Error(status=409, code="SNAPSHOT_RECONCILIATION_REQUIRED", error="native_task_active",
+                           message="Native snapshot tasks cannot be cancelled by signalling the API runner. Reconcile their saved task identities first.")
     if att is None or att.state in ("succeeded", "partial", "failed",
                                     "cancelled", "unknown"):
         raise Range42Error(

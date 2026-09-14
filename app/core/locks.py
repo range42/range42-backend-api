@@ -1,20 +1,24 @@
 """Deployment-scoped lock with heartbeat.
 
-Stale after 3 * heartbeat_interval_s. Cleanup runs both on acquire() (if
-a stale lock exists, it is evicted in the same transaction) and from
-apscheduler every interval.
+A heartbeat expires after 3 * heartbeat_interval_s, but a verified live
+runner retains its lock even during API downtime or pending cancellation.
+Cleanup runs on acquire() and from apscheduler every interval.
 
 Spec refs: §7 concurrency, §8 concurrency primitives.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+import fcntl
+import os
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Range42Error
-from app.core.models import WorkspaceLock
+from app.core.models import Attempt, Deployment, WorkspaceLock
+from app.core.runner_detached import process_matches
 
 
 class LockHeldError(Range42Error):
@@ -23,12 +27,82 @@ class LockHeldError(Range42Error):
     code = "DEPLOYMENT_LOCKED"
 
 
+class ProvisioningLock:
+    """Serialize full provisioning across this installation's workspaces.
+
+    The detached runner inherits the locked descriptor. A hard API crash cannot
+    release the lock while that runner is staging/applying cluster SDN changes.
+    All targets share one lock so aliases for the same cluster cannot bypass it.
+    External Proxmox writers must still coordinate their changes separately.
+    """
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.fd = -1
+
+    def __enter__(self):
+        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(self.directory / "provisioning.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            raise Range42Error(
+                status=409, error="provisioning_busy", code="PROVISIONING_BUSY",
+                message="Another full deployment is preparing infrastructure. Wait for it to finish before retrying.",
+            ) from None
+        self.fd = fd
+        return self
+
+    def __exit__(self, *_):
+        # Do not LOCK_UN: that would also unlock the child's inherited open
+        # file description. Closing leaves it locked until the runner exits.
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
 def _is_stale(lock: WorkspaceLock) -> bool:
     now = datetime.now(timezone.utc)
     hb = lock.heartbeat_at
     if hb.tzinfo is None:
         hb = hb.replace(tzinfo=timezone.utc)
     return (now - hb) > timedelta(seconds=3 * lock.heartbeat_interval_s)
+
+
+async def _runner_alive(session: AsyncSession, lock: WorkspaceLock) -> bool:
+    """Verify this workspace's process, including the spawn-to-DB crash gap.
+
+    Cancellation is recorded before the subprocess exits. Terminal state or
+    an expired observer heartbeat alone therefore cannot relinquish ownership.
+    A PID only counts with the matching persisted boot ID and start time.
+    """
+    if not lock.owner.startswith("attempt-"):
+        return False
+    attempt = await session.get(Attempt, lock.owner.removeprefix("attempt-"))
+    if attempt is None or attempt.deployment_id != lock.deployment_id:
+        return False
+    if attempt.scope == "snapshot_set":
+        from app.core.snapshot_models import SnapshotOperation
+        operation = await session.scalar(select(SnapshotOperation).where(SnapshotOperation.attempt_id == attempt.id))
+        # A remote native task survives API/PID loss. Only its verified
+        # terminal reconciliation can relinquish this durable ownership.
+        return operation is not None and operation.state in {"running", "needs_review"}
+    deployment = await session.get(Deployment, lock.deployment_id)
+    if deployment is None:
+        return False
+    workspace = Path(deployment.workspace_path)
+    artifact = workspace / "runner" / attempt.id
+    try:
+        resolved = artifact.resolve()
+        if artifact.is_symlink() or not resolved.is_relative_to(workspace.resolve()):
+            return False
+        if attempt.artifact_dir and Path(attempt.artifact_dir).resolve() != resolved:
+            return False
+        pid = attempt.pid or int((artifact / "pid").read_text())
+        return process_matches(artifact, pid)
+    except (OSError, ValueError, RuntimeError):
+        return False
 
 
 async def acquire_lock(
@@ -46,7 +120,7 @@ async def acquire_lock(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        if _is_stale(existing):
+        if _is_stale(existing) and not await _runner_alive(session, existing):
             await session.delete(existing)
             await session.flush()
         else:
@@ -102,9 +176,14 @@ async def heartbeat(
     return True
 
 
-async def cleanup_stale_locks(session: AsyncSession) -> int:
-    rows = (await session.execute(select(WorkspaceLock))).scalars().all()
-    stale = [r for r in rows if _is_stale(r)]
-    for r in stale:
-        await session.delete(r)
-    return len(stale)
+async def cleanup_stale_locks(session: AsyncSession, *, deployment_id: str | None = None) -> int:
+    query = select(WorkspaceLock)
+    if deployment_id is not None:
+        query = query.where(WorkspaceLock.deployment_id == deployment_id)
+    rows = (await session.execute(query)).scalars().all()
+    removed = 0
+    for row in rows:
+        if _is_stale(row) and not await _runner_alive(session, row):
+            await session.delete(row)
+            removed += 1
+    return removed

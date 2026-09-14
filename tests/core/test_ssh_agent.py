@@ -3,6 +3,8 @@ range42 SSH keys from the workspace vault, mirroring range42-context's
 SSH_ASKPASS mechanism so the backend's ansible-runner can reach the VMs.
 """
 import subprocess
+import shutil
+import stat
 from pathlib import Path
 
 import yaml
@@ -143,3 +145,54 @@ def test_close_kills_agent(tmp_path):
     handle.close()
     # After close the agent socket is dead -> ssh-add -l can't list keys.
     assert _agent_key_count(sock) == 0
+
+
+def test_workspace_socket_survives_service_temporary_directory_cleanup(tmp_path, monkeypatch):
+    private_tmp = tmp_path / "service-tmp"
+    private_tmp.mkdir()
+    monkeypatch.setenv("TMPDIR", str(private_tmp))
+    ws = tmp_path / "workspace"
+    vault_pass = ws / "secrets/vault_pass.txt"
+    vault_pass.parent.mkdir(parents=True)
+    vault_pass.write_text("vaultpw")
+    _gen_key(ws / "ssh_keys/r42.demo-deployer-key_alice", "keypw")
+    _make_vault(ws / "secrets/default_vault.yml",
+                {"ssh_passphrase_deployer_admin": "keypw"}, vault_pass)
+    handle = unlock_workspace_keys(ws, vault_pass)
+    try:
+        sock = Path(handle.env["SSH_AUTH_SOCK"])
+        assert sock.is_relative_to(ws)
+        assert stat.S_ISSOCK(sock.stat().st_mode)
+        assert sock.parent.stat().st_mode & 0o777 == 0o700
+        shutil.rmtree(private_tmp)
+        assert _agent_key_count(str(sock)) == 1
+    finally:
+        handle.close()
+    assert not sock.parent.exists()
+
+
+def test_agent_close_preserves_replaced_socket_directory(tmp_path):
+    from app.core.ssh_agent import _start_agent
+    handle = _start_agent(tmp_path)
+    directory = Path(handle.env["SSH_AUTH_SOCK"]).parent
+    moved = directory.with_name(directory.name + "-old")
+    try:
+        directory.rename(moved)
+        directory.mkdir()
+        (directory / "s").write_text("unrelated")
+        handle.close()
+        assert (directory / "s").read_text() == "unrelated"
+    finally:
+        handle.close()
+        shutil.rmtree(moved, ignore_errors=True)
+
+
+def test_long_workspace_socket_path_fails_without_leaking_directory(tmp_path):
+    from app.core.errors import RunnerSetupError
+    from app.core.ssh_agent import _start_agent
+    import pytest
+    workspace = tmp_path / ("x" * 90)
+    workspace.mkdir()
+    with pytest.raises(RunnerSetupError, match="shorter workspace root"):
+        _start_agent(workspace)
+    assert list(workspace.iterdir()) == []

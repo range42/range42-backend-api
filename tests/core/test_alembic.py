@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import sqlite3
 from pathlib import Path
 
 
@@ -15,5 +16,9 @@ def test_alembic_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
     subprocess.run(alembic + ["upgrade", "head"], cwd=repo, check=True,
                    capture_output=True, text=True)
     assert db.exists()
+    with sqlite3.connect(db) as connection:
+        columns = {row[1]: row for row in connection.execute("PRAGMA table_info(attempts)")}
+        assert "project_sha" in columns
+        assert columns["project_sha"][3] == 0  # Old attempt rows remain nullable.
     subprocess.run(alembic + ["downgrade", "base"], cwd=repo, check=True,
                    capture_output=True, text=True)

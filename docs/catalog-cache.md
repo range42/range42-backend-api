@@ -1,0 +1,23 @@
+# Catalog metadata freshness and cache boundaries
+
+`GET /v1/catalog/entries` reuses repository metadata for up to 30 seconds. Cold repository reads run concurrently, with at most four clone/discovery workers per API application process. Simultaneous requests for the same repository share one worker. Checkouts remain temporary and are removed by their worker, including when the requesting browser disconnects. Entry detail reads remain fresh Git reads.
+
+The cache holds at most 32 repository snapshots and 16 MiB of serialized metadata per process. The latter is a serialized-data budget, not a bound on total Python memory or temporary checkout size. An oversized result is returned intact without caching. Cached results are copied for callers, so response processing cannot mutate subsequent reads.
+
+Authentication and the repository URL allowlist are checked before returning cached entries. Keys bind the source/provider/base URL, repository identity, branch, manifest path, source creation time, refresh timestamp, and digests of both the registered `token_ref` and its resolved credential bytes. Keys contain no raw credentials; cached rows contain metadata and the actual cloned commit SHA. No checkout or credential is persisted by this cache. Explicit operator-approved [Git credential references](git-credential-references.md) are resolved before every cache lookup. The same captured bytes supply the cache identity and clone; rotation changes the key, while a missing or denied reference refuses access even when an older snapshot exists.
+
+Source creation, credential changes, deletion and explicit source refresh invalidate the current process cache. Refresh invalidates before work starts and again after a successful database update; its timestamp also changes keys in other processes. Work begun before invalidation can finish for its original caller but cannot repopulate the current cache. Failed loads and failed refreshes do not return an older snapshot as a fallback.
+
+Use **Sources → Refresh** when an external repository change must be visible immediately. This performs a fresh remote read; the next entries request rebuilds its snapshot. External changes, including upstream permission changes that do not alter the registered credential, may otherwise remain unseen until the 30-second snapshot expires. Multiple API workers keep separate caches. This is bounded metadata reuse, not a continuously synchronized Git index or a transaction spanning all repository branches and pagination requests.
+
+The UI still requests the API on every catalog load. Its optional offline metadata is keyed by backend URL and a digest of the current gateway credential, and expires five minutes after the last successful read. All HTTP errors, including authentication denial and missing/deleted entries, discard that fallback. A transport failure can show recent metadata from the same identity with a visible error. Credential/backend changes, source mutations and component disposal invalidate pending reads, preventing old responses from replacing the current selection or refilling an invalidated cache. Previously saved browser data cannot provide server-side revocation while offline.
+
+## Local validation and measured scope
+
+Before this change, authenticated read-only requests to the shared API returned 64 entries from three sources in 4,510 ms, then 4,731 ms on a repeat. Every request repeated all shallow clones sequentially. Individual source requests took 2,533 ms, 989 ms and 1,092 ms. These are observations of the old installed release, not an after-deployment benchmark.
+
+A disposable local Git/ASGI fixture using the accepted 60-entry catalog tree plus two synthetic repositories containing one and three entries measured a cold read at 954.27 ms, a warm read at 11.85 ms and a subsequent page at 9.86 ms. Exactly three clones occurred across the three requests. Local filesystem cloning excludes remote network latency; a shared deployment must be measured separately before claiming a live improvement.
+
+Focused regressions cover snapshot expiry, bounds, mutation isolation, shared cancellation, concurrent repositories, invalidation racing an in-flight clone, credential/source/policy changes and authentication before cache access. UI regressions cover stale responses and pagination, offline expiry, private-cache denial, source mutations, and backend/credential changes while a read or mutation is pending.
+
+Implementation follows the existing [Git shallow clone contract](https://git-scm.com/docs/git-clone) and Python's [task shielding and strong task-reference guidance](https://docs.python.org/3.12/library/asyncio-task.html#shielding-from-cancellation).

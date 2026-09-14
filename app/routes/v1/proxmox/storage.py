@@ -7,6 +7,8 @@ from __future__ import annotations
 from typing import Literal
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +44,7 @@ async def list_storage_content(
         f"/storage/{store}/content"
     )
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row),
                               params={"content": content})
     except httpx.RequestError as e:
@@ -65,7 +67,7 @@ async def list_storage(host_id: str, session: AsyncSession = Depends(_session)):
     row = await _get_host(host_id, session)
     url = f"{row.api_url.rstrip('/')}/api2/json/nodes/{row.node_name}/storage"
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.get(url, headers=_auth_headers(row))
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
@@ -105,7 +107,7 @@ async def storage_download_url(
     if body.checksum_algorithm is not None:
         form["checksum-algorithm"] = body.checksum_algorithm
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as cli:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
             r = await cli.post(url, headers=_auth_headers(row), data=form)
     except httpx.RequestError as e:
         raise _unreachable(row, e) from e
