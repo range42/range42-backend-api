@@ -18,6 +18,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.auth import BearerAuthMiddleware, configured_api_token
+from app.core.access import configured_principals
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware_trace import TraceIdMiddleware
@@ -90,7 +91,8 @@ def create_app() -> FastAPI:
     configure_logging(json_output=True)
 
     token = configured_api_token(settings)
-    if settings.auth_mode == "required":
+    principals = configured_principals(settings)
+    if settings.auth_mode == "required" or principals:
         from app.core.credential_store import credential_cipher
         credential_cipher(settings)
     maintenance_gate = MaintenanceGate(
@@ -104,11 +106,11 @@ def create_app() -> FastAPI:
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Content-Type", "Accept", "Authorization", "Last-Event-ID", "X-Range42-Trace-Id", "X-Range42-Reservation-Token"],
-            expose_headers=["X-Range42-Trace-Id"],
+            expose_headers=["X-Range42-Trace-Id", "X-Range42-Audit-Id", "X-Range42-Audit-State"],
             max_age=600,
         ),
         Middleware(TraceIdMiddleware),
-        Middleware(BearerAuthMiddleware, token=token),
+        Middleware(BearerAuthMiddleware, token=token, principals=principals, audit_enabled=settings.audit_enabled),
         Middleware(MaintenanceMiddleware, gate=maintenance_gate),
     ]
 

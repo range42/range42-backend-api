@@ -83,6 +83,9 @@ class Settings:
     api_token: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN", ""), repr=False)
     api_token_file: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN_FILE", ""))
 
+    api_principals_file: str = field(default_factory=lambda: os.getenv("RANGE42_API_PRINCIPALS_FILE", ""))
+    audit_enabled: bool = field(default_factory=lambda: os.getenv("RANGE42_AUDIT_ENABLED", "").lower() in ("1", "true", "yes"))
+
     credential_key: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY", ""), repr=False)
     credential_key_file: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY_FILE", ""))
 

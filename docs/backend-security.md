@@ -6,7 +6,9 @@ The API requires bearer authentication by default. Configure the browser's backe
 | --- | --- |
 | `RANGE42_AUTH_MODE` | `required` by default. Set `development` explicitly only for a local development instance without authentication. |
 | `RANGE42_API_TOKEN_FILE` | Preferred token source. Readable file containing at least 32 non-whitespace characters. |
-| `RANGE42_API_TOKEN` | Alternative token source; cannot be combined with the file setting. |
+| `RANGE42_API_TOKEN` | Alternative shared admin token; cannot be combined with the token file setting. |
+| `RANGE42_API_PRINCIPALS_FILE` | Optional private named-token hash/role file; see [named access and audit](named-access-and-audit.md). |
+| `RANGE42_AUDIT_ENABLED` | Enable durable mutation auditing for shared-token installations after migration0008. Named-principal mode always enables it. |
 | `RANGE42_CREDENTIAL_KEY_FILE` | Preferred persistent Fernet encryption-key file. Back up separately from the database and retain across upgrades. |
 | `RANGE42_CREDENTIAL_KEY` | Alternative Fernet key; cannot be combined with the file setting. |
 | `RANGE42_CORS_ORIGINS` | Comma-separated exact browser origins, including scheme and nonstandard port. Loopback development origins remain allowed by the default regex. |
@@ -23,7 +25,7 @@ Old backups and SQLite free pages/WAL may retain previous plaintext values: rota
 
 Git URL validation runs at source/project ingress and again before catalog, legacy compose and concrete scenario network fetches. Embedded credentials, unexpected schemes, unapproved hosts/ports, queries and fragments are rejected. Redirects are disabled for clone/fetch, so configure the canonical forge URL directly. Operators must trust the DNS and service behind explicitly approved hosts. Personal access tokens use the separate credential fields.
 
-The bearer token is a shared operator credential. This provides an application access boundary; user accounts, per-project authorization and individual operator attribution are not implemented by this change. Serve the UI and API behind TLS or through the authenticated lab network, and keep the token out of public UI configuration.
+The legacy bearer token is a shared admin credential, attributed as `shared-operator`. Optional [named access and audit](named-access-and-audit.md) provides individual token identities and installation-wide admin/operator/viewer roles. Per-project isolation and SSO remain separate capabilities. Serve the UI and API behind TLS or through the authenticated lab network, and keep the token out of public UI configuration.
 
 Authenticated `/v1/health/ready` requires the database WAL, workspace writability
 and registered Proxmox-host checks to succeed. Its Git entry is advisory:

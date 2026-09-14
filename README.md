@@ -501,3 +501,5 @@ HTTP 409 and code `WORKSPACE_NON_LOCAL_FS`.
 ## License
 
 [GPL-3.0](LICENSE)
+
+Named API token roles and durable mutation audit are documented in [named access and audit](docs/named-access-and-audit.md). Existing single-token deployments remain compatible.
