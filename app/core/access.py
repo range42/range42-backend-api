@@ -64,6 +64,8 @@ VIEWER_READS = frozenset({
     *[f"/v1/deployments/{{deployment_id}}/{suffix}" for suffix in (
         "allocations", "attempts", "events/download", "events", "preflight", "snapshots", "timings", "runtime", "snapshot-sets")],
     "/v1/deployments/{deployment_id}/snapshot-sets/{set_id}",
+    "/v1/proxmox/hosts/{host_id}/sdn/zones", "/v1/proxmox/hosts/{host_id}/sdn/vnets",
+    "/v1/proxmox/hosts/{host_id}/sdn/vnets/{vnet}/subnets",
     "/v1/proxmox/hosts", "/v1/proxmox/hosts/{host_id}/health", "/v1/proxmox/hosts/{host_id}/vms",
     "/v1/proxmox/hosts/{host_id}/vms/{vmid}/status", "/v1/proxmox/hosts/{host_id}/tasks/{upid}/status",
     "/v1/proxmox/hosts/{host_id}/storage", "/v1/proxmox/hosts/{host_id}/storage/{store}/content",
