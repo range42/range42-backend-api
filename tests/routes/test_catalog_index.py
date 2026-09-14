@@ -112,3 +112,15 @@ def test_bundle_names_outside_naming_grammar_are_flagged(tmp_path):
     write(tmp_path, f"{path}/main.yml", "- hosts: '{{ TARGET_GROUP }}'\n  tasks: []\n")
     detail = _detail_at_path(tmp_path, path)
     assert detail["document"]["grammar_valid"] is False
+
+
+@pytest.mark.parametrize("context", [
+    {"catalog": {"description": "Reusable training service"}},
+    {"misconfig": {"title": "Reusable training service"}},
+    {"vuln": {"title": "Reusable training service"}},
+])
+def test_container_descriptions_survive_catalog_discovery_and_detail(tmp_path, context):
+    path = "03_container_layer/docker/admin/training_web"
+    write(tmp_path, f"{path}/meta.json", json.dumps({"x_range42": context}))
+    assert _discover(tmp_path)[0]["description"] == "Reusable training service"
+    assert _detail_at_path(tmp_path, path)["description"] == "Reusable training service"

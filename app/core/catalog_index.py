@@ -118,7 +118,9 @@ def detail_at_path(repo_dir: Path, path: str) -> dict | None:
         doc = _mapping(metadata)
         context = _mapping(doc.get("x_range42"))
         return _entry(base, root, kind="container", name=_mapping(context.get("exercise")).get("id"),
-                      description=_mapping(context.get("vuln")).get("title"),
+                      description=(_mapping(context.get("catalog")).get("description")
+                                   or _mapping(context.get("vuln")).get("title")
+                                   or _mapping(context.get("misconfig")).get("title")),
                       tags=_mapping(context.get("catalog")).get("tags"), document=doc)
     if "04_gamification_layer" in base.relative_to(root).parts:
         manifest = _document(base / "manifest.json", root)
