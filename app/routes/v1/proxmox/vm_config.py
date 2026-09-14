@@ -24,7 +24,7 @@ from app.core.locks import ProvisioningLock
 from app.core.proxmox_tls import proxmox_verify
 from app.routes.v1.proxmox._helpers import (
     _assert_vmid_safe, _auth_headers, _config_target_digest, _config_task_vmid,
-    _get_host, _session,
+    _get_host, _session, _assert_snapshot_member_free,
 )
 from app.schemas.v1.vm_config import VmConfigReview, VmConfigUpdate, VmConfigUpdateResult, VmConfigValues
 
@@ -139,6 +139,7 @@ async def update_vm_config(host_id: str, vmid: VmId, body: VmConfigUpdate, vmtyp
         await session.execute(text("BEGIN IMMEDIATE"))
         try:
             row = await _get_host(host_id, session)
+            await _assert_snapshot_member_free(session, vmid)
             _assert_vmid_safe(row, vmid, "configure")
             await _claims(session, vmid)
             async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:

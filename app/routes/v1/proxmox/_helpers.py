@@ -10,7 +10,8 @@ import json
 import re
 
 import httpx
-from sqlalchemy import select
+from fastapi import Depends
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session_factory
@@ -26,6 +27,35 @@ log = get_logger(__name__)
 async def _session() -> AsyncSession:
     async with get_session_factory()() as session:
         yield session
+
+
+async def _assert_snapshot_member_free(session: AsyncSession, vmid: int) -> None:
+    from app.core.snapshot_models import SnapshotOperation, SnapshotSet
+    members = await session.scalars(select(SnapshotSet.members).join(
+        SnapshotOperation, SnapshotOperation.set_id == SnapshotSet.id
+    ).where(SnapshotOperation.state.in_({"running", "needs_review"})))
+    for rows in members:
+        if (not isinstance(rows, list) or any(not isinstance(row, dict) or type(row.get("vm_id")) is not int for row in rows)
+                or any(row["vm_id"] == vmid for row in rows)):
+            raise Range42Error(status=409, code="SNAPSHOT_MEMBER_BUSY", error="snapshot_member_busy",
+                               message="A snapshot-set operation owns this guest. Reconcile it before another mutation.")
+
+
+async def _mutation_session(vmid: int, session: AsyncSession = Depends(_session)) -> AsyncSession:
+    """Fence raw VM writes against finite set dispatch and durable remote work.
+
+    Internal snapshot dispatch calls the primitive with its already-held
+    session; HTTP callers cannot bypass this dependency through request data.
+    """
+    from app.core.config import Settings
+    from app.core.locks import ProvisioningLock
+    with ProvisioningLock(Settings().workspace_root / ".locks"):
+        try:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            await _assert_snapshot_member_free(session, vmid)
+            yield session
+        finally:
+            await session.rollback()
 
 
 async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:

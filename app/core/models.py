@@ -153,3 +153,4 @@ class WorkspaceLock(Base):
 
 # Register optional-domain tables in the central Alembic/test metadata.
 from app.core import allocation_models as _allocation_models  # noqa: E402, F401
+from app.core import snapshot_models as _snapshot_models  # noqa: E402, F401

@@ -82,6 +82,12 @@ async def _runner_alive(session: AsyncSession, lock: WorkspaceLock) -> bool:
     attempt = await session.get(Attempt, lock.owner.removeprefix("attempt-"))
     if attempt is None or attempt.deployment_id != lock.deployment_id:
         return False
+    if attempt.scope == "snapshot_set":
+        from app.core.snapshot_models import SnapshotOperation
+        operation = await session.scalar(select(SnapshotOperation).where(SnapshotOperation.attempt_id == attempt.id))
+        # A remote native task survives API/PID loss. Only its verified
+        # terminal reconciliation can relinquish this durable ownership.
+        return operation is not None and operation.state in {"running", "needs_review"}
     deployment = await session.get(Deployment, lock.deployment_id)
     if deployment is None:
         return False

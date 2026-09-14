@@ -20,7 +20,7 @@ def test_allocation_migration_upgrades_runtime_schema_and_downgrades(tmp_path):
                            "VALUES ('h','fixture','https://fixture','n','test-only','vmbr0','2026-01-01')")
         connection.execute("INSERT INTO allocation_reservations VALUES ('lease','draft','h','n','test-hash','[]','2027-01-01','2026-01-01')")
         connection.commit()
-    migrate("upgrade", "head")
+    migrate("upgrade", "0006_deployment_allocations")
     with sqlite3.connect(database) as connection:
         names = {row[1] for row in connection.execute("PRAGMA table_info(allocation_reservations)")}
         assert names == {"id", "project_key", "host_id", "node_name", "api_url", "token_hash", "assignments", "expires_at", "checked_at"}

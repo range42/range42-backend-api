@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AuthFailedError, Range42Error
 from app.core.logging import get_logger
 from app.routes.v1.proxmox._helpers import (
+    _mutation_session,
     _assert_vmid_safe,
     _auth_headers,
     _config_target_digest,
@@ -184,7 +185,7 @@ async def vm_status_action(
     vmid: int,
     action: str,
     vmtype: Literal["qemu", "lxc"] = "qemu",
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     if action not in _ALLOWED_ACTIONS:
         raise Range42Error(
@@ -228,7 +229,7 @@ async def vm_delete(
     vmid: int,
     vmtype: Literal["qemu", "lxc"] = "qemu",
     purge: bool = True,
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     row = await _get_host(host_id, session)
     _assert_vmid_safe(row, vmid, "delete")

@@ -142,6 +142,9 @@ async def cancel_current_attempt(deployment_id: str,
                       "reason": "deployment has no current_attempt_id"}],
         )
     att = await session.get(Attempt, dep.current_attempt_id)
+    if att is not None and att.scope == "snapshot_set" and att.state not in {"succeeded", "partial", "failed"}:
+        raise Range42Error(status=409, code="SNAPSHOT_RECONCILIATION_REQUIRED", error="native_task_active",
+                           message="Native snapshot tasks cannot be cancelled by signalling the API runner. Reconcile their saved task identities first.")
     if att is None or att.state in ("succeeded", "partial", "failed",
                                     "cancelled", "unknown"):
         raise Range42Error(

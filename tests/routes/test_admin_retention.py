@@ -21,7 +21,7 @@ async def test_retention_default_when_missing(tmp_path, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
         r = await c.get("/v1/admin/retention")
         assert r.status_code == 200
-        assert r.json() == {"keep_count": 5, "keep_days": 7}
+        assert r.json() == {"keep_count": 5, "keep_days": 7, "automatic_enforcement": False, "execution": "reviewed_snapshot_sets_only"}
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_retention_put_persists_atomically(tmp_path, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
         r = await c.put("/v1/admin/retention", json={"keep_count": 12, "keep_days": 30})
         assert r.status_code == 200
-        assert r.json() == {"keep_count": 12, "keep_days": 30}
+        assert r.json() == {"keep_count": 12, "keep_days": 30, "automatic_enforcement": False, "execution": "reviewed_snapshot_sets_only"}
 
     on_disk = json.loads((tmp_path / "retention.json").read_text())
     assert on_disk == {"keep_count": 12, "keep_days": 30}
@@ -77,4 +77,4 @@ async def test_retention_get_after_corrupt_falls_back_to_defaults(tmp_path, monk
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
         r = await c.get("/v1/admin/retention")
         assert r.status_code == 200
-        assert r.json() == {"keep_count": 5, "keep_days": 7}
+        assert r.json() == {"keep_count": 5, "keep_days": 7, "automatic_enforcement": False, "execution": "reviewed_snapshot_sets_only"}

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.routes.v1.proxmox._helpers import (
+    _mutation_session,
     _assert_vmid_safe, _auth_headers, _get_host, _raise_for_pve, _session,
     _unreachable,
 )
@@ -66,7 +67,7 @@ async def create_snapshot(
     vmid: int,
     body: SnapshotCreateIn,
     vmtype: Literal["qemu", "lxc"] = "qemu",
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     row = await _get_host(host_id, session)
     _assert_vmid_safe(row, vmid, "snapshot create")
@@ -95,7 +96,7 @@ async def delete_snapshot(
     vmid: int,
     vmtype: Literal["qemu", "lxc"] = "qemu",
     name: str = Path(pattern=r"^[A-Za-z0-9_][A-Za-z0-9._-]*$"),
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     row = await _get_host(host_id, session)
     _assert_vmid_safe(row, vmid, "snapshot delete")
@@ -118,7 +119,7 @@ async def rollback_snapshot(
     vmid: int,
     vmtype: Literal["qemu", "lxc"] = "qemu",
     name: str = Path(pattern=r"^[A-Za-z0-9_][A-Za-z0-9._-]*$"),
-    session: AsyncSession = Depends(_session),
+    session: AsyncSession = Depends(_mutation_session),
 ):
     row = await _get_host(host_id, session)
     _assert_vmid_safe(row, vmid, "rollback")

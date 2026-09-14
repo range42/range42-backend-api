@@ -207,6 +207,14 @@ async def reconcile_once() -> list[ReconcileResult]:
         )).all()
     results = []
     for attempt, dep in rows:
+        if attempt.scope == "snapshot_set":
+            from app.core.snapshot_sets import reconcile_operation
+            from app.core.errors import Range42Error
+            try:
+                await reconcile_operation((attempt.operation or {}).get("operation_id"))
+            except Range42Error:
+                logger.warning("native snapshot recovery remains unverified", attempt_id=attempt.id)
+            continue
         task = _TASKS.get(attempt.id)
         if task is not None and not task.done():
             continue
