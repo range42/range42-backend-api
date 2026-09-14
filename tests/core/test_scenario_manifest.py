@@ -71,3 +71,48 @@ def test_storage_requires_complete_explicit_versioned_preferences():
     del value['vms'][0]['storage']
     with pytest.raises(ValueError, match='storage'):
         validate_vm_manifest(value)
+
+
+def cloud_manifest():
+    value = manifest()
+    value['guest_preferences_version'] = 2
+    value['vms'][0].update(storage=None, cloud_init={
+        'ssh_user': 'operator', 'dns_servers': ['10.42.1.2', '1.1.1.1'], 'dns_search_domain': 'lab.example',
+    })
+    return value
+
+
+def test_explicit_cloud_init_version_retains_valid_values():
+    from app.core.scenario_manifest import validate_vm_manifest
+    value = cloud_manifest()
+    assert validate_vm_manifest(value) == value
+    value['vms'][0]['cloud_init'].update(dns_servers=None, dns_search_domain=None)
+    assert validate_vm_manifest(value) == value
+
+
+@pytest.mark.parametrize('change', [
+    lambda vm: vm.pop('cloud_init'),
+    lambda vm: vm['cloud_init'].pop('dns_servers'),
+    lambda vm: vm['cloud_init'].update(ssh_user='{{ user }}'),
+    lambda vm: vm['cloud_init'].update(dns_servers=['invalid']),
+    lambda vm: vm['cloud_init'].update(dns_servers=[1234]),
+    lambda vm: vm['cloud_init'].update(dns_servers=[]),
+    lambda vm: vm['cloud_init'].update(dns_servers=['1.1.1.1'] * 4),
+    lambda vm: vm['cloud_init'].update(dns_search_domain='bad domain'),
+    lambda vm: vm['cloud_init'].update(dns_search_domain='-bad.example'),
+    lambda vm: vm['cloud_init'].update(password='must-never-persist'),
+])
+def test_cloud_init_rejects_incomplete_unsafe_or_secret_preferences(change):
+    from app.core.scenario_manifest import validate_vm_manifest
+    value = cloud_manifest()
+    change(value['vms'][0])
+    with pytest.raises(ValueError):
+        validate_vm_manifest(value)
+
+
+def test_unversioned_cloud_init_metadata_is_not_silently_ignored():
+    from app.core.scenario_manifest import validate_vm_manifest
+    value = cloud_manifest()
+    value['guest_preferences_version'] = 1
+    with pytest.raises(ValueError, match='preferences'):
+        validate_vm_manifest(value)

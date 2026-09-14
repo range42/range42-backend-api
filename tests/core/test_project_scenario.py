@@ -105,6 +105,19 @@ def test_literal_scenario_binds_inventory_for_every_operation(tmp_path, scope):
     assert resolve(tmp_path, scope=scope).vmids == [3101]
 
 
+def test_reviewed_cloud_init_user_matches_inventory_before_any_operation(tmp_path):
+    scenario, manifest, hosts = version3_scenario(tmp_path)
+    manifest['guest_preferences_version'] = 2
+    manifest['vms'][0].update(storage=None, cloud_init={'ssh_user': 'operator', 'dns_servers': None, 'dns_search_domain': None})
+    (scenario / 'manifest/scenario_vms.json').write_text(json.dumps(manifest))
+    for scope in ('full', 'configure', 'teardown', 'runtime'):
+        with pytest.raises(Range42Error):
+            resolve(tmp_path, scope=scope)
+    hosts['all']['children']['scenario_guests']['hosts']['saved-vm']['ansible_user'] = 'operator'
+    (scenario / 'hosts.yml').write_text(yaml.safe_dump(hosts))
+    assert resolve(tmp_path).vmids == [3101]
+
+
 def test_nonreplicated_scenario_inventory_allows_more_than_64_guests(tmp_path):
     scenario, manifest, hosts = version3_scenario(tmp_path)
     manifest["vms"] = []

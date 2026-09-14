@@ -130,6 +130,9 @@ def validate_vm_inventory(vm_manifest: dict, inventory: dict) -> None:
     for vm in vms:
         _require(guests[vm.vm_name].get("ansible_host") == str(vm.ip),
                  "Inventory management addresses must match their VM manifest")
+        if vm.cloud_init is not None:
+            _require(guests[vm.vm_name].get("ansible_user") == vm.cloud_init.ssh_user,
+                     "Inventory SSH users must match their cloud-init preferences")
 
 
 def validate_scenario_instances(document: dict, vm_manifest: dict, network_manifest: dict, inventory: dict) -> None:

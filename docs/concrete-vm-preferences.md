@@ -38,5 +38,31 @@ this opt-in pinned-body check. Ordinary tests also cover the same omission and
 precedence contract with a minimal harmless local playbook. No controller or
 playbook source change is required.
 
-SSH-user/DNS preference enforcement is a separate follow-up; this storage
-checkpoint does not claim those fields are protected at extra-vars precedence.
+## Reviewed cloud-init preferences
+
+New Scenario reviews use `guest_preferences_version: 2`. This adds an explicit
+`cloud_init` object to every literal VM, alongside the version 1 storage field:
+`ssh_user`, `dns_servers` (one to three IPv4 strings or `null`) and
+`dns_search_domain` (a bounded DNS domain or `null`). The SSH user must match the
+guest's literal `ansible_user` in `hosts.yml`; disagreement refuses all resolve
+scopes. Unknown cloud-init fields, including passwords and SSH keys, are refused.
+
+The new form preserves the existing `1.1.1.1` DNS default. Clearing its DNS or
+domain field deliberately omits that controller argument, retaining template
+configuration. Existing saved fields remain authoritative over canvas defaults.
+Older generated snapshots and version 1 storage-only manifests keep their bytes
+until a user reviews the Scenario again. Save/reopen preserves the reviewed
+preferences and their replication fan-out.
+
+For full attempts, a validated `r42_guest_cloud_init` map protects both bootstrap
+aliases and controller parameters at Ansible extra-vars precedence. A vault's
+`default_admin_vm_ci_user` or `vm_ci_dns_ips` cannot silently change the selected
+user or DNS. Passwords and SSH keys retain the private backend workspace contract;
+the public map never carries them. This applies when bootstrapping new clones,
+not a configure-only update of existing cloud-init state.
+
+`R42_PREFERENCE_CLOUDINIT_TASK` enables the matching actual-controller-body local
+consumer in `test_scenario_preferences.py`. It templates the pinned PUT body as
+a harmless local module argument, proving per-VM user/DNS values and true omitted
+keys despite conflicting vault/import values. It makes no Proxmox call and does
+not claim guest image cloud-init support beyond that pinned runtime contract.

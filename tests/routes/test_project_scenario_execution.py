@@ -394,13 +394,16 @@ async def test_live_runner_survives_shutdown_and_recovery_keeps_user_cancel(tmp_
 
 
 @pytest.mark.asyncio
-async def test_full_attempt_passes_only_validated_manifest_storage_to_runner(tmp_path, monkeypatch):
+@pytest.mark.parametrize('preferences_version', [1, 2])
+async def test_full_attempt_passes_only_validated_manifest_storage_to_runner(tmp_path, monkeypatch, preferences_version):
     from app.core import deploy_trigger
     from tests.core.test_scenario_manifest import manifest
     app, dbmod = await _boot(tmp_path, monkeypatch)
     value = manifest()
-    value['guest_preferences_version'] = 1
+    value['guest_preferences_version'] = preferences_version
     value['vms'][0]['storage'] = 'reviewed-pool'
+    if preferences_version == 2:
+        value['vms'][0]['cloud_init'] = {'ssh_user': 'alice', 'dns_servers': ['1.1.1.1'], 'dns_search_domain': None}
     class RecordingRunner(FakeRunner):
         async def start(self, **kwargs):
             self.arguments = kwargs
@@ -426,6 +429,11 @@ async def test_full_attempt_passes_only_validated_manifest_storage_to_runner(tmp
         variables = runner.arguments['extravars']
         assert variables['r42_guest_storage'] == {'3101': 'reviewed-pool'}
         assert variables['proxmox_dest_vm_storage_name'] == '{{ r42_guest_storage[global_vm_id | string] | default(omit, true) }}'
+        if preferences_version == 2:
+            assert variables['r42_guest_cloud_init'] == {'3101': value['vms'][0]['cloud_init']}
+            assert variables['vm_ci_user'] == '{{ r42_guest_cloud_init[global_vm_id | string].ssh_user }}'
+        else:
+            assert 'r42_guest_cloud_init' not in variables
     finally:
         await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
         await dbmod.dispose_engine()

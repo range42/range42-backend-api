@@ -50,6 +50,59 @@ def test_storage_variable_injection_is_rejected_before_runner_setup(tmp_path):
     assert '{{ secret }}' not in str(error.value)
 
 
+@pytest.mark.parametrize('actual_controller', [False, True])
+def test_ansible_cloud_init_preferences_override_vault_and_keep_inheritance_per_vm(tmp_path, actual_controller):
+    from app.core.scenario_preferences import storage_runtime_variables
+    controller_path = os.getenv('R42_PREFERENCE_CLOUDINIT_TASK')
+    if actual_controller and not controller_path:
+        pytest.skip('Set R42_PREFERENCE_CLOUDINIT_TASK to the reviewed controller cloudinit_set_variables.yaml')
+    value = write_manifest(tmp_path)
+    value['guest_preferences_version'] = 2
+    preferences = [
+        {'ssh_user': 'operator', 'dns_servers': ['10.42.1.2', '1.1.1.1'], 'dns_search_domain': 'lab.example'},
+        {'ssh_user': 'second', 'dns_servers': None, 'dns_search_domain': None},
+        {'ssh_user': 'third', 'dns_servers': ['9.9.9.9'], 'dns_search_domain': 'other.example'},
+    ]
+    for vm, cloud_init in zip(value['vms'], preferences, strict=True):
+        vm['cloud_init'] = cloud_init
+    (tmp_path / 'manifest/scenario_vms.json').write_text(json.dumps(value))
+    variables = storage_runtime_variables(tmp_path)
+    assert variables['r42_guest_cloud_init'] == {str(vm['vm_id']): vm['cloud_init'] for vm in value['vms']}
+    assert all('password' not in key and 'ssh_key' not in key for key in variables)
+    body = {'ciuser': '{{ vm_ci_user | default(omit) }}', 'nameserver': '{{ vm_ci_dns_ips | default(omit) }}',
+            'searchdomain': '{{ vm_ci_dns_domain | default(omit) }}'}
+    if actual_controller:
+        source = yaml.safe_load(Path(controller_path).read_text())
+        body = next(task['uri']['body'] for task in source[0]['block'] if task.get('uri', {}).get('method') == 'PUT')
+    conflicting = {key: 'conflicting-vault' for key in ('vm_ci_user', 'default_admin_vm_ci_user', 'vm_ci_dns_ips', 'global_vm_ci_dns_ips', 'vm_ci_dns_domain')}
+    (tmp_path / 'vault.yml').write_text(yaml.safe_dump(conflicting))
+    (tmp_path / 'bootstrap.yml').write_text(yaml.safe_dump([{
+        'hosts': 'localhost', 'gather_facts': False, 'vars_files': ['vault.yml'],
+        'tasks': [{'ansible.builtin.set_fact': {'captured_body': body}},
+                  {'ansible.builtin.assert': {'that': [
+                      "captured_body['ciuser'] == expected.ssh_user",
+                      "captured_body.get('nameserver') == (expected.dns_servers | join(' ') if expected.dns_servers is not none else none)",
+                      "captured_body.get('searchdomain') == expected.dns_search_domain",
+                      "('nameserver' in captured_body) == (expected.dns_servers is not none)",
+                      "('searchdomain' in captured_body) == (expected.dns_search_domain is not none)",
+                      "default_admin_vm_ci_user == expected.ssh_user",
+                  ]}}],
+    }]))
+    (tmp_path / 'main.yml').write_text(yaml.safe_dump([{
+        'ansible.builtin.import_playbook': 'bootstrap.yml',
+        'vars': {'global_vm_id': vm['vm_id'], 'expected': vm['cloud_init'], 'vm_ci_ssh_key': 'ssh-ed25519 local-fixture', **conflicting},
+    } for vm in value['vms']]))
+    (tmp_path / 'extras.yml').write_text(yaml.safe_dump(variables))
+    (tmp_path / 'ansible.cfg').write_text('[defaults]\nretry_files_enabled=False\n')
+    executable = Path(sys.executable).with_name('ansible-playbook')
+    env = {key: val for key, val in os.environ.items() if not key.startswith('ANSIBLE_')}
+    env.update(ANSIBLE_CONFIG=str(tmp_path / 'ansible.cfg'), ANSIBLE_NOCOLOR='1')
+    result = subprocess.run([str(executable), '-i', 'localhost,', '-c', 'local', '-e', '@extras.yml', 'main.yml'],
+                            cwd=tmp_path, env=env, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'failed=0' in result.stdout
+
+
 @pytest.mark.parametrize('actual_clone', [False, True])
 def test_ansible_selected_and_inherited_storage_override_vault_without_leaking_between_vms(tmp_path, actual_clone):
     from app.core.scenario_preferences import storage_runtime_variables

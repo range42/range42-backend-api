@@ -4,7 +4,7 @@ from __future__ import annotations
 from ipaddress import IPv4Address
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator, model_validator
 
 VmId = Annotated[StrictInt, Field(ge=100, le=999999999)]
 Bridge = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,14}$")]
@@ -28,6 +28,21 @@ class ResourceOverrides(BaseModel):
     disk_device: str | None = Field(default=None, pattern=r"^(?:scsi(?:[0-9]|[12][0-9]|30)|virtio(?:[0-9]|1[0-5])|sata[0-5])$")
 
 
+class CloudInit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ssh_user: str = Field(strict=True, pattern=r"^[a-z_][a-z0-9_-]{0,31}$")
+    dns_servers: list[StrictStr] | None = Field(min_length=1, max_length=3)
+    dns_search_domain: str | None = Field(strict=True, max_length=253,
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+    @field_validator("dns_servers")
+    @classmethod
+    def dns_addresses(cls, value):
+        for address in value or []:
+            IPv4Address(address)
+        return value
+
+
 class Vm(ResourceOverrides):
     vm_id: VmId
     vm_name: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9-]{0,62}$")
@@ -35,6 +50,7 @@ class Vm(ResourceOverrides):
     ip: IPv4Address
     bridge: Bridge
     nics: list[Nic] = Field(min_length=1, max_length=32)
+    cloud_init: CloudInit | None = None
 
     @model_validator(mode="after")
     def management_nic(self):
@@ -54,11 +70,16 @@ def validate_vm_manifest(document: dict) -> dict:
     preferences = document.get("guest_preferences_version")
     rows = document.get("vms")
     explicit_storage = isinstance(rows, list) and any(isinstance(vm, dict) and "storage" in vm for vm in rows)
-    if preferences is not None or explicit_storage:
-        if type(preferences) is not int or preferences != 1 or document.get("version") != 3:
-            raise ValueError("Explicit storage requires guest preferences version 1 and VM manifest version 3")
+    explicit_cloud_init = isinstance(rows, list) and any(isinstance(vm, dict) and "cloud_init" in vm for vm in rows)
+    if preferences is not None or explicit_storage or explicit_cloud_init:
+        if type(preferences) is not int or preferences not in (1, 2) or document.get("version") != 3:
+            raise ValueError("Explicit guest preferences require version 1 or 2 and VM manifest version 3")
         if not isinstance(document.get("vms"), list) or any(not isinstance(vm, dict) or "storage" not in vm for vm in document["vms"]):
             raise ValueError("Every VM must declare selected or inherited storage")
+        if explicit_cloud_init and preferences != 2:
+            raise ValueError("Cloud-init requires guest preferences version 2")
+        if preferences == 2 and any(not isinstance(vm.get("cloud_init"), dict) for vm in rows):
+            raise ValueError("Every VM must declare cloud-init preferences")
     if document.get("version", 2) in (1, 2):
         for vm in document.get("vms", []):
             ResourceOverrides.model_validate(vm)
