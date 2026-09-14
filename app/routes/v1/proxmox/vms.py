@@ -269,7 +269,7 @@ async def task_status(
 ):
     row = await _get_host(host_id, session)
     if expected_target_digest is not None:
-        vmid = _config_task_vmid(upid, row.node_name)
+        vmid = _config_task_vmid(upid, row.node_name, kinds=('qmconfig', 'resize'))
         if vmid is None or not hmac.compare_digest(expected_target_digest, _config_target_digest(row, vmid, "qemu")):
             raise Range42Error(
                 error="conflict", code="VM_CONFIG_TARGET_CHANGED", status=409,

@@ -88,7 +88,7 @@ async def _claims(session, vmid):
             raise _error("VM_CONFIG_MANAGED", "Use the owning deployment to change this guest.")
 
 
-async def _read(cli, row, vmid, vmtype):
+async def _read_configs(cli, row, vmid, vmtype):
     configs = []
     for current in (0, 1):
         try:
@@ -110,6 +110,11 @@ async def _read(cli, row, vmid, vmtype):
     configured, current = configs
     if configured["digest"] != current["digest"]:
         raise _error("VM_CONFIG_STALE", "Guest configuration changed during review. Refresh before editing.")
+    return configured, current
+
+
+async def _read(cli, row, vmid, vmtype):
+    configured, current = await _read_configs(cli, row, vmid, vmtype)
     configured_values, current_values = _values(configured, vmtype), _values(current, vmtype)
     return VmConfigReview(host_id=row.id, node=row.node_name, vmid=vmid, vmtype=vmtype,
         digest=_digest(row, vmid, vmtype, configured["digest"]), target_digest=_config_target_digest(row, vmid, vmtype),

@@ -85,12 +85,13 @@ def _config_target_digest(row: ProxmoxHost, vmid: int, vmtype: str) -> str:
     return hashlib.sha256(json.dumps(binding, separators=(",", ":")).encode()).hexdigest()
 
 
-def _config_task_vmid(upid: str, node: str) -> int | None:
-    """Only the QEMU configuration worker has this guarded polling contract."""
+def _config_task_vmid(upid: str, node: str, *, kinds: tuple[str, ...] = ('qmconfig',)) -> int | None:
+    """Bind explicitly supported QEMU workers to their literal target VMID."""
     if not isinstance(upid, str) or len(upid) > 512:
         return None
+    workers = '|'.join(re.escape(kind) for kind in kinds)
     match = re.fullmatch(
-        rf"UPID:{re.escape(node)}:[A-Fa-f0-9]+:[A-Fa-f0-9]+:[A-Fa-f0-9]+:qmconfig:([0-9]{{3,9}}):[^:\s]+:", upid,
+        rf"UPID:{re.escape(node)}:[A-Fa-f0-9]+:[A-Fa-f0-9]+:[A-Fa-f0-9]+:(?:{workers}):([0-9]{{3,9}}):[^:\s]+:", upid,
     )
     if match and 100 <= int(match[1]) <= 999999999:
         return int(match[1])
