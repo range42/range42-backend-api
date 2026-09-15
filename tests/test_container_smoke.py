@@ -12,6 +12,7 @@ import subprocess
 import time
 import uuid
 
+from alembic.script import ScriptDirectory
 from cryptography.fernet import Fernet
 import httpx
 import pytest
@@ -144,19 +145,21 @@ else:
 """
             compose("exec", "-T", "api", "python", "-c", readonly_probe)
         # Verify real writable ControlMaster location and ciphertext without printing it.
-        check = """import os, sqlite3, stat
+        expected_revision = ScriptDirectory(str(ROOT / "alembic")).get_current_head()
+        check = """import os, sqlite3, stat, sys
 from pathlib import Path
 p = Path.home() / '.ssh/range42/container-smoke'
 p.write_text('persistent control state')
 assert stat.S_IMODE(p.parent.stat().st_mode) == 0o700
 db = sqlite3.connect('/var/lib/range42/workspaces/.range42.db')
-assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0006_deployment_allocations'
+revision = db.execute('SELECT version_num FROM alembic_version').fetchone()[0]
+assert revision == sys.argv[1], (revision, sys.argv[1])
 value = db.execute('SELECT token_ref FROM sources LIMIT 1').fetchone()[0]
 assert value.startswith('range42:fernet:v1:')
 assert os.getuid() != 0
 print('validated')
 """
-        assert compose("exec", "-T", "api", "python", "-c", check) == "validated"
+        assert compose("exec", "-T", "api", "python", "-c", check, expected_revision) == "validated"
         agent_probe = """from pathlib import Path
 from app.core.ssh_agent import _start_agent
 workspace = Path('/var/lib/range42/workspaces/agent-probe')
