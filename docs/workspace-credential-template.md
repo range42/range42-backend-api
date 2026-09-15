@@ -43,3 +43,21 @@ isolation or a browser credential-upload interface. Separate installations or
 explicit workspace credentials remain appropriate when targets require different
 access. Use the authenticated API host registry for the selected Proxmox token;
 concrete runtime target variables override obsolete vault target values.
+
+## Proxmox credentials belong to the registered target
+
+`POST /v1/deployments/` rejects `secrets.proxmox_token` with HTTP 422 and
+`DEPLOYMENT_TOKEN_UNSUPPORTED`, before creating a deployment or changing its
+workspace. Omit that field and configure the selected host using the authenticated
+`POST /v1/proxmox/hosts` registration contract. That request carries the API URL,
+node and complete `user@realm!token-id=secret` token; named access requires an
+administrator. Concrete execution derives the exact API host, user, token ID and
+secret from this registered target, taking precedence over stale vault values.
+An operator who cannot change registration should ask the backend administrator.
+
+The old optional helper silently skipped provisioning after accessing a missing
+Vault property. It also supplied empty target URL/token identity and wrote a
+`proxmox_token.yml` file that no installed runner loaded. That unused path has
+been removed instead of creating a second, ineffective credential store. Existing
+workspace files are not deleted. Caller-provided `secrets.vault_password`, coherent
+template inheritance and legacy operator-managed inventory/vault remain unchanged.

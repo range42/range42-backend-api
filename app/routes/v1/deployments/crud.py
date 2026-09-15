@@ -1,9 +1,8 @@
 """/v1/deployments CRUD (list/create/get).
 
-Creating a deployment scaffolds the workspace (Workspace.create) which
-enforces the local-FS invariant per spec §8. Proxmox token provisioning
-is best-effort if the app has a vault password file resolvable; otherwise
-the deployment still persists and preflight surfaces AUTH_FAILED later.
+Creating a deployment scaffolds the workspace (Workspace.create), enforcing
+the local-FS invariant. Concrete runtime credentials come from the selected
+registered Proxmox host; workspace credentials provide Vault and SSH inputs.
 """
 from __future__ import annotations
 
@@ -26,7 +25,6 @@ from app.core.scenario import prepare_project_scenario
 from app.core.workspace import Workspace, WorkspaceError
 from app.core.workspace_secrets import (
     VaultSeedError,
-    provision_host_token,
     vault_seed,
 )
 from app.schemas.v1.common import Page
@@ -57,6 +55,18 @@ async def list_deployments(session: AsyncSession = Depends(_session),
 async def create_deployment(payload: DeploymentCreate,
                             x_range42_reservation_token: str | None = Header(default=None, max_length=128),
                             session: AsyncSession = Depends(_session)):
+    if payload.secrets is not None and "proxmox_token" in payload.secrets:
+        raise Range42Error(
+            error="unsupported_secret",
+            code="DEPLOYMENT_TOKEN_UNSUPPORTED",
+            status=422,
+            message=(
+                "Deployment-level Proxmox tokens are unsupported. Configure the "
+                "selected registered host through /v1/proxmox/hosts and omit "
+                "secrets.proxmox_token."
+            ),
+            details=[{"field": "secrets.proxmox_token", "reason": "use the registered target credential"}],
+        )
     # (codename, scenario_label) is unique and also names the workspace
     # directory, so a duplicate would reuse an existing deployment's
     # workspace. Reject it here rather than letting the commit fail: by then
@@ -212,7 +222,6 @@ async def create_deployment(payload: DeploymentCreate,
         ) from e
 
     await session.refresh(row)
-    provision_host_token(ws.path, payload.target_host_id, payload.secrets)
 
     return DeploymentOut.model_validate(row, from_attributes=True)
 

@@ -1,7 +1,7 @@
 """Workspace side effects for a deployment create, with one durability rule.
 
-Creating a deployment touches three things that must agree: the database row,
-the vault password on disk, and (best effort) a provisioned Proxmox token.
+Creating a deployment touches two things that must agree: the database row
+and the vault password on disk.
 Four rounds of review found four different ways to get that ordering wrong —
 a duplicate clobbering a live workspace, a committed row with no password, a
 misreported constraint, a secret outliving the row it belonged to.
@@ -111,37 +111,3 @@ def vault_seed(workspace: Path,
     except BaseException:
         seed.revert()
         raise
-
-
-def provision_host_token(workspace: Path, host_id: str,
-                         secrets: Mapping[str, str] | None) -> bool:
-    """Provision a Proxmox token into the workspace vault, if we can.
-
-    Deliberately best-effort and deliberately *outside* `vault_seed`: it talks
-    to Proxmox rather than the workspace's own durability, and preflight is the
-    source of truth for whether the credential actually works.
-
-    :returns: True when a token was provisioned.
-    """
-    if not secrets or "proxmox_token" not in secrets:
-        return False
-    try:
-        from app.core.proxmox_secrets import provision_proxmox_token
-        from app.core.vault import VaultManager
-
-        vault_file = VaultManager().vault_file
-        if not vault_file or not Path(vault_file).exists():
-            return False
-        provision_proxmox_token(
-            workspace=workspace,
-            host_id=host_id,
-            api_url="",
-            token_id="",
-            token_secret=secrets["proxmox_token"],
-            vault_password_file=Path(vault_file),
-        )
-        return True
-    except Exception as e:  # noqa: BLE001 — preflight is the source of truth
-        logger.warning("proxmox token provisioning skipped",
-                       host_id=host_id, error=str(e))
-        return False
