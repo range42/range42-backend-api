@@ -28,10 +28,11 @@ hashes before native mutations; rule and alias edits also use the Proxmox digest
 at the write itself. The installation lock does not lock out external Proxmox
 writers, which must coordinate shared SDN apply separately.
 
-Native runtime wrappers load an empty private vars file. Registered credentials
+The new scoped native wrappers load an empty private vars file. Registered credentials
 and reviewed native arguments are passed as backend-owned extra variables;
 scenario vault settings cannot add an unreviewed VLAN, gateway or rule option.
-The original vault and project remain unchanged.
+The original vault and project remain unchanged. Existing guest firewall
+composites retain their workspace SSH-source policy.
 
 ## Network lifecycle
 

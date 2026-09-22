@@ -132,10 +132,12 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
     directory.mkdir(mode=0o700)
     config_dir = directory / "config"
     config_dir.mkdir(mode=0o700)
-    # Native operations receive registered credentials and reviewed inputs as
+    # Scoped native operations receive registered credentials and reviewed inputs as
     # extra vars. A scenario vault must not add unreviewed optional parameters
     # (VLAN tags, gateway, management rules, etc.) through native vars_files.
-    if plan.get("contract"):
+    # Existing guest composites retain their workspace's SSH-source policy.
+    if plan.get("contract") and attempt.operation["request"]["kind"] in (
+            "sdn_network", "host_firewall", "firewall_rule", "firewall_alias", "runtime_observe"):
         _private_document(config_dir / "secrets/default_vault.yml", {})
     else:
         (config_dir / "secrets").symlink_to(Path(deployment.workspace_path) / "secrets", target_is_directory=True)
