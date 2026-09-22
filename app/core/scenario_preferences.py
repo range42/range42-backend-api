@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.errors import Range42Error
 from app.core.scenario_manifest import validate_vm_manifest
+from app.core.scenario_firewall import firewall_runtime_variables
 
 
 def storage_runtime_variables(scenario_dir: Path) -> dict[str, Any]:
@@ -15,9 +16,11 @@ def storage_runtime_variables(scenario_dir: Path) -> dict[str, Any]:
         if not path.resolve().is_relative_to(scenario_dir.resolve()) or path.stat().st_size > 1024 * 1024:
             raise ValueError('Invalid manifest path or size')
         manifest = validate_vm_manifest(json.loads(path.read_text()))
+        firewall_variables = firewall_runtime_variables(scenario_dir, manifest)
         if 'guest_preferences_version' not in manifest:
-            return {}
+            return firewall_variables
         variables = {
+            **firewall_variables,
             'r42_guest_storage': {str(vm['vm_id']): vm['storage'] for vm in manifest['vms']},
             # Evaluated in each imported VM's scope. Ansible removes omit from
             # the module body, so inheritance never reuses a prior VM's pool.

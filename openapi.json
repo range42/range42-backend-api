@@ -6279,6 +6279,37 @@
         }
       }
     },
+    "/v1/proxmox/runtime-capabilities": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Runtime Capabilities",
+        "operationId": "runtime_capabilities_v1_proxmox_runtime_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeCapabilities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/stats": {
       "get": {
         "tags": [
@@ -11616,6 +11647,87 @@
           "scope"
         ],
         "title": "RollbackRequest"
+      },
+      "RuntimeCapabilities": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "contract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
+          "operations": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "vm_firewall",
+                "scenario_firewall",
+                "sdn_snat"
+              ]
+            },
+            "type": "array",
+            "title": "Operations"
+          },
+          "bootstrap_features": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "extra_nics",
+                "resources",
+                "disk_resize"
+              ]
+            },
+            "type": "array",
+            "title": "Bootstrap Features"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "management_access_available": {
+            "type": "boolean",
+            "title": "Management Access Available",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "RuntimeCapabilities"
       },
       "ScenarioFirewall": {
         "properties": {

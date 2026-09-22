@@ -15,11 +15,31 @@ from app.core.preflight import PreflightCheck
 from app.core.proxmox_read import ProxmoxReadError, list_proxmox_data, read_proxmox_data
 from app.core.scenario_manifest import validate_vm_manifest
 from app.core.scenario_capacity import check_plan_capacity
+from app.core.errors import Range42Error
+from app.core.scenario_firewall import read_firewall_policy
 
 
 def _blocked(code: str, detail: str) -> list[PreflightCheck]:
     return [PreflightCheck(check="scenario_resources", result="block", code=code,
                            detail=detail, field_path="manifest/scenario_vms.json")]
+
+
+def bootstrap_features() -> set[str]:
+    """Optional bootstrap inputs are unsupported unless explicitly advertised."""
+    root = os.getenv("RANGE42_BUNDLE_DIR")
+    try:
+        if not root:
+            return set()
+        path = Path(root) / "proxmox/vm.bootstrap/capabilities.json"
+        if path.stat().st_size > 8192:
+            return set()
+        capabilities = json.loads(path.read_text())
+        features = capabilities.get("features")
+        if capabilities.get("version") != 1 or not isinstance(features, list) or any(not isinstance(feature, str) for feature in features):
+            return set()
+        return set(features).intersection({"extra_nics", "resources", "disk_resize"})
+    except (OSError, ValueError, AttributeError):
+        return set()
 
 
 def _missing_bootstrap_features(vms: list[dict]) -> set[str]:
@@ -31,28 +51,19 @@ def _missing_bootstrap_features(vms: list[dict]) -> set[str]:
             required.add("resources")
         if vm.get("disk_gb") is not None:
             required.add("disk_resize")
-    if not required:
-        return set()
-    root = os.getenv("RANGE42_BUNDLE_DIR")
-    try:
-        if not root:
-            return required
-        path = Path(root) / "proxmox/vm.bootstrap/capabilities.json"
-        if path.stat().st_size > 8192:
-            return required
-        capabilities = json.loads(path.read_text())
-        features = capabilities.get("features")
-        if capabilities.get("version") != 1 or not isinstance(features, list) or any(not isinstance(feature, str) for feature in features):
-            return required
-        return required.difference(features)
-    except (OSError, ValueError, AttributeError):
-        return required
+    return required.difference(bootstrap_features()) if required else set()
 
 
 async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None, *,
                                    deployment_id: str, scope: str = "full",
                                    client: httpx.AsyncClient | None = None) -> list[PreflightCheck]:
     """Check generated template-based plans. Hand-authored inventory stays supported."""
+    if scope == "full":
+        try:
+            read_firewall_policy(scenario_dir)
+        except Range42Error as exc:
+            return [PreflightCheck(check="scenario_firewall", result="block", code=exc.code,
+                                   detail=exc.message, field_path="manifest/scenario_firewall.json")]
     try:
         path = scenario_dir / "manifest/scenario_vms.json"
         if not path.resolve().is_relative_to(scenario_dir.resolve()) or path.stat().st_size > 1024 * 1024:
@@ -68,7 +79,7 @@ async def check_scenario_resources(scenario_dir: Path, host: ProxmoxHost | None,
         if host is None:
             return _blocked("SCENARIO_RESOURCES_UNREADABLE", "Select an available target host.")
         if scope == "full" and (missing := _missing_bootstrap_features(vms)):
-            return _blocked("BOOTSTRAP_CAPABILITY_MISSING", "Update the installed VM bootstrap bundle before deployment. Missing support: " + ", ".join(sorted(missing)) + ".")
+            return _blocked("BOOTSTRAP_CAPABILITY_MISSING", "This runtime cannot apply these VM choices: " + ", ".join(sorted(missing)) + ". Use one NIC and inherit unsupported resource sizes from the template, or select a runtime that supports these inputs.")
         if client is None:
             async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8) as owned_client:
                 return await check_scenario_resources(scenario_dir, host, deployment_id=deployment_id,

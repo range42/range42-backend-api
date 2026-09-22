@@ -49,6 +49,8 @@ async def _verified_plan(deployment, attempt, host, scenario_dir) -> dict:
         raise blocked("The installed runtime changed; request this operation again after reviewing the new release", "RUNTIME_REVISION_CHANGED")
     state = await read_runtime_state(scenario_dir, host, deployment_id=deployment.id)
     plan = plan_operation(request, state)
+    if profile.get("contract"):
+        plan["contract"] = profile["contract"]
     overrides = json.loads(host.protected_vmids_override_json) if host.protected_vmids_override_json else None
     check = check_vmids(plan["vmids"], host_overrides=overrides)
     if check.result == "block":
@@ -126,7 +128,13 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
     plays = [_ownership_guard(targets, deployment.id)] if targets else []
     if attempt.operation["request"]["kind"] == "sdn_snat":
         plays.append(_ssh_node_guard())
+        if plan.get("contract"):
+            from app.core.native_sdn import snat_guard_play
+            plays.append(snat_guard_play())
     plays.append({"ansible.builtin.import_playbook": str(bundle), "vars": plan["variables"]})
+    if plan.get("contract") and attempt.operation["request"]["kind"] == "sdn_snat":
+        from app.core.native_sdn import snat_observation_play
+        plays.append(snat_observation_play())
     playbook = directory / "main.yml"
     _private_document(playbook, plays)
     _private_document(directory / "context.yml", {"scenario_dir": str(scenario_dir.relative_to(artifact_dir)), "plan": plan})
