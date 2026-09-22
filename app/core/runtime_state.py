@@ -175,3 +175,13 @@ async def read_runtime_state(scenario_dir: Path, host: ProxmoxHost, *, deploymen
     sdn, networks = await _networks(client, host, plan)
     return {"deployment_id": deployment_id, "target_host_id": host.id, "node_name": host.node_name,
             "firewall": firewall, "vms": guests, "sdn": sdn, "networks": networks}
+
+
+async def read_runtime_report(scenario_dir: Path, host: ProxmoxHost, *, deployment_id: str,
+                              client: httpx.AsyncClient | None = None) -> dict:
+    from app.core.runtime_reports import report_from_state
+    if client is None:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8) as owned:
+            return await read_runtime_report(scenario_dir, host, deployment_id=deployment_id, client=owned)
+    state = await read_runtime_state(scenario_dir, host, deployment_id=deployment_id, client=client)
+    return await report_from_state(client, host, state)

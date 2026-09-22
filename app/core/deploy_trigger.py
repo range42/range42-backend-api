@@ -204,6 +204,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     if scenario is not None:
         runtime_vars = target_runtime_variables(target_host, ws)
         extravars.update(runtime_vars)
+        if runtime_run is not None:
+            extravars.update(runtime_run.variables)
         if attempt.scope == "full":
             from app.core.scenario_preferences import storage_runtime_variables
             extravars.update(storage_runtime_variables(scenario.playbook.parent))

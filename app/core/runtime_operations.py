@@ -13,6 +13,8 @@ from app.core.models import ProxmoxHost
 from app.core.bundle_runtime import dependencies, runtime_snapshot
 from app.schemas.v1.runtime import RuntimeOperation
 
+NATIVE_OPERATIONS = ("vm_firewall", "scenario_firewall", "sdn_snat", "host_firewall", "runtime_observe", "sdn_network", "firewall_alias", "firewall_rule")
+
 
 def blocked(message: str, code: str = "RUNTIME_OPERATION_BLOCKED") -> Range42Error:
     return Range42Error(status=409, code=code, error="runtime_operation_blocked", message=message)
@@ -49,9 +51,11 @@ def operation_profile(kind: str) -> dict:
     profile, fingerprint = runtime_snapshot()
     from app.core.native_sdn import native_contract
     contract = native_contract(profile)
-    if contract and kind in ("vm_firewall", "scenario_firewall", "sdn_snat"):
+    if contract and kind in NATIVE_OPERATIONS:
         return {"fingerprint": fingerprint, "dependencies": dependencies(profile), "contract": contract,
-                "operations": ["vm_firewall", "scenario_firewall", "sdn_snat"]}
+                "operations": list(NATIVE_OPERATIONS)}
+    if kind not in ("vm_firewall", "scenario_firewall", "sdn_snat"):
+        raise blocked("This operation requires the reviewed native SDN runtime", "RUNTIME_CAPABILITY_MISSING")
     try:
         root = Path(profile["environment"]["RANGE42_BUNDLE_DIR"])
         marker = root / "runtime-capabilities.json"
@@ -75,6 +79,17 @@ def operation_profile(kind: str) -> dict:
 def plan_operation(request: dict, state: dict) -> dict:
     operation = TypeAdapter(RuntimeOperation).validate_python(request)
     plan = {"vmids": [], "missing_vmids": [], "variables": {}}
+    if operation.kind == "sdn_network":
+        from app.core.runtime_networks import network_plan
+        return network_plan(request, state["network_lifecycle"])
+    if operation.kind == "runtime_observe":
+        return {**plan, "bundle": "firewall/in_proxmox/firewall.report.status", "read_only": True}
+    if operation.kind == "host_firewall":
+        before = {key: state.get("firewall", {}).get(key) for key in ("datacenter_enabled", "node_enabled")}
+        if any(type(value) is not bool for value in before.values()) or state["firewall"].get("errors"):
+            raise blocked("Read both host firewall switches before requesting a change")
+        return {**plan, "bundle": f"firewall/in_proxmox/firewall.{'enable' if operation.enabled else 'disable'}.datacenter_and_nodes",
+                "before": before, "shared_scope": "datacenter_and_selected_node"}
     if operation.kind == "sdn_snat":
         if state["sdn"]["pending_changes"] is not False or state["sdn"]["errors"]:
             raise blocked("SDN apply requires verified absence of pending changes across the entire cluster", "SDN_PENDING_CHANGES")

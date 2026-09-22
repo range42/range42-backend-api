@@ -84,6 +84,7 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
                 return
             await deploy_trigger.start_attempt(session, attempt=attempt, runner=runner)
         variables = runner.arguments["extravars"]
+        assert variables["BUNDLE_VM_ID"] == 3191
         wrapper = Path(variables["r42_playbook_path"])
         assert wrapper.is_relative_to(ws / "runner/runtime")
         assert not wrapper.is_relative_to(ws / "runner/runtime/checkout")

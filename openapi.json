@@ -3876,6 +3876,137 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/runtime-report": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Runtime Report",
+        "operationId": "runtime_report_v1_deployments__deployment_id__runtime_report_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/operations/plan": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Preview Operation",
+        "operationId": "preview_operation_v1_deployments__deployment_id__operations_plan_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/VmFirewall"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ScenarioFirewall"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SdnSnat"
+                  },
+                  {
+                    "$ref": "#/components/schemas/HostFirewall"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RuntimeObserve"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SdnNetwork"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FirewallAlias"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FirewallRule"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "vm_firewall": "#/components/schemas/VmFirewall",
+                    "scenario_firewall": "#/components/schemas/ScenarioFirewall",
+                    "sdn_snat": "#/components/schemas/SdnSnat",
+                    "host_firewall": "#/components/schemas/HostFirewall",
+                    "runtime_observe": "#/components/schemas/RuntimeObserve",
+                    "sdn_network": "#/components/schemas/SdnNetwork",
+                    "firewall_alias": "#/components/schemas/FirewallAlias",
+                    "firewall_rule": "#/components/schemas/FirewallRule"
+                  }
+                },
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/deployments/{deployment_id}/operations": {
       "post": {
         "tags": [
@@ -3908,6 +4039,21 @@
                   },
                   {
                     "$ref": "#/components/schemas/SdnSnat"
+                  },
+                  {
+                    "$ref": "#/components/schemas/HostFirewall"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RuntimeObserve"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SdnNetwork"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FirewallAlias"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FirewallRule"
                   }
                 ],
                 "discriminator": {
@@ -3915,7 +4061,12 @@
                   "mapping": {
                     "vm_firewall": "#/components/schemas/VmFirewall",
                     "scenario_firewall": "#/components/schemas/ScenarioFirewall",
-                    "sdn_snat": "#/components/schemas/SdnSnat"
+                    "sdn_snat": "#/components/schemas/SdnSnat",
+                    "host_firewall": "#/components/schemas/HostFirewall",
+                    "runtime_observe": "#/components/schemas/RuntimeObserve",
+                    "sdn_network": "#/components/schemas/SdnNetwork",
+                    "firewall_alias": "#/components/schemas/FirewallAlias",
+                    "firewall_rule": "#/components/schemas/FirewallRule"
                   }
                 },
                 "title": "Payload"
@@ -7912,6 +8063,99 @@
         "title": "ErrorEnvelope",
         "description": "What every v1 error actually returns.\n\nMirrors ``app.core.errors._envelope``. Declared so the generated spec\nstops advertising FastAPI's default ``{\"detail\": [...]}`` for 422s \u2014\nclients built from the committed spec were deserialising the wrong\nshape for every validation failure."
       },
+      "FirewallAlias": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "vm",
+              "datacenter"
+            ],
+            "title": "Scope"
+          },
+          "vm_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 999999999.0,
+                "minimum": 100.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vm Id"
+          },
+          "acknowledge_shared_scope": {
+            "type": "boolean",
+            "title": "Acknowledge Shared Scope"
+          },
+          "review_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Fingerprint"
+          },
+          "kind": {
+            "type": "string",
+            "const": "firewall_alias",
+            "title": "Kind"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "delete",
+              "rename"
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            "title": "Name"
+          },
+          "cidr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cidr"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scope",
+          "acknowledge_shared_scope",
+          "kind",
+          "action",
+          "name"
+        ],
+        "title": "FirewallAlias"
+      },
       "FirewallAliasAddItemReply": {
         "properties": {
           "action": {
@@ -8268,6 +8512,144 @@
           "proxmox_node": "px-testing",
           "vm_id": "1000"
         }
+      },
+      "FirewallAliasReport": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cidr": {
+            "type": "string",
+            "title": "Cidr"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "cidr"
+        ],
+        "title": "FirewallAliasReport"
+      },
+      "FirewallCardReport": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "title": "Vm Id"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "bridge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge"
+          },
+          "filtering_configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filtering Configured"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vm_id",
+          "index",
+          "bridge",
+          "filtering_configured",
+          "reasons"
+        ],
+        "title": "FirewallCardReport"
+      },
+      "FirewallChainReport": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "datacenter",
+              "node",
+              "vm"
+            ],
+            "title": "Scope"
+          },
+          "vm_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vm Id"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/FirewallRuleReport"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/FirewallAliasReport"
+            },
+            "type": "array",
+            "title": "Aliases"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "available"
+        ],
+        "title": "FirewallChainReport"
       },
       "FirewallDisableDcItemReply": {
         "properties": {
@@ -8833,6 +9215,120 @@
           "vm_name": "test"
         }
       },
+      "FirewallRule": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "vm",
+              "node",
+              "datacenter"
+            ],
+            "title": "Scope"
+          },
+          "vm_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 999999999.0,
+                "minimum": 100.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vm Id"
+          },
+          "acknowledge_shared_scope": {
+            "type": "boolean",
+            "title": "Acknowledge Shared Scope"
+          },
+          "review_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Fingerprint"
+          },
+          "kind": {
+            "type": "string",
+            "const": "firewall_rule",
+            "title": "Kind"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "delete",
+              "move"
+            ],
+            "title": "Action"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4095.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "move_to": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4095.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move To"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FirewallRuleBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scope",
+          "acknowledge_shared_scope",
+          "kind",
+          "action"
+        ],
+        "title": "FirewallRule"
+      },
       "FirewallRuleApplyItemReply": {
         "properties": {
           "action": {
@@ -9132,6 +9628,80 @@
           }
         ]
       },
+      "FirewallRuleBody": {
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out"
+            ],
+            "title": "Direction"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "ACCEPT",
+              "DROP",
+              "REJECT"
+            ],
+            "title": "Action"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "title": "Protocol"
+          },
+          "destination_port": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[0-9:,]+$",
+            "title": "Destination Port"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "direction",
+          "action",
+          "protocol",
+          "destination_port"
+        ],
+        "title": "FirewallRuleBody"
+      },
       "FirewallRuleDeleteRequest": {
         "properties": {
           "proxmox_node": {
@@ -9339,6 +9909,173 @@
           "proxmox_node": "px-testing",
           "vm_id": "1000"
         }
+      },
+      "FirewallRuleReport": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "destination_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Port"
+          },
+          "source_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Port"
+          },
+          "interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface"
+          },
+          "macro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macro"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "log": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "direction",
+          "action",
+          "enabled"
+        ],
+        "title": "FirewallRuleReport"
+      },
+      "FirewallSwitchesReport": {
+        "properties": {
+          "datacenter_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datacenter Enabled"
+          },
+          "node_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Enabled"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "datacenter_enabled",
+          "node_enabled",
+          "errors"
+        ],
+        "title": "FirewallSwitchesReport"
       },
       "HTTPValidationError": {
         "properties": {
@@ -9553,6 +10290,43 @@
           "limitations"
         ],
         "title": "HostCapacity"
+      },
+      "HostFirewall": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "kind": {
+            "type": "string",
+            "const": "host_firewall",
+            "title": "Kind"
+          },
+          "acknowledge_shared_scope": {
+            "type": "boolean",
+            "title": "Acknowledge Shared Scope"
+          },
+          "review_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "kind",
+          "acknowledge_shared_scope"
+        ],
+        "title": "HostFirewall"
       },
       "HostHealth": {
         "properties": {
@@ -9781,6 +10555,59 @@
         ],
         "title": "IdentityOut"
       },
+      "LiveNatReport": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/NativeNatRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "default": "Run a native observation to read live NAT rules."
+          }
+        },
+        "type": "object",
+        "title": "LiveNatReport"
+      },
       "MaintenanceCapability": {
         "properties": {
           "protocol": {
@@ -9881,6 +10708,44 @@
         },
         "type": "object",
         "title": "MemoryCapacity"
+      },
+      "NativeNatRule": {
+        "properties": {
+          "snat_source": {
+            "type": "string",
+            "title": "Snat Source"
+          },
+          "snat_out_iface": {
+            "type": "string",
+            "title": "Snat Out Iface"
+          },
+          "snat_target": {
+            "type": "string",
+            "title": "Snat Target"
+          },
+          "snat_count": {
+            "type": "integer",
+            "title": "Snat Count"
+          },
+          "snat_host": {
+            "type": "string",
+            "title": "Snat Host"
+          },
+          "proxmox_node": {
+            "type": "string",
+            "title": "Proxmox Node"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snat_source",
+          "snat_out_iface",
+          "snat_target",
+          "snat_count",
+          "snat_host",
+          "proxmox_node"
+        ],
+        "title": "NativeNatRule"
       },
       "NicChanges": {
         "properties": {
@@ -11688,7 +12553,12 @@
               "enum": [
                 "vm_firewall",
                 "scenario_firewall",
-                "sdn_snat"
+                "sdn_snat",
+                "host_firewall",
+                "runtime_observe",
+                "sdn_network",
+                "firewall_alias",
+                "firewall_rule"
               ]
             },
             "type": "array",
@@ -11729,6 +12599,113 @@
         ],
         "title": "RuntimeCapabilities"
       },
+      "RuntimeObserve": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "runtime_observe",
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "RuntimeObserve"
+      },
+      "RuntimeReport": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "project_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Sha"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Observed At"
+          },
+          "partial": {
+            "type": "boolean",
+            "title": "Partial"
+          },
+          "traffic_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Traffic Verified",
+            "default": false
+          },
+          "switches": {
+            "$ref": "#/components/schemas/FirewallSwitchesReport"
+          },
+          "sdn": {
+            "$ref": "#/components/schemas/SdnStateReport"
+          },
+          "networks": {
+            "items": {
+              "$ref": "#/components/schemas/SdnNetworkReport"
+            },
+            "type": "array",
+            "title": "Networks"
+          },
+          "chains": {
+            "items": {
+              "$ref": "#/components/schemas/FirewallChainReport"
+            },
+            "type": "array",
+            "title": "Chains"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/FirewallCardReport"
+            },
+            "type": "array",
+            "title": "Cards"
+          },
+          "live_nat": {
+            "$ref": "#/components/schemas/LiveNatReport"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "target_host_id",
+          "node_name",
+          "observed_at",
+          "partial",
+          "switches",
+          "sdn",
+          "networks",
+          "chains",
+          "cards"
+        ],
+        "title": "RuntimeReport"
+      },
       "ScenarioFirewall": {
         "properties": {
           "enabled": {
@@ -11748,6 +12725,147 @@
           "kind"
         ],
         "title": "ScenarioFirewall"
+      },
+      "SdnNetwork": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "sdn_network",
+            "title": "Kind"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "delete"
+            ],
+            "title": "Action"
+          },
+          "vnet": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9]{0,7}$",
+            "title": "Vnet"
+          },
+          "acknowledge_shared_scope": {
+            "type": "boolean",
+            "title": "Acknowledge Shared Scope"
+          },
+          "review_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "action",
+          "vnet",
+          "acknowledge_shared_scope"
+        ],
+        "title": "SdnNetwork"
+      },
+      "SdnNetworkReport": {
+        "properties": {
+          "vnet": {
+            "type": "string",
+            "title": "Vnet"
+          },
+          "zone": {
+            "type": "string",
+            "title": "Zone"
+          },
+          "subnet": {
+            "type": "string",
+            "title": "Subnet"
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway"
+          },
+          "manifest_snat": {
+            "type": "boolean",
+            "title": "Manifest Snat"
+          },
+          "configured_snat": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured Snat"
+          },
+          "subnet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subnet Id"
+          },
+          "identity_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Matches"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "live_forwarding_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Live Forwarding Verified",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "vnet",
+          "zone",
+          "subnet",
+          "gateway",
+          "manifest_snat",
+          "configured_snat",
+          "subnet_id",
+          "identity_matches",
+          "active"
+        ],
+        "title": "SdnNetworkReport"
       },
       "SdnPage_SdnSubnet_": {
         "properties": {
@@ -11917,6 +13035,34 @@
           "acknowledge_shared_scope"
         ],
         "title": "SdnSnat"
+      },
+      "SdnStateReport": {
+        "properties": {
+          "pending_changes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Changes"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pending_changes",
+          "errors"
+        ],
+        "title": "SdnStateReport"
       },
       "SdnSubnet": {
         "properties": {
