@@ -87,7 +87,7 @@ class EventsWatcher:
 
     async def run(self) -> None:
         self.job_events_dir.mkdir(parents=True, exist_ok=True)
-        while not self.stop.is_set():
+        while True:
             for p in sorted(self.job_events_dir.glob("*.json")):
                 if p.name in self._seen:
                     continue
@@ -102,6 +102,8 @@ class EventsWatcher:
                                          attempt_id=self.attempt_id)
                 self.writer.append(redacted, attempt_id=self.attempt_id,
                                    deployment_id=self.deployment_id)
+            if self.stop.is_set():
+                break
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.poll_ms / 1000)
             except asyncio.TimeoutError:

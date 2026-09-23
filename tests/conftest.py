@@ -30,3 +30,21 @@ def openapi_schema():
     c = TestClient(app)
     resp = c.get("/docs/openapi.json")
     return resp.json()
+
+
+@pytest.fixture(autouse=True)
+async def finish_deployment_observers():
+    """Keep each test's background lifecycle work on its own event loop."""
+    yield
+    import asyncio
+    from app.core.deploy_trigger import _BACKGROUND_TASKS
+
+    tasks = {task for task in _BACKGROUND_TASKS
+             if task.get_loop() is asyncio.get_running_loop()}
+    if tasks:
+        _, pending = await asyncio.wait(tasks, timeout=2)
+        for task in pending:
+            task.cancel()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        _BACKGROUND_TASKS.difference_update(tasks)
+        assert not [result for result in results if isinstance(result, Exception)]

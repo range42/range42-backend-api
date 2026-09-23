@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Range42Error
@@ -47,8 +48,11 @@ async def acquire_lock(
     ).scalar_one_or_none()
     if existing is not None:
         if _is_stale(existing):
-            await session.delete(existing)
-            await session.flush()
+            await session.execute(delete(WorkspaceLock).where(
+                WorkspaceLock.deployment_id == deployment_id,
+                WorkspaceLock.heartbeat_at == existing.heartbeat_at,
+                WorkspaceLock.owner == existing.owner,
+            ))
         else:
             raise LockHeldError(
                 details=[
@@ -61,13 +65,17 @@ async def acquire_lock(
                     }
                 ]
             )
-    lock = WorkspaceLock(
-        deployment_id=deployment_id,
-        owner=owner,
-        heartbeat_interval_s=interval_s,
-    )
-    session.add(lock)
-    return lock
+    claimed = (await session.execute(
+        insert(WorkspaceLock).values(deployment_id=deployment_id, owner=owner,
+                                     heartbeat_interval_s=interval_s)
+        .on_conflict_do_nothing(index_elements=[WorkspaceLock.deployment_id])
+        .returning(WorkspaceLock.deployment_id)
+    )).scalar_one_or_none()
+    if claimed is None:
+        raise LockHeldError(message="Another attempt already owns this workspace")
+    return (await session.execute(select(WorkspaceLock).where(
+        WorkspaceLock.deployment_id == deployment_id
+    ).execution_options(populate_existing=True))).scalar_one()
 
 
 async def release_lock(

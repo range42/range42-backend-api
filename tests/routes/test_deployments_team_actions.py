@@ -4,6 +4,12 @@ from httpx import ASGITransport, AsyncClient
 
 
 async def _boot(tmp_path, monkeypatch):
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+    pb = tmp_path / "playbooks/scenarios/b"
+    pb.mkdir(parents=True)
+    for name in ['main', 'team_reset', 'snapshot_all', 'snapshot_team', 'rollback_team']:
+        (pb / f"{name}.yml").write_text("- hosts: localhost\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(tmp_path / "playbooks"))
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     from importlib import reload
@@ -155,7 +161,9 @@ async def test_cancel_without_inflight_attempt(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cancel_with_running_attempt_marks_cancelled(tmp_path, monkeypatch):
+async def test_cancel_with_running_attempt_requests_cancellation(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("app.core.runner_detached.signal_running_attempt", AsyncMock(return_value=True))
     app, dbmod = await _boot(tmp_path, monkeypatch)
     try:
         await _seed(dbmod, tmp_path)
@@ -174,8 +182,9 @@ async def test_cancel_with_running_attempt_marks_cancelled(tmp_path, monkeypatch
             r = await c.post("/v1/deployments/dep-1/cancel")
             assert r.status_code == 202, r.text
             body = r.json()
-            assert body["state"] == "cancelled"
-            assert body["ended_at"] is not None
+            assert body["state"] == "running"
+            assert body["sub_reason"] == "cancel_requested"
+            assert body["ended_at"] is None
     finally:
         await dbmod.dispose_engine()
 

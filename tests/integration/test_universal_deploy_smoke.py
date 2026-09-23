@@ -305,7 +305,10 @@ async def test_universal_smoke_with_real_detached_runner(tmp_path, monkeypatch):
             self.returncode = 0
             return 0
 
+    captured = []
+
     async def _fake_spawn(*args, **kwargs):
+        captured.extend(args)
         return _FakeProc()
 
     monkeypatch.setattr(
@@ -352,16 +355,14 @@ async def test_universal_smoke_with_real_detached_runner(tmp_path, monkeypatch):
 
     # ASSERT: env/cmdline references _universal and inventory
     cmdline = (pdd / "env" / "cmdline").read_text()
-    assert "scenarios/_universal/main.yml" in cmdline
-    assert "-i inventory" in cmdline
+    assert not cmdline
+    assert captured[captured.index("--playbook") + 1] == "scenarios/_universal/main.yml"
 
-    # ASSERT: env/envvars is KEY=VALUE format (not JSON), 0600
+    # ASSERT: env/envvars is a JSON mapping, 0600
     envvars_path = pdd / "env" / "envvars"
     assert envvars_path.is_file()
     envvars_content = envvars_path.read_text()
-    assert not envvars_content.lstrip().startswith("{"), \
-        "env/envvars must be KEY=VALUE format, not JSON"
-    assert "RANGE42_TRACE_ID=att-smoke-u2" in envvars_content
+    assert json.loads(envvars_content)["RANGE42_TRACE_ID"] == "att-smoke-u2"
     mode = envvars_path.stat().st_mode & 0o777
     assert mode == 0o600, f"Expected 0o600 envvars, got {oct(mode)}"
 

@@ -429,11 +429,16 @@ Canonical error envelope per spec section 18.1 -- every /v1 error includes
 ## Detached runner
 
 See [docs/runner-migration.md](docs/runner-migration.md). The v1 runtime
-spawns `ansible-runner start <private_data_dir>` as a daemonised
-subprocess. FastAPI restarts do not kill the run; orphan reconcile scans
-`~/range42.config/*/runner/pid` every 5 minutes. Events land in
-`<artifact_dir>/job_events/*.json` and a separate `EventsWatcher`
-translates them into `events.jsonl` through the redaction pipeline.
+spawns `ansible-runner run <private_data_dir> --ident execution --playbook <path>`
+in a separate process session. The backend waits for that process, persists
+its exit status, renews the workspace lock while it runs, and releases the
+lock on completion. Events live under
+`<private_data_dir>/artifacts/execution/job_events/` and are redacted before
+being appended to `events.jsonl`.
+
+Scoped actions require their own scenario playbooks; unsupported actions
+return `409 OPERATION_UNSUPPORTED`. Teardown preserves workspace credentials,
+inventory, and logs. See the runner documentation for the operation contract.
 
 ## Events + SSE
 

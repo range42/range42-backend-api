@@ -11,19 +11,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, case
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.allocation import ssh_controlmaster_env
 from app.core.config import settings
-from app.core.errors import ProjectCheckoutError
+from app.core.errors import ProjectCheckoutError, Range42Error
 from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
 from app.core.inventory_writer import write_inventory
-from app.core.locks import acquire_lock
+from app.core.locks import acquire_lock, heartbeat, release_lock
 from app.core.logging import get_logger
 from app.core.models import Attempt, Deployment, Project, ProxmoxHost, Source
 from app.core.project import checkout_project
@@ -42,6 +43,7 @@ from app.utils.checks_playbooks import resolve_scenarios_playbook
 logger = get_logger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
+HEARTBEAT_INTERVAL_S = 30
 
 
 def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
@@ -61,13 +63,64 @@ def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
     return resolve_scenarios_playbook(scenario_label, playbooks_dir_type="www_app")
 
 
+def resolve_attempt_playbook(scenario_label: str, scope: str) -> Path:
+    main = _resolve_playbook_for_scenario(scenario_label)
+    if scope == "full":
+        return main
+    operation = scope
+    if scope.startswith("rollback_team_"):
+        operation = "rollback_team"
+    allowed = {"failed_teams", "team_reset", "teardown", "rollback_all", "rollback_team",
+               "rollback_shared", "snapshot_all", "snapshot_team", "snapshot_shared"}
+    candidate = main.with_name(f"{operation}.yml") if operation in allowed else None
+    if candidate is None or not candidate.is_file() or candidate.resolve().parent != main.parent:
+        raise Range42Error(code="OPERATION_UNSUPPORTED", status=409,
+                           message=f"Scenario {scenario_label} does not implement {scope}")
+    return candidate
+
+
 async def start_attempt(session: AsyncSession, *, attempt: Attempt,
-                        runner: RunnerProtocol | None = None) -> None:
+                        runner: RunnerProtocol | None = None,
+                        lock_acquired: bool = False,
+                        operation_vars: dict[str, Any] | None = None) -> None:
+    """Own the workspace until actual execution ends, including setup errors."""
+    owner = f"attempt-{attempt.id}"
+    if not lock_acquired:
+        await acquire_lock(session, deployment_id=attempt.deployment_id,
+                           owner=owner, interval_s=30)
+    dep = await session.get(Deployment, attempt.deployment_id)
+    attempt.state = "deploying"
+    attempt.started_at = datetime.now(timezone.utc)
+    dep.current_attempt_id = attempt.id
+    dep.state = "deploying"
+    await session.commit()
+    dep_id, att_id = dep.id, attempt.id
+    try:
+        await _launch_attempt(session, attempt=attempt, runner=runner,
+                              operation_vars=operation_vars)
+    except BaseException:
+        await session.rollback()
+        attempt = await session.get(Attempt, att_id)
+        dep = await session.get(Deployment, dep_id)
+        attempt.state = "failed"
+        attempt.ended_at = datetime.now(timezone.utc)
+        attempt.sub_reason = "RUNNER_SETUP_FAILED"
+        dep.state = "failed"
+        await release_lock(session, deployment_id=dep.id, owner=owner)
+        await session.commit()
+        private = Path(dep.workspace_path) / "runner" / attempt.id
+        for name in ("envvars", "extravars"):
+            shred_envvars(private / "env" / name)
+        raise
+
+
+async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
+                          runner: RunnerProtocol | None = None,
+                          operation_vars: dict[str, Any] | None = None) -> None:
     """Spawn the detached runner for an attempt and begin event watching.
 
-    Acquires the workspace lock, writes an attempt_start event, starts
-    the runner subprocess, and spawns the EventsWatcher as a background
-    asyncio Task. Returns immediately — attempt lifecycle runs async.
+    The caller owns the workspace lock. Prepare inputs, start the runner,
+    and observe it using independent database sessions until completion.
     """
     dep = (await session.execute(
         select(Deployment).where(Deployment.id == attempt.deployment_id))
@@ -78,13 +131,7 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     artifact_dir = ws / "runner" / attempt.id
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    await acquire_lock(session, deployment_id=dep.id,
-                       owner=f"attempt-{attempt.id}", interval_s=30)
-    await session.commit()
-
-    # Resolve scenario_label -> playbook path so the runner (DetachedRunner
-    # from T2-T4) can populate project/, env/cmdline, env/envvars from it.
-    playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
+    playbook_path = resolve_attempt_playbook(dep.scenario_label, attempt.scope)
 
     writer = EventsWriter(events_jsonl)
     audit = RedactionAuditWriter(redactions_jsonl)
@@ -112,6 +159,8 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         # (set_fact on localhost is not visible to the proxmox-cli plays).
         "team_count": dep.team_count or 1,
     }
+
+    extravars.update(operation_vars or {})
 
     # Build the tainted-string set for substring redaction. Always includes
     # the vault password (when present); _universal scenarios additionally
@@ -222,50 +271,99 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
             envvars.update(ssh_agent.env)
 
     runner = runner or DetachedRunner()
+    handle = None
     try:
         handle = await runner.start(
             private_data_dir=artifact_dir,
             extravars=extravars,
             envvars=envvars,
         )
+        (artifact_dir / "pid").write_text(str(handle.pid or 0))
+
+        layers = [ConfigDenylistLayer(settings.redaction_denylist),
+                  VaultTaggedLayer(),
+                  TaintedStringLayer(tainted_strings=tainted)]
+        stop = asyncio.Event()
+        watcher = EventsWatcher(
+            job_events_dir=Path(getattr(handle, "artifact_dir", artifact_dir / "artifacts" / "execution")) / "job_events",
+            writer=writer, audit=audit, layers=layers,
+            deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
+        )
+
+        # Background work must never reuse the request's session.
+        factory = async_sessionmaker(session.bind, expire_on_commit=False)
+        dep_id, att_id = dep.id, attempt.id
+        owner = f"attempt-{att_id}"
+        attempt.pid = handle.pid
+        attempt.artifact_dir = str(getattr(handle, "artifact_dir", artifact_dir))
+        await session.commit()
+
     except BaseException:
+        # No observer owns this subprocess yet. Stop it before the caller
+        # marks setup failed and releases the workspace for another attempt.
+        if handle is not None:
+            await handle.kill()
         if ssh_agent is not None:
             ssh_agent.close()
         raise
-    (artifact_dir / "pid").write_text(str(handle.pid or 0))
 
-    layers = [ConfigDenylistLayer(settings.redaction_denylist),
-              VaultTaggedLayer(),
-              TaintedStringLayer(tainted_strings=tainted)]
-    stop = asyncio.Event()
-    watcher = EventsWatcher(
-        job_events_dir=artifact_dir / "job_events",
-        writer=writer, audit=audit, layers=layers,
-        deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
-    )
+    async def _renew() -> None:
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+            async with factory() as db:
+                if not await heartbeat(db, deployment_id=dep_id, owner=owner):
+                    return
+                await db.commit()
 
     async def _run() -> None:
         task_watch = asyncio.create_task(watcher.run())
+        task_heartbeat = asyncio.create_task(_renew())
+        completed = False
         try:
             rc = await handle.wait()
+            completed = True
             stop.set()
-            await task_watch
-            writer.append({"event_type": "attempt_end",
-                           "payload": {"terminal_state": "completed" if rc == 0 else "failed",
-                                       "rc": rc}},
-                          attempt_id=attempt.id, deployment_id=dep.id)
-            logger.info("attempt finished", attempt_id=attempt.id, rc=rc)
+            stream_failed = False
+            try:
+                await task_watch
+            except Exception:
+                stream_failed = True
+                logger.exception("attempt event collection failed", attempt_id=att_id)
+            async with factory() as db:
+                terminal = (await db.execute(update(Attempt).where(Attempt.id == att_id).values(
+                    state=case((Attempt.sub_reason == "cancel_requested", "cancelled"),
+                               else_="succeeded" if rc == 0 else "failed"),
+                    rc=rc, ended_at=datetime.now(timezone.utc),
+                    sub_reason="EVENT_STREAM_FAILED" if stream_failed else None,
+                ).returning(Attempt.state))).scalar_one()
+                await db.execute(update(Deployment).where(
+                    Deployment.id == dep_id, Deployment.current_attempt_id == att_id,
+                ).values(state=terminal))
+                # Write the last event while still owning the workspace. A new
+                # writer must recover its cursor after this append.
+                try:
+                    writer.append({"event_type": "attempt_end",
+                                   "payload": {"terminal_state": terminal, "rc": rc}},
+                                  attempt_id=att_id, deployment_id=dep_id)
+                except OSError:
+                    logger.exception("attempt terminal event write failed", attempt_id=att_id)
+                    await db.execute(update(Attempt).where(Attempt.id == att_id).values(
+                        sub_reason="EVENT_STREAM_FAILED"))
+                await release_lock(db, deployment_id=dep_id, owner=owner)
+                await db.commit()
+            logger.info("attempt finished", attempt_id=att_id, rc=rc)
         finally:
-            # Kill the ssh-agent started for this attempt (if any) so it does
-            # not outlive the deploy.
-            if ssh_agent is not None:
-                ssh_agent.close()
-            # Shred secrets-bearing files in the runner's private_data_dir.
-            # Defense-in-depth: prevents the snapshotted PAT / vault pass from
-            # sitting on disk after the attempt completes. Runs on both success
-            # and failure paths so cleanup is guaranteed.
-            shred_envvars(artifact_dir / "env" / "envvars")
-            shred_envvars(artifact_dir / "env" / "extravars")
+            stop.set()
+            task_heartbeat.cancel()
+            await asyncio.gather(task_heartbeat, return_exceptions=True)
+            await asyncio.gather(task_watch, return_exceptions=True)
+            # On web-worker shutdown the separate runner session remains alive.
+            # Keep its agent and inputs until an observer sees actual completion.
+            if completed:
+                if ssh_agent is not None:
+                    ssh_agent.close()
+                shred_envvars(artifact_dir / "env" / "envvars")
+                shred_envvars(artifact_dir / "env" / "extravars")
 
     task = asyncio.create_task(_run())
     _BACKGROUND_TASKS.add(task)

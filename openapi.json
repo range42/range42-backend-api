@@ -4896,6 +4896,7 @@
             "type": "string",
             "maxLength": 128,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)*$",
             "title": "Scenario Label"
           },
           "project_id": {

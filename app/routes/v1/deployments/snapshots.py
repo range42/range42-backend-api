@@ -8,11 +8,8 @@
 """
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session_factory
@@ -45,17 +42,10 @@ async def snapshot(deployment_id: str, payload: SnapshotCreate,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
-    att = Attempt(
-        id=uuid.uuid4().hex[:16],
-        deployment_id=deployment_id,
-        scope=f"snapshot_{payload.scope}",
-        team_id=payload.team_id,
-        state="pending",
-        started_at=datetime.now(timezone.utc),
-    )
-    session.add(att)
-    await session.commit()
-    await session.refresh(att)
+    from app.core.attempts import submit_attempt
+    att = await submit_attempt(session, dep, scope=f"snapshot_{payload.scope}",
+                               team_id=payload.team_id,
+                               operation_vars={"r42_snapshot_name": payload.name})
     return AttemptOut.model_validate(att, from_attributes=True)
 
 
@@ -73,7 +63,13 @@ async def rollback(deployment_id: str, payload: RollbackRequest,
     # Refuse rollback when required snapshot is missing or expired (§18.6).
     q = select(Snapshot).where(Snapshot.deployment_id == deployment_id)
     if payload.scope == "team":
+        if payload.team_id is None:
+            raise Range42Error(code="TEAM_REQUIRED", status=400, message="team_id is required")
+        if not 1 <= payload.team_id <= dep.team_count:
+            raise Range42Error(code="TEAM_OUT_OF_RANGE", status=400, message="Invalid team_id")
         q = q.where(Snapshot.team_id == payload.team_id)
+    elif payload.scope == "shared":
+        q = q.where(Snapshot.team_id.is_(None))
     snaps = (await session.execute(q)).scalars().all()
     if not snaps:
         raise Range42Error(
@@ -92,17 +88,11 @@ async def rollback(deployment_id: str, payload: RollbackRequest,
         )
     scope = (f"rollback_team_{payload.team_id}"
              if payload.scope == "team" else f"rollback_{payload.scope}")
-    att = Attempt(
-        id=uuid.uuid4().hex[:16],
-        deployment_id=deployment_id,
-        scope=scope,
-        team_id=payload.team_id,
-        state="pending",
-        started_at=datetime.now(timezone.utc),
-    )
-    session.add(att)
-    await session.commit()
-    await session.refresh(att)
+    from app.core.attempts import submit_attempt
+    att = await submit_attempt(session, dep, scope=scope, team_id=payload.team_id,
+                               operation_vars={"r42_snapshot_id": payload.snapshot_id,
+                                               "r42_snapshots": [{"vm_id": row.vm_id, "name": row.name}
+                                                                 for row in snaps]})
     return AttemptOut.model_validate(att, from_attributes=True)
 
 
@@ -147,11 +137,21 @@ async def cancel_current_attempt(deployment_id: str,
             details=[{"field": "attempt.state",
                       "reason": f"state={att.state if att else 'missing'}"}],
         )
-    # SIGTERM the detached ansible-runner subprocess (Task 20 handle).
-    # Events watcher then writes attempt_end with terminal_state=cancelled.
-    await signal_running_attempt(dep.workspace_path, signal="SIGTERM")
-    att.state = "cancelled"
-    att.ended_at = datetime.now(timezone.utc)
+    # Claim cancellation with a conditional write before signalling. The
+    # completion observer uses an atomic update too, so neither can overwrite
+    # a terminal result based on a stale read.
+    claimed = await session.execute(update(Attempt).where(
+        Attempt.id == att.id,
+        Attempt.state.in_(["pending", "running", "deploying"]),
+    ).values(sub_reason="cancel_requested"))
+    if not claimed.rowcount:
+        await session.rollback()
+        raise Range42Error(code="ATTEMPT_TERMINAL", status=409,
+                           message="The attempt finished before cancellation")
+    if not await signal_running_attempt(dep.workspace_path, signal="SIGTERM", attempt_id=att.id):
+        await session.rollback()
+        raise Range42Error(code="RUNNER_NOT_RUNNING", status=409,
+                           message="No running process found for the current attempt")
     await session.commit()
     await session.refresh(att)
     return AttemptOut.model_validate(att, from_attributes=True)

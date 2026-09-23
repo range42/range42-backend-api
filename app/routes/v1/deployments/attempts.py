@@ -1,9 +1,6 @@
 """/v1/deployments/:id/attempts — list + create."""
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,32 +41,9 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
-    # Spec §13 cut-list: single-attempt-per-deployment for v1 cut.
-    # Existing attempts stay queryable; new attempt transitions deployment
-    # out of terminal state. The full multi-attempt lifecycle is additive
-    # in v1.1 — attempt_id field already in event schema.
-    row = Attempt(
-        id=uuid.uuid4().hex[:16],
-        deployment_id=deployment_id,
-        scope=payload.scope,
-        team_id=payload.team_id,
-        state="pending",
-        started_at=datetime.now(timezone.utc),
-    )
-    session.add(row)
-    dep.current_attempt_id = row.id
-    dep.state = "pending"
-    await session.commit()
-    await session.refresh(row)
-
-    import os
-    if os.getenv("RANGE42_AUTO_START_ATTEMPTS", "1") in ("1", "true", "yes"):
-        try:
-            from app.core.deploy_trigger import start_attempt
-            await start_attempt(session, attempt=row)
-        except Exception as e:  # noqa: BLE001
-            from app.core.logging import get_logger
-            get_logger(__name__).warning("attempt_autostart_failed",
-                                         attempt_id=row.id, err=str(e))
-
+    if payload.scope in {"teardown", "rollback_all", "rollback_team"}:
+        raise Range42Error(code="USE_SCOPED_ENDPOINT", status=400,
+                           message="Use the teardown or rollback endpoint with its required safeguards")
+    from app.core.attempts import submit_attempt
+    row = await submit_attempt(session, dep, scope=payload.scope, team_id=payload.team_id)
     return AttemptOut.model_validate(row, from_attributes=True)

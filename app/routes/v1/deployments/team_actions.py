@@ -1,16 +1,13 @@
 """Per-team reset attempts."""
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
-from app.core.models import Attempt, Deployment
+from app.core.models import Deployment
 from app.schemas.v1.deployments import AttemptOut
 
 router = APIRouter()
@@ -39,16 +36,6 @@ async def reset_team(deployment_id: str, team_id: int,
             details=[{"field": "team_id",
                       "reason": f"must be in 1..{dep.team_count}"}],
         )
-    att = Attempt(
-        id=uuid.uuid4().hex[:16],
-        deployment_id=deployment_id,
-        scope="team_reset",
-        team_id=team_id,
-        state="pending",
-        started_at=datetime.now(timezone.utc),
-    )
-    session.add(att)
-    dep.current_attempt_id = att.id
-    await session.commit()
-    await session.refresh(att)
+    from app.core.attempts import submit_attempt
+    att = await submit_attempt(session, dep, scope="team_reset", team_id=team_id)
     return AttemptOut.model_validate(att, from_attributes=True)

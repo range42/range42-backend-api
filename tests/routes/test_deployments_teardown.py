@@ -4,6 +4,12 @@ from httpx import ASGITransport, AsyncClient
 
 
 async def _boot(tmp_path, monkeypatch):
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+    pb = tmp_path / "playbooks/scenarios/x"
+    pb.mkdir(parents=True)
+    for name in ['main', 'teardown']:
+        (pb / f"{name}.yml").write_text("- hosts: localhost\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(tmp_path / "playbooks"))
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     from importlib import reload
@@ -69,8 +75,8 @@ async def test_teardown_accepts_correct_codename(tmp_path, monkeypatch):
             att = r.json()
             assert att["scope"] == "teardown"
             assert att["state"] == "pending"
-            # Workspace dir is removed.
-            assert not ws.exists()
+            # Workspace and recovery inputs are retained.
+            assert ws.exists()
     finally:
         await dbmod.dispose_engine()
 
