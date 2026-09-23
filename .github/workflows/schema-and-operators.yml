@@ -1,0 +1,76 @@
+name: schema-and-operators
+
+on:
+  push:
+    branches: [main, dev, 'feat/**', 'fix/**', 'feature/**']
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  operators-and-codegen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout backend-api
+        uses: actions/checkout@v4
+        with:
+          path: range42-backend-api
+
+      # Prefer a same-named branch in deployer-ui (paired cross-repo work),
+      # otherwise fall back to dev. The fallback must NOT be skippable: a
+      # missing checkout used to silently disable every schema step below,
+      # so push-event runs on feature/** passed without checking anything.
+      - name: Checkout deployer-ui (schema + vectors)
+        id: checkout_ui
+        uses: actions/checkout@v4
+        with:
+          repository: range42/range42-deployer-ui
+          path: range42-deployer-ui
+          ref: ${{ github.head_ref || github.ref_name }}
+        continue-on-error: true
+
+      - name: Checkout deployer-ui (dev fallback)
+        if: steps.checkout_ui.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: range42/range42-deployer-ui
+          path: range42-deployer-ui
+          ref: dev
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bundle schema
+        working-directory: range42-deployer-ui
+        run: |
+          npm ci
+          npm run bundle-schema
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        working-directory: range42-backend-api
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Regenerate Pydantic + drift check
+        working-directory: range42-backend-api
+        run: |
+          . .venv/bin/activate
+          bash ../range42-deployer-ui/tools/generate-pydantic.sh
+          git diff --exit-code -- app/schemas/generated.py \
+            || { echo "::error::app/schemas/generated.py is out of date — regenerate and commit"; exit 1; }
+
+      - name: Pytest (operators on shared vectors)
+        working-directory: range42-backend-api
+        run: |
+          . .venv/bin/activate
+          pytest tests/overlay/ -v

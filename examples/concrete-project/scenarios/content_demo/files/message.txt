@@ -1,0 +1,2 @@
+Hello from a concrete Range42 scenario.
+This content, script and playbook share the same Git commit.

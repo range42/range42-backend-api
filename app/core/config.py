@@ -70,15 +70,74 @@ class Settings:
     cors_origin_regex: str = field(
         default_factory=lambda: os.getenv(
             "CORS_ORIGIN_REGEX",
-            r"^https?://(localhost|127\.0\.0\.1|\[::1\]|192\.168\.42\.\d{1,3})(:\d+)?$",
+            r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
         )
     )
+
+    cors_origins: tuple[str, ...] = field(default_factory=lambda: tuple(
+        origin.strip() for origin in os.getenv("RANGE42_CORS_ORIGINS", "").split(",") if origin.strip()
+    ))
+
+    # Explicit development opt-in; deployments fail closed without a token.
+    auth_mode: str = field(default_factory=lambda: os.getenv("RANGE42_AUTH_MODE", "required"))
+    api_token: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN", ""), repr=False)
+    api_token_file: str = field(default_factory=lambda: os.getenv("RANGE42_API_TOKEN_FILE", ""))
+
+    api_principals_file: str = field(default_factory=lambda: os.getenv("RANGE42_API_PRINCIPALS_FILE", ""))
+    audit_enabled: bool = field(default_factory=lambda: os.getenv("RANGE42_AUDIT_ENABLED", "").lower() in ("1", "true", "yes"))
+
+    credential_key: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY", ""), repr=False)
+    credential_key_file: str = field(default_factory=lambda: os.getenv("RANGE42_CREDENTIAL_KEY_FILE", ""))
+
+    git_allowed_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
+        host.strip().lower() for host in os.getenv("RANGE42_GIT_ALLOWED_HOSTS", "github.com,gitlab.com,codeberg.org").split(",") if host.strip()
+    ))
+    git_allow_http: bool = field(default_factory=lambda: os.getenv("RANGE42_GIT_ALLOW_HTTP", "").lower() in ("1", "true", "yes"))
+
+    proxmox_ca_file: str = field(default_factory=lambda: os.getenv("RANGE42_PROXMOX_CA_FILE", ""))
 
     # Server
     host: str = field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(os.getenv("PORT", "8000")))
     debug: bool = field(
         default_factory=lambda: os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
+    )
+
+    # v1 workspace + state
+    workspace_root: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("RANGE42_WORKSPACE_ROOT", str(Path.home() / "range42.config"))
+        ).resolve()
+    )
+    db_url: str = field(
+        default_factory=lambda: os.getenv(
+            "RANGE42_DB_URL",
+            f"sqlite+aiosqlite:///{Path(os.getenv('RANGE42_WORKSPACE_ROOT', str(Path.home() / 'range42.config'))).resolve() / '.range42.db'}",
+        )
+    )
+
+    maintenance_lock_file: str = field(
+        default_factory=lambda: os.getenv("RANGE42_MAINTENANCE_LOCK_FILE", "")
+    )
+
+    # v1 redaction
+    redaction_denylist: tuple = field(
+        default_factory=lambda: tuple(
+            (os.getenv("RANGE42_REDACTION_DENYLIST")
+             or "*_password,*_passwd,*_token,*_key,*_secret,admin_password,root_password").split(",")
+        )
+    )
+
+    # v1 runtime knobs
+    orphan_reconcile_interval_s: int = field(
+        default_factory=lambda: int(os.getenv("RANGE42_ORPHAN_RECONCILE_INTERVAL", "300"))
+    )
+    runner_bin: str = field(
+        default_factory=lambda: os.getenv("RANGE42_RUNNER_BIN", "ansible-runner")
+    )
+    uvicorn_workers_guard: bool = field(
+        default_factory=lambda: os.getenv("RANGE42_UVICORN_WORKERS_GUARD", "1").lower()
+        in ("1", "true", "yes")
     )
 
     @property

@@ -1,0 +1,32 @@
+# Installation template: replace the deployment user, paths and listener as needed.
+# Keep the existing deployer-cli account; native context switching uses its home.
+[Unit]
+Description=Range42 API for native scenario contexts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deployer
+Group=deployer
+WorkingDirectory=/opt/range42/backend-api
+EnvironmentFile=/etc/range42/native-api.env
+Environment=PATH=/opt/range42/backend-api/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=/opt/range42/backend-api
+Environment=PROJECT_ROOT_DIR=/opt/range42/backend-api
+Environment=RANGE42_WORKSPACE_ROOT=/var/lib/range42-native/workspaces
+Environment=RANGE42_AUTH_MODE=required
+Environment=RANGE42_CONTEXT_ROOT=/home/deployer/range42.config
+Environment=RANGE42_CONTEXT_SCRIPT=/home/deployer/range42/range42/roles/deployer.bootstrap/files/range42-context.sh
+# native-api.env supplies private RANGE42_API_TOKEN_FILE and
+# RANGE42_CREDENTIAL_KEY_FILE paths, actual UI CORS origins and Proxmox TLS trust.
+ExecStart=/opt/range42/backend-api/.venv/bin/python /opt/range42/backend-api/container_entrypoint.py /opt/range42/backend-api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010 --workers 1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+KillMode=process
+TimeoutStopSec=30
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

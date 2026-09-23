@@ -525,106 +525,6 @@ class VmActionReply(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Mass Delete
-# ---------------------------------------------------------------------------
-
-
-class MassDeleteVmItem(BaseModel):
-    id: str = Field(..., description="Virtual machine id", pattern=r"^[0-9]+$")
-
-    name: str = Field(
-        ...,
-        description="Virtual machine meta name",
-        pattern="^[A-Za-z0-9-]+$",  #  deny void name
-        # pattern=r"^[A-Za-z0-9-]*$",
-    )
-
-
-class MassDeleteRequest(BaseModel):
-    proxmox_node: str = Field(
-        ...,
-        # default= "px-testing",
-        description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$",
-    )
-
-    as_json: bool = Field(
-        default=True, description="If true : JSON output else : raw output"
-    )
-
-    vms: List[MassDeleteVmItem] = Field(
-        ...,
-        description="List of virtual machine (vm_id + vm_name)",
-        min_length=1,
-    )
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True,
-                "vms": [
-                    {"id": "4000", "name": "vuln-box-00"},
-                    {"id": "4001", "name": "vuln-box-01"},
-                    {"id": "4002", "name": "vuln-box-02"},
-                ],
-            }
-        }
-    }
-
-
-class MassDeleteItemReply(BaseModel):
-    action: Literal["vm_start", "vm_stop", "vm_resume", "vm_pause", "vm_stop_force"]
-    source: Literal["proxmox"]
-
-    proxmox_node: str
-    vm_id: str  # int = Field(..., ge=1)
-    # vm_new_id   : str  # int = Field(..., ge=1)
-    vm_name: str
-    vm_status: Literal["running", "stopped", "paused"]
-
-
-class MassDeleteReply(BaseModel):
-    rc: int = Field(0, description="RETURN code (0 = OK)")
-    result: list[MassDeleteItemReply]
-
-
-# ---------------------------------------------------------------------------
-# Mass Start / Stop / Resume / Pause
-# ---------------------------------------------------------------------------
-
-
-class MassActionRequest(BaseModel):
-    proxmox_node: str = Field(
-        ...,
-        # default= "px-testing",
-        description="Proxmox node name",
-        pattern=r"^[A-Za-z0-9-]*$",
-    )
-
-    as_json: bool = Field(
-        default=True, description="If true : JSON output else : raw output"
-    )
-    #
-
-    vm_ids: List[str] = Field(
-        ...,
-        description="Virtual machine id",
-        min_length=1,
-    )
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "proxmox_node": "px-testing",
-                "as_json": True,
-                "vm_ids": ["4000", "4001"],
-            }
-        }
-    }
-
-
-# ---------------------------------------------------------------------------
 # Backward compatibility -- old names used by current routes
 # ---------------------------------------------------------------------------
 
@@ -661,11 +561,4 @@ Request_ProxmoxVmsVMID_StartStopPauseResume = VmActionRequest
 Reply_ProxmoxVmsVMID_StartStopPauseResumeItem = VmActionItemReply
 Reply_ProxmoxVmsVMID_StartStopPauseResume = VmActionReply
 
-# vm_ids/mass_delete.py
-vm = MassDeleteVmItem
-Request_ProxmoxVmsVmIds_MassDelete = MassDeleteRequest
-Reply_ProxmoxVmsVMID_MasseDeleteItem = MassDeleteItemReply
-Reply_ProxmoxVmsVmIds_MassDelete = MassDeleteReply
 
-# vm_ids/mass_start_stop_resume_pause.py
-Request_ProxmoxVmsVmIds_MassStartStopPauseResume = MassActionRequest

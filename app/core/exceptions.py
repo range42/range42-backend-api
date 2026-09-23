@@ -6,13 +6,14 @@ with the deployer-ui frontend.
 """
 
 import json
-import logging
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def make_validation_error_detail(err: dict) -> dict:

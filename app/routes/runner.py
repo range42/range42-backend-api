@@ -6,7 +6,6 @@ Endpoints
 - ``POST /v0/admin/run/scenarios/{scenario_name}/run`` -- Run a named scenario.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -14,10 +13,11 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app import utils
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.debug import Request_DebugPing
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"
@@ -47,7 +47,7 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
 
 
 @router.post(
-    path="/{bundles_name}/run",
+    path="/{bundles_name:path}/run",
     summary="Run bundles",
     description="Run generic bundles with default (and static) extras_vars ",
     tags=["runner"],
@@ -55,7 +55,7 @@ def _run_generic(req, name: str, resolver_fn) -> JSONResponse:
 def run_bundle(bundles_name: str, req: Request_DebugPing):
     """Run a named bundle playbook from the external playbooks repository.
 
-    :param bundles_name: Bundle path (e.g. ``"core/linux/ubuntu/install/docker"``).
+    :param bundles_name: Bundle path (e.g. ``"generic/systems.baseline.docker_host"``).
     :param req: Request body with ``hosts`` and optional ``proxmox_node``.
     :returns: JSON with ``rc`` and ``log_multiline``.
     """
@@ -63,7 +63,7 @@ def run_bundle(bundles_name: str, req: Request_DebugPing):
 
 
 @router.post(
-    path="/{scenario_name}/run",
+    path="/{scenario_name:path}/run",
     summary="Run scenario",
     description="Run generic scenario with default (and static) extras_vars ",
     tags=["runner"],

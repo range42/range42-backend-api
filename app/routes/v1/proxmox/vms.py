@@ -1,0 +1,302 @@
+"""/v1/proxmox/hosts/{id}/vms — list + lifecycle.
+
+Talks to the Proxmox API directly over httpx using the registered host's token
+(single source of truth). Replaces the v0 Ansible-driven proxmox surface for
+VM listing and start/stop/pause/resume.
+"""
+from __future__ import annotations
+
+import hmac
+from typing import Annotated, Literal
+from urllib.parse import quote
+
+import httpx
+
+from app.core.proxmox_tls import proxmox_verify
+from fastapi import APIRouter, Depends, Path, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.errors import AuthFailedError, Range42Error
+from app.core.logging import get_logger
+from app.routes.v1.proxmox._helpers import (
+    _mutation_session,
+    _assert_vmid_safe,
+    _auth_headers,
+    _config_target_digest,
+    _config_task_vmid,
+    _get_host,
+    _session,
+    _unreachable,
+)
+from app.schemas.v1.common import Page
+from app.schemas.v1.proxmox import (
+    TaskStatus,
+    VmActionResult,
+    VmConfigResult,
+    VmSummary,
+    VmObservedStatus,
+)
+
+router = APIRouter()
+log = get_logger(__name__)
+
+# Proxmox status sub-actions we expose. `resume`/`start` are non-destructive;
+# the rest can disrupt a running guest.
+_ALLOWED_ACTIONS = {"start", "stop", "shutdown", "suspend", "resume", "reboot"}
+_DESTRUCTIVE_ACTIONS = {"stop", "shutdown", "suspend", "reboot"}
+
+
+@router.get("/hosts/{host_id}/vms", response_model=Page[VmSummary])
+async def list_host_vms(host_id: str, session: AsyncSession = Depends(_session)):
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    headers = _auth_headers(row)
+    items: list[VmSummary] = []
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
+            for vm_type in ("qemu", "lxc"):
+                r = await cli.get(
+                    f"{base}/api2/json/nodes/{row.node_name}/{vm_type}", headers=headers
+                )
+                if r.status_code in (401, 403):
+                    raise AuthFailedError(
+                        details=[{
+                            "field": "token_ref",
+                            "reason": f"Proxmox API rejected credentials ({r.status_code})",
+                        }]
+                    )
+                if r.status_code != 200:
+                    # A node may not have one guest type; skip rather than fail.
+                    continue
+                for v in r.json().get("data", []):
+                    items.append(VmSummary(
+                        vmid=v["vmid"],
+                        name=v.get("name"),
+                        type=vm_type,
+                        status=v.get("status", "unknown"),
+                        node=row.node_name,
+                        maxmem=v.get("maxmem"),
+                        maxcpu=v.get("maxcpu") or v.get("cpus"),
+                        uptime=v.get("uptime"),
+                        template=bool(v.get("template", 0)),
+                        tags=v.get("tags"),
+                    ))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    return Page[VmSummary](
+        items=items, total=len(items), offset=0, limit=len(items)
+    )
+
+
+def _observed_state(vmtype: str, data: dict) -> str:
+    status = data.get("status")
+    if status == "stopped":
+        return "stopped"
+    if status != "running":
+        return "unknown"
+    if vmtype == "lxc":
+        return "running"
+    # QEMU's process can be running while the guest is suspended or paused.
+    qmp = data.get("qmpstatus")
+    if qmp in ("paused", "suspended"):
+        return "paused"
+    return "running" if qmp == "running" else "unknown"
+
+
+@router.get("/hosts/{host_id}/vms/{vmid}/status", response_model=VmObservedStatus)
+async def vm_observed_status(
+    host_id: str,
+    vmid: Annotated[int, Path(ge=1)],
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=10) as cli:
+            r = await cli.get(
+                f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/current",
+                headers=_auth_headers(row),
+            )
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(details=[{
+            "field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})",
+        }])
+    if r.status_code != 200:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message=f"Proxmox returned {r.status_code} for guest status")
+    try:
+        data = r.json()["data"]
+        if not isinstance(data, dict):
+            raise ValueError("Invalid status object")
+    except (ValueError, KeyError, TypeError) as e:
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+                           message="Proxmox returned an invalid guest status") from e
+    return VmObservedStatus(vmid=vmid, node=row.node_name, type=vmtype,
+                            status=_observed_state(vmtype, data))
+
+
+@router.get(
+    "/hosts/{host_id}/vms/{vmid}/config", response_model=VmConfigResult
+)
+async def vm_config(
+    host_id: str,
+    vmid: int,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_session),
+):
+    """Return the raw PVE guest config (net0/net1/ipconfig*, etc.). The UI import
+    flow parses net* to rebuild per-NIC bridge/network edges (#79); the v1 VM
+    list deliberately omits per-NIC detail."""
+    row = await _get_host(host_id, session)
+    base = row.api_url.rstrip("/")
+    url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/config"
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
+            r = await cli.get(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(details=[{
+            "field": "token_ref",
+            "reason": f"Proxmox API rejected credentials ({r.status_code})",
+        }])
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for vm config",
+            details=[{"field": "vmid", "reason": (r.text or "")[:300]}],
+        )
+    return VmConfigResult(
+        vmid=vmid, node=row.node_name, type=vmtype,
+        config=r.json().get("data", {}) or {},
+    )
+
+
+@router.post(
+    "/hosts/{host_id}/vms/{vmid}/status/{action}", response_model=VmActionResult
+)
+async def vm_status_action(
+    host_id: str,
+    vmid: int,
+    action: str,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    session: AsyncSession = Depends(_mutation_session),
+):
+    if action not in _ALLOWED_ACTIONS:
+        raise Range42Error(
+            error="validation_error",
+            code="INVALID_ACTION",
+            status=400,
+            message=f"Unsupported action '{action}'",
+            details=[{"field": "action", "reason": f"one of {sorted(_ALLOWED_ACTIONS)}"}],
+        )
+    row = await _get_host(host_id, session)
+    if action in _DESTRUCTIVE_ACTIONS:
+        _assert_vmid_safe(row, vmid, action)
+    base = row.api_url.rstrip("/")
+    url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}/status/{action}"
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
+            r = await cli.post(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{
+                "field": "token_ref",
+                "reason": f"Proxmox API rejected credentials ({r.status_code})",
+            }]
+        )
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for {action}",
+            details=[{"field": "vmid", "reason": r.text[:300]}],
+        )
+    return VmActionResult(status="accepted", upid=r.json().get("data"))
+
+
+@router.delete("/hosts/{host_id}/vms/{vmid}", response_model=VmActionResult)
+async def vm_delete(
+    host_id: str,
+    vmid: int,
+    vmtype: Literal["qemu", "lxc"] = "qemu",
+    purge: bool = True,
+    session: AsyncSession = Depends(_mutation_session),
+):
+    row = await _get_host(host_id, session)
+    _assert_vmid_safe(row, vmid, "delete")
+    base = row.api_url.rstrip("/")
+    url = f"{base}/api2/json/nodes/{row.node_name}/{vmtype}/{vmid}"
+    params: dict[str, int] = {}
+    if purge:
+        params["purge"] = 1
+        params["destroy-unreferenced-disks"] = 1
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
+            r = await cli.delete(url, headers=_auth_headers(row), params=params)
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{"field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})"}]
+        )
+    if r.status_code != 200:
+        text = (r.text or "").lower()
+        # PVE phrasing varies by version/guest type; also honor an explicit 409.
+        running_markers = ("running", "stop it first", "qemu process", "container is running")
+        if r.status_code == 409 or any(m in text for m in running_markers):
+            raise Range42Error(error="conflict", code="VM_RUNNING", status=409,
+                message="Stop the VM before deleting",
+                details=[{"field": "vmid", "reason": (r.text or "")[:300]}])
+        raise Range42Error(error="upstream_error", code="PROXMOX_ERROR", status=502,
+            message=f"Proxmox returned {r.status_code} for delete",
+            details=[{"field": "vmid", "reason": (r.text or "")[:300]}])
+    return VmActionResult(status="accepted", upid=r.json().get("data"))
+
+
+@router.get("/hosts/{host_id}/tasks/{upid:path}/status", response_model=TaskStatus)
+async def task_status(
+    host_id: str, upid: str, session: AsyncSession = Depends(_session),
+    expected_target_digest: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
+):
+    row = await _get_host(host_id, session)
+    if expected_target_digest is not None:
+        vmid = _config_task_vmid(upid, row.node_name, kinds=('qmconfig', 'resize'))
+        if vmid is None or not hmac.compare_digest(expected_target_digest, _config_target_digest(row, vmid, "qemu")):
+            raise Range42Error(
+                error="conflict", code="VM_CONFIG_TARGET_CHANGED", status=409,
+                message="The configuration task no longer matches its reviewed registered target. Do not confirm or retry the edit from this result.",
+            )
+    base = row.api_url.rstrip("/")
+    enc = quote(upid, safe="")
+    url = f"{base}/api2/json/nodes/{row.node_name}/tasks/{enc}/status"
+    try:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=15) as cli:
+            r = await cli.get(url, headers=_auth_headers(row))
+    except httpx.RequestError as e:
+        raise _unreachable(row, e) from e
+    if r.status_code in (401, 403):
+        raise AuthFailedError(
+            details=[{"field": "token_ref", "reason": f"Proxmox API rejected credentials ({r.status_code})"}]
+        )
+    if r.status_code != 200:
+        raise Range42Error(
+            error="upstream_error",
+            code="PROXMOX_ERROR",
+            status=502,
+            message=f"Proxmox returned {r.status_code} for task status",
+            details=[{"field": "upid", "reason": (r.text or "")[:300]}],
+        )
+    data = r.json().get("data", {}) or {}
+    raw_status = data.get("status", "running")
+    status = raw_status if raw_status in ("running", "stopped") else "stopped"
+    return TaskStatus(upid=upid, status=status,
+        exitstatus=data.get("exitstatus"), node=row.node_name)

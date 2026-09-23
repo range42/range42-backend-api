@@ -87,23 +87,6 @@ def test_vm_clone_request():
     assert req.vm_description == "cloned-vm"  # default
 
 
-def test_mass_delete_request():
-    from app.schemas.vms import MassDeleteRequest, MassDeleteVmItem
-
-    req = MassDeleteRequest(
-        proxmox_node="px-testing",
-        vms=[MassDeleteVmItem(id="4000", name="vuln-box-00")],
-    )
-    assert len(req.vms) == 1
-
-
-def test_mass_delete_request_rejects_empty_vms():
-    from app.schemas.vms import MassDeleteRequest
-
-    with pytest.raises(ValidationError):
-        MassDeleteRequest(proxmox_node="px-testing", vms=[])
-
-
 # ===========================================================================
 # vm_config.py
 # ===========================================================================
@@ -257,45 +240,6 @@ def test_storage_download_iso_request():
 
 
 # ===========================================================================
-# bundles.py
-# ===========================================================================
-
-
-def test_bundle_add_user_request():
-    from app.schemas.bundles import BundleAddUserRequest
-
-    req = BundleAddUserRequest(
-        proxmox_node="px-testing",
-        hosts="r42.vuln-box-00",
-        user="elliot",
-        password="r0b0t_aLd3rs0n",
-        change_pwd_at_logon=False,
-        shell_path="/bin/sh",
-    )
-    assert req.user == "elliot"
-
-
-def test_bundle_create_admin_vms_request():
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsItemRequest,
-        BundleCreateAdminVmsRequest,
-    )
-
-    req = BundleCreateAdminVmsRequest(
-        proxmox_node="px-testing",
-        vms={
-            "admin-wazuh": BundleCreateAdminVmsItemRequest(
-                vm_id=1000,
-                vm_ip="192.168.42.100",
-                vm_description="Wazuh - dashboard",
-            )
-        },
-    )
-    assert "admin-wazuh" in req.vms
-    assert req.vms["admin-wazuh"].vm_id == 1000
-
-
-# ===========================================================================
 # debug.py
 # ===========================================================================
 
@@ -351,10 +295,6 @@ def test_backward_compat_aliases_vms():
     )
 
     assert Request_ProxmoxVmsVMID_StartStopPauseResume is VmActionRequest
-
-    from app.schemas.vms import MassDeleteRequest, Request_ProxmoxVmsVmIds_MassDelete
-
-    assert Request_ProxmoxVmsVmIds_MassDelete is MassDeleteRequest
 
 
 def test_backward_compat_aliases_vm_config():
@@ -431,25 +371,6 @@ def test_backward_compat_aliases_storage():
     )
 
     assert Request_ProxmoxStorage_ListIso is StorageListIsoRequest
-
-
-def test_backward_compat_aliases_bundles():
-    from app.schemas.bundles import (
-        BundleAddUserRequest,
-        Request_BundlesCoreLinuxUbuntuConfigure_AddUser,
-    )
-
-    assert Request_BundlesCoreLinuxUbuntuConfigure_AddUser is BundleAddUserRequest
-
-    from app.schemas.bundles import (
-        BundleCreateAdminVmsRequest,
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms,
-    )
-
-    assert (
-        Request_BundlesCoreProxmoxConfigureDefaultVms_CreateAdminVms
-        is BundleCreateAdminVmsRequest
-    )
 
 
 def test_backward_compat_aliases_debug():

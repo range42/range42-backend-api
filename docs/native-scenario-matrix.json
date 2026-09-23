@@ -1,0 +1,317 @@
+{
+  "playbooks_sha": "6dcf31b5b53600f41be1ce7553d489dba4ad803b",
+  "scenarios": [
+    {
+      "scenario": "admin_services_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 2,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "blank_scenario_2_subnets",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 13,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "blank_scenario_4_subnets",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 25,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [
+        4001,
+        4002,
+        4003,
+        4004
+      ],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "blank_scenario_6_subnets",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 33,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "catalog_try",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 1,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "debug_scenario_a",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 3,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "debug_scenario_b",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 3,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "debug_sdn_tests",
+      "actions": [
+        "full",
+        "deploy_vms"
+      ],
+      "vm_count": 0,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {
+        "sdn_test_vm_id": [
+          102
+        ]
+      }
+    },
+    {
+      "scenario": "demo_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 15,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "dev_deployer_ui_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 5,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "gitea_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 2,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "gitea_registry_lab_to_migrate",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 1,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "init_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 14,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "kunai_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 8,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [
+        1111
+      ],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "mattermost_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 1,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "misp_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 2,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "nextcloud_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 1,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    },
+    {
+      "scenario": "rocketchat_lab",
+      "actions": [
+        "full",
+        "deploy_vms",
+        "teardown",
+        "delete_vms",
+        "reset",
+        "deploy_networks",
+        "delete_networks"
+      ],
+      "vm_count": 1,
+      "template_render": "pass",
+      "wrapper_syntax": "pass",
+      "protected_vmids": [],
+      "vmid_parameters": {}
+    }
+  ]
+}

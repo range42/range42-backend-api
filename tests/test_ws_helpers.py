@@ -1,8 +1,6 @@
 """Tests for WebSocket helper functions in app.routes.ws_status."""
 
 import os
-import pytest
-from pathlib import Path
 from unittest.mock import patch
 
 from app.routes.ws_status import compute_diff, load_proxmox_credentials

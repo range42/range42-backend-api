@@ -1,0 +1,24 @@
+import subprocess
+import sys
+import sqlite3
+from pathlib import Path
+
+
+def test_alembic_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
+    db = tmp_path / "mig.db"
+    monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{db}")
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
+    repo = Path(__file__).resolve().parents[2]
+    # Invoke alembic via the active interpreter (sys.executable -m) so the
+    # migration runs against the venv's SQLAlchemy, not whatever bare
+    # ``alembic`` happens to resolve to on PATH (e.g. a stale ~/.local copy).
+    alembic = [sys.executable, "-m", "alembic"]
+    subprocess.run(alembic + ["upgrade", "head"], cwd=repo, check=True,
+                   capture_output=True, text=True)
+    assert db.exists()
+    with sqlite3.connect(db) as connection:
+        columns = {row[1]: row for row in connection.execute("PRAGMA table_info(attempts)")}
+        assert "project_sha" in columns
+        assert columns["project_sha"][3] == 0  # Old attempt rows remain nullable.
+    subprocess.run(alembic + ["downgrade", "base"], cwd=repo, check=True,
+                   capture_output=True, text=True)

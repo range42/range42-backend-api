@@ -9,7 +9,6 @@ Endpoints
 - ``POST /v0/admin/proxmox/vms/vm_id/config/vm_set_tag`` -- Set VM tags.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from app import utils
 from app.core.extractor import extract_action_results
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.vm_config import (
     Reply_ProxmoxVmsVMID_VmGetConfig,
@@ -40,7 +40,7 @@ from app.schemas.vm_config import (
     Reply_ProxmoxVmsVMID_VmSetMemory,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"

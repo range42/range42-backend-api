@@ -6,18 +6,18 @@ Endpoints
 - ``POST /v0/admin/debug/func_test`` -- Temporary test function.
 """
 
-import logging
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.debug import Request_DebugPing
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 PLAYBOOK_SRC = PROJECT_ROOT / "playbooks" / "ping.yml"

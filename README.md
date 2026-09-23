@@ -139,15 +139,22 @@ VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
 
 ### OpenAPI spec
 
-The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration. To regenerate it after adding or modifying routes:
+The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration, and **CI fails if it is out of date** — regenerate and commit it whenever you add or modify a route:
 
 ```bash
+RANGE42_AUTH_MODE=development \
+PROJECT_ROOT_DIR=$PWD \
+API_BACKEND_WWWAPP_PLAYBOOKS_DIR=$PWD \
+API_BACKEND_PUBLIC_PLAYBOOKS_DIR=$PWD \
+API_BACKEND_INVENTORY_DIR=$PWD/inventory \
 PYTHONPATH=. python -c "
 import json
 from app.main import create_app
 print(json.dumps(create_app().openapi(), indent=2))
 " > openapi.json
 ```
+
+The path variables satisfy import-time reads. The command uses development authentication mode only for schema generation; it does not start an HTTP service or load operator credentials. The generated document does not depend on these values. Production authentication remains required by default.
 
 ---
 
@@ -278,7 +285,6 @@ range42-backend-api/
 |   |   |-- firewall.py          # Firewall (aliases, rules, enable/disable)
 |   |   |-- network.py           # Network interfaces (VM and node level)
 |   |   |-- storage.py           # Storage (list, download ISO, templates)
-|   |   |-- bundles.py           # Predefined bundles (Ubuntu setup, Proxmox VMs)
 |   |   |-- runner.py            # Generic bundle/scenario runner
 |   |   |-- debug.py             # Debug endpoints (ping, test functions)
 |   |   |-- ws_status.py         # WebSocket real-time VM status
@@ -290,7 +296,6 @@ range42-backend-api/
 |   |   |-- firewall.py          # Firewall schemas
 |   |   |-- network.py           # Network schemas
 |   |   |-- storage.py           # Storage schemas
-|   |   |-- bundles/             # Bundle-specific schemas
 |   |   |-- debug/               # Debug endpoint schemas
 |   |-- utils/
 |   |   |-- checks_playbooks.py  # Playbook path validation and resolution
@@ -342,13 +347,12 @@ HTTP Request
 | --------------------------------------- | ------------------------- | --------------------- |
 | `/v0/admin/proxmox/vms/`                | `vms.py`                  | VM list and lifecycle |
 | `/v0/admin/proxmox/vms/vm_id/`          | `vms.py`                  | Single VM operations  |
-| `/v0/admin/proxmox/vms/vm_ids/`         | `vms.py`                  | Mass VM operations    |
 | `/v0/admin/proxmox/vms/vm_id/config/`   | `vm_config.py`            | VM configuration      |
 | `/v0/admin/proxmox/vms/vm_id/snapshot/` | `snapshots.py`            | VM snapshots          |
 | `/v0/admin/proxmox/firewall/`           | `firewall.py`             | Firewall management   |
 | `/v0/admin/proxmox/network/`            | `network.py`              | Network interfaces    |
 | `/v0/admin/proxmox/storage/`            | `storage.py`              | Storage and ISOs      |
-| `/v0/admin/run/bundles/`                | `bundles.py`, `runner.py` | Bundle execution      |
+| `/v0/admin/run/bundles/`                | `runner.py`               | Bundle execution      |
 | `/v0/admin/run/scenarios/`              | `runner.py`               | Scenario execution    |
 | `/v0/admin/debug/`                      | `debug.py`                | Debug/test endpoints  |
 | `/ws/vm-status`                         | `ws_status.py`            | WebSocket VM status   |
@@ -408,6 +412,98 @@ Curl scripts for every endpoint are available in `curl_utils/`.
 
 ---
 
+## v1 API surface
+
+See [docs/v1-routes.md](docs/v1-routes.md) for the full endpoint map.
+Highlights:
+
+- `/v1/catalog/sources` -- git source registration.
+- `/v1/catalog/entries` -- cross-source browse + manifest detail.
+- `/v1/projects` -- project CRUD + `compose` + `validate`.
+- `/v1/deployments` -- create/list/get + `attempts` + `preflight` + `events` (SSE) + `timings` + `cancel`.
+- `/v1/proxmox/hosts` -- host CRUD + `health`.
+- `/v1/health`, `/v1/health/ready`, `/v1/admin/stats`.
+
+Canonical error envelope per spec section 18.1 -- every /v1 error includes
+`{error, message, code, details[], trace_id, timestamp}`.
+
+### Git catalog onboarding
+
+`POST /v1/catalog/sources/default` registers the public
+`https://github.com/range42/range42-catalog` repository on `main` without a
+token. It returns `200` with the existing or newly created source, and repeated
+requests reuse that registration. Registration does not clone the repository;
+refresh or browse it when ready.
+
+For another repository, send `POST /v1/catalog/sources` with the Git server URL
+and a repository binding:
+
+```json
+{
+  "provider": "github",
+  "base_url": "https://github.com",
+  "auth_kind": "none",
+  "repos": [{"owner": "range42", "repo": "range42-catalog", "branch": "main"}]
+}
+```
+
+Register one repository per source so catalog entries have an unambiguous
+source and path. `branch` defaults to `main`; `owner` supports nested GitLab
+groups. Use the repository name without `.git`. Legacy requests without `repos`
+remain accepted, but refreshing an empty source returns `400` with
+`SOURCE_REPOS_REQUIRED` and registration instructions.
+
+`GET /v1/catalog/sources` returns a page with `items`, `total`, `offset`, and
+`limit`. Every source response includes `repos` with repository IDs, names,
+branches, and `last_refreshed_at`. Refresh a registered source with
+`POST /v1/catalog/sources/{id}/refresh`, then browse
+`GET /v1/catalog/entries?source_id={id}`. Refresh reports how many repositories
+and recognized manifests it found; browsing currently clones again and is
+not a persistent catalog cache.
+
+Catalog entry summaries and details include the checked-out Git commit in
+`sha`, so project attachments can pin the version that was browsed.
+
+Private HTTPS repositories use `auth_kind: "pat"` with `token_ref` on creation.
+Rotate credentials through `PATCH /v1/catalog/sources/{id}` with
+`{"auth_kind":"pat","token_ref":"..."}`, or clear them with
+`{"auth_kind":"none"}`. Responses expose only `has_token`, never the token.
+Put credentials in `token_ref`, not in the server URL. Catalog registration
+is separate from deployment inventory credentials and host configuration.
+
+## Detached runner
+
+See [the runner lifecycle](docs/runner-lifecycle.md). The v1 runtime spawns
+`ansible-runner run` in an independent process session with per-attempt
+artifacts. After a hard API crash, recovery verifies process identity before
+adopting a live runner, restores recorded exit results, or reports an unknown
+outcome. Events pass through the redaction pipeline with replay deduplication.
+Full provisioning shares a lock inherited by the runner, including across API
+crashes. Graceful API shutdown detaches local observation while preserving the
+runner and its workspace-owned credentials; explicit cancellation signals it.
+Legacy scoped actions require their own operation playbook and use the same
+attempt reservation; unsupported actions return `409 OPERATION_UNSUPPORTED`.
+Teardown preserves workspace inventory, credentials, and logs. See the
+[operation contract](docs/runner-migration.md).
+
+## Events + SSE
+
+Each deployment owns `~/range42.config/<CODENAME>-<SCENARIO>/events.jsonl`
+with `event_seq` as the cursor. SSE endpoint
+`GET /v1/deployments/:id/events` replays up to 5000 events then tails
+live writes. Deployments behind Kong/Nginx must set
+`proxy_buffering off` -- see [docs/sse-proxy.md](docs/sse-proxy.md).
+
+## Local-FS invariant
+
+Workspace root and SQLite DB must be on a local filesystem (ext4/xfs/
+btrfs/zfs/tmpfs). NFS/CIFS/FUSE is refused at deployment create with
+HTTP 409 and code `WORKSPACE_NON_LOCAL_FS`.
+
+---
+
 ## License
 
 [GPL-3.0](LICENSE)
+
+Named API token roles and durable mutation audit are documented in [named access and audit](docs/named-access-and-audit.md). Existing single-token deployments remain compatible.

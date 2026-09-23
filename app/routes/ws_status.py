@@ -13,16 +13,19 @@ Endpoints
 """
 
 import asyncio
-import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -180,7 +183,7 @@ async def vm_status_websocket(ws: WebSocket):
 
     prev_state: Dict[int, dict] = {}
 
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient(verify=proxmox_verify()) as client:
         try:
             while True:
                 vms = await fetch_vm_status(

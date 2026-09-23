@@ -1,0 +1,17 @@
+# Catalog and bundle discovery
+
+`POST /v1/catalog/sources/default` keeps the public `range42-catalog` repository on `main` as the default inventory source. `POST /v1/catalog/sources/default?kind=bundles` idempotently adds a separate `range42-playbooks` source on `feat-sdn-implementation`, matching the current SDN integration branch. Private GitHub, GitLab and Gitea sources use the same scanner after their host is approved by the backend operator.
+
+Browse bundles through `GET /v1/catalog/entries?kind=bundle&source_id=...`. Every response retains the source id, repository-relative path and actual checked-out commit SHA. Detail uses the existing `/v1/catalog/entries/{source_id}/{path}` route.
+
+Bundle discovery reads `bundles/**/main.yml` or `main.yaml`; `bundle_parameters.json` is optional metadata enrichment. The parsed detail document provides the path-derived `bundle`, `tier`, `entrypoint`, `subject`, `verb`, `grammar_valid`, and inferred `bundle_kind`, plus descriptor `params` when present. Descriptor values cannot replace the path-derived bundle identity. Naming-grammar violations are flagged rather than hidden, so private sources can still be inspected.
+
+The scanner reads every play's `hosts` value using a YAML parser, ignoring comments. Recognized VM targets yield `VM`, group targets yield `GROUP`, infrastructure targets yield `INFRA`, and VM/group plus infrastructure yields `XTIER`. Unresolved imported playbooks, arbitrary host expressions and mixed incompatible targets yield `UNKNOWN`; clients must not assume those bundles can attach to an arbitrary VM.
+
+Native `range42.yaml`, container `meta.json`, and Galaxy role metadata continue to work. Actual role `tasks/main.yml`/`main.yaml`, Docker Compose/Dockerfile assets and gamification `manifest.json` can supply entries when metadata is absent. Placeholder directories do not become executable components. Explicit metadata wins over inferred metadata, entries are deduplicated by path and sorted consistently, and browse/detail use the same resolver. Paths, metadata symlinks and README links cannot escape the checkout; files larger than 2 MiB are not read as metadata or README content.
+
+Checkout and scanning run outside the event loop so catalog requests do not block SSE, heartbeat handling or other API work. Each worker owns its temporary checkout until the operation completes, including after request cancellation.
+
+Discovery is not deployment materialization. To execute a linked-source bundle, the authoring flow must copy its selected revision and dependencies into the project or verify that the installed runtime bundle source matches the saved source/commit. A path from an arbitrary private source must not silently resolve against the server's public `RANGE42_BUNDLE_DIR`. The source commit returned by this API is provenance for that workflow. This scanner does not add the renderer registry described in issue #111, because that registry is absent from the current concrete-scenario backend branch; the UI owns scenario generation.
+
+Executable VM attachments now use the separate [bundle resolution contract](bundle-attachments.md). It verifies the selected source content against the installed release, records the dependency profile and binds a sealed resolution to generated scenario imports at preflight and launch. Catalog detail alone still does not authorize execution.

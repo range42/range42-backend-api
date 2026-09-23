@@ -16,7 +16,6 @@ Endpoints
 - ``POST /v0/admin/proxmox/firewall/datacenter/disable`` -- Disable DC firewall.
 """
 
-import logging
 import os
 from pathlib import Path
 
@@ -25,6 +24,7 @@ from fastapi.responses import JSONResponse
 
 from app import utils
 from app.core.extractor import extract_action_results
+from app.core.logging import get_logger
 from app.core.runner import run_playbook_core
 from app.schemas.firewall import (
     Reply_ProxmoxFirewallWithStorageName_AddIptablesAlias,
@@ -53,7 +53,7 @@ from app.schemas.firewall import (
 )
 from app.utils.vm_id_name_resolver import resolv_id_to_vm_name
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT_DIR")).resolve()
 INVENTORY_NAME = "hosts"

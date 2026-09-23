@@ -8,12 +8,12 @@ import app.utils
 
 
 @pytest.fixture(autouse=True)
-def _patch_utils_resolve():
-    """Patch utils.resolve_inventory onto the utils module (not yet exported in __init__)."""
+def _patch_utils_resolve(monkeypatch):
+    """Override utils.resolve_inventory; monkeypatch auto-restores the real
+    re-exported function after each test."""
     fake = MagicMock(return_value=Path("/tmp/fake/hosts.yml"))
-    app.utils.resolve_inventory = fake
+    monkeypatch.setattr(app.utils, "resolve_inventory", fake)
     yield
-    delattr(app.utils, "resolve_inventory")
 
 
 @pytest.fixture

@@ -1,0 +1,28 @@
+---
+# Local content example: the complete asset tree travels with its Git commit.
+# Real infrastructure scenarios put SDN preparation before VM bootstrap and
+# configuration. This example deliberately has no network or VM provisioning.
+- name: Install scenario content and run a script
+  hosts: content_demo
+  gather_facts: false
+  tasks:
+    - name: Create the demo output directory
+      ansible.builtin.file:
+        path: "{{ r42_demo_output_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Copy the scenario content
+      ansible.builtin.copy:
+        src: files/message.txt
+        dest: "{{ r42_demo_output_dir }}/message.txt"
+        mode: "0600"
+
+    - name: Process content with the scenario script
+      ansible.builtin.script:
+        cmd: >-
+          scripts/process.sh
+          {{ (r42_demo_output_dir ~ '/message.txt') | quote }}
+          {{ (r42_demo_output_dir ~ '/processed.txt') | quote }}
+
+- ansible.builtin.import_playbook: configure.yml
