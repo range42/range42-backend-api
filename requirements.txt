@@ -4,7 +4,7 @@ ansible-runner==2.4.1
 
 # SSH
 paramiko>=3.4.0
-cryptography>=42
+cryptography>=50.0.1
 
 # API
 fastapi==0.115.0
