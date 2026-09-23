@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout backend-api
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: range42-backend-api
 
@@ -21,7 +21,7 @@ jobs:
       # so push-event runs on feature/** passed without checking anything.
       - name: Checkout deployer-ui (schema + vectors)
         id: checkout_ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: range42/range42-deployer-ui
           path: range42-deployer-ui
@@ -30,7 +30,7 @@ jobs:
 
       - name: Checkout deployer-ui (dev fallback)
         if: steps.checkout_ui.outcome == 'failure'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: range42/range42-deployer-ui
           path: range42-deployer-ui
