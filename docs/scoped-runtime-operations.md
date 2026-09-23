@@ -132,8 +132,9 @@ vault isolation and unrelated NAT preservation. The UI browser fixture checks
 desktop/mobile review and refusal, accessibility and preserved policy drafts.
 These are controlled fixtures, not live guest qualification.
 
-API #74 remains the shared-context deployment/traffic acceptance gate. On 22
-September 2026 the shared API was reachable but lacked the new capability
-endpoint; the available backend SSH keys were refused. Installing the paired
-application branches and validating real traffic remains pending working backend
-access. No host configuration was changed for these checks.
+The [23 September shared acceptance](shared-sdn-acceptance-20260923.md) records
+the installed paired branches, exact native revisions, live guest/NAT/policy and
+content checks, owned teardown and preservation evidence for API #74. Context
+SSH access is resolved. Host/DC switches were left unchanged; guest firewall
+enforcement and multi-node lifecycle are outside this qualification. The
+application stacks still require review, merge and release promotion.
