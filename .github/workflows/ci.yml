@@ -17,17 +17,17 @@ jobs:
       - run: |
           apt-get update && apt-get install -y --no-install-recommends \
             git openssh-client zsh jq yq
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
       - run: ruff check app/ tests/
       - name: Checkout reviewed native playbooks contract
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: range42/range42-playbooks
           ref: 6dcf31b5b53600f41be1ce7553d489dba4ad803b
           path: runtime-contract/playbooks
       - name: Checkout reviewed native controller contract
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: range42/range42-ansible_roles-proxmox_controller
           ref: 617b57cddecbe4ddedd1f72becc7023bbcdf2114
