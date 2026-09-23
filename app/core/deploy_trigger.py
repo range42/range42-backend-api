@@ -34,7 +34,7 @@ from app.core.scenario import prepare_project_scenario, validate_concrete_scope
 from app.core.scenario_networks import check_scenario_networks
 from app.core.scenario_resources import check_scenario_resources
 from app.core.deployment_allocations import ensure_for_attempt
-from app.core.scenario_runtime import cleanup_runtime_vault, prepare_runtime_vault, target_runtime_variables
+from app.core.scenario_runtime import cleanup_runtime_vault, prepare_runtime_vault, prepare_scenario_context, target_runtime_variables
 from app.core.redaction import (
     ConfigDenylistLayer,
     RedactionAuditWriter,
@@ -213,7 +213,10 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         tainted.add(runtime_vars["default_admin_vm_ci_password"])
         extravars["r42_project_dir"] = str(runtime_run.playbook.parent if runtime_run else scenario.project_root)
         extravars["r42_inventory_path"] = str(runtime_run.inventory if runtime_run else scenario.inventory)
-        envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
+        config_dir = runtime_run.config_dir if runtime_run else prepare_scenario_context(
+            ws, scenario.playbook.parent, artifact_dir,
+        )
+        envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(config_dir)
         # Custom playbooks may use this to keep run output out of the pinned tree.
         extravars["r42_workspace_dir"] = str(ws)
         if scenario.checkout_credential:

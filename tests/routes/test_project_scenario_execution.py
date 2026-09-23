@@ -153,7 +153,11 @@ async def test_attempt_runs_pinned_project_playbook_with_its_inventory_and_asset
         assert Path(variables["r42_inventory_path"]) == playbook.parent / "hosts.yml"
         assert (playbook.parent / "files/config.txt").read_text() == "pinned content"
         assert (playbook.parent / "scripts/setup.sh").is_file()
-        assert runner.arguments["envvars"]["RANGE42_ACTIVE_CONFIG_DIR"] == str(ws)
+        context = Path(runner.arguments["envvars"]["RANGE42_ACTIVE_CONFIG_DIR"])
+        assert context == ws / "runner/attempt-content/config"
+        assert context.stat().st_mode & 0o777 == 0o700
+        assert (context / "scenario").resolve() == playbook.parent
+        assert (context / "secrets").resolve() == ws / "secrets"
         async with dbmod.get_session_factory()() as session:
             attempt = await session.get(Attempt, "attempt-content")
             assert attempt.state == "succeeded"

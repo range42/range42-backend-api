@@ -34,6 +34,12 @@ scenario vault settings cannot add an unreviewed VLAN, gateway or rule option.
 The original vault and project remain unchanged. Existing guest firewall
 composites retain their workspace SSH-source policy.
 
+Full, configure and teardown attempts expose an isolated native config directory:
+`scenario/` points to that attempt's pinned checkout and `secrets/` points to its
+workspace secrets. Native manifest consumers therefore use the reviewed VM scope
+even if an old workspace contains a stale `scenario/` directory. Neither the
+project nor the workspace metadata is rewritten to satisfy native paths.
+
 ## Network lifecycle
 
 ```json
