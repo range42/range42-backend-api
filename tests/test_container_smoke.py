@@ -217,3 +217,42 @@ workspace.rmdir()
         assert fake_pat not in compose("logs", "--no-color", "api")
     finally:
         compose("down", "--volumes", "--remove-orphans", "--timeout", "10")
+
+
+def test_encrypted_workspace_key_unlock_with_noexec_tmp():
+    code = '''
+from pathlib import Path
+import os, subprocess
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, BestAvailableEncryption
+from app.core.ssh_agent import unlock_workspace_keys
+w = Path('/var/lib/range42/key-test')
+(w/'secrets').mkdir(parents=True, mode=0o700)
+(w/'ssh_keys').mkdir(mode=0o700)
+password = w/'secrets/vault_pass.txt'
+password.write_text('disposable-vault-password')
+vault = w/'secrets/default_vault.yml'
+vault.write_text('ssh_passphrase_deployer_admin: disposable-key-password\\n')
+subprocess.run(['ansible-vault', 'encrypt', '--vault-password-file', str(password), str(vault)],
+               check=True, capture_output=True)
+key = w/'ssh_keys/r42.test-deployer-key_alice'
+key.write_bytes(Ed25519PrivateKey.generate().private_bytes(Encoding.PEM, PrivateFormat.OpenSSH,
+               BestAvailableEncryption(b'disposable-key-password')))
+key.chmod(0o600)
+assert any(line.split()[1] == '/tmp' and 'noexec' in line.split()[3].split(',')
+           for line in Path('/proc/mounts').read_text().splitlines())
+agent = unlock_workspace_keys(w, password)
+assert agent is not None
+try:
+    result = subprocess.run(['ssh-add', '-l'], env={**os.environ, **agent.env}, capture_output=True, text=True)
+    assert result.returncode == 0 and len(result.stdout.splitlines()) == 1, 'Encrypted workspace key was not loaded'
+    assert not list(w.rglob('r42-askpass-*')), 'Unlock helper was not removed'
+finally:
+    agent.close()
+assert not list(w.glob('.agent-*')), 'Owned agent directory was not removed'
+'''
+    result = subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only',
+        '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,mode=1777,size=64m',
+        '--tmpfs', '/var/lib/range42:rw,exec,nosuid,nodev,uid=1000,gid=1000,mode=700,size=64m',
+        '--entrypoint', 'python', IMAGE, '-c', code], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
