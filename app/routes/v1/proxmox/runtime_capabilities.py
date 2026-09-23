@@ -18,7 +18,7 @@ class RuntimeCapabilities(BaseModel):
     available: bool
     contract: str | None = None
     fingerprint: str | None = None
-    operations: list[Literal["vm_firewall", "scenario_firewall", "sdn_snat"]] = Field(default_factory=list)
+    operations: list[Literal["vm_firewall", "scenario_firewall", "sdn_snat", "host_firewall", "runtime_observe", "sdn_network", "firewall_alias", "firewall_rule"]] = Field(default_factory=list)
     bootstrap_features: list[Literal["extra_nics", "resources", "disk_resize"]] = Field(default_factory=list)
     reason: str | None = None
     management_access_available: bool = False

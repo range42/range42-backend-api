@@ -58,7 +58,7 @@ run these checks. Desktop/mobile browser coverage is in the UI's
 
 Shared range42-context guest deployment and end-to-end traffic acceptance remain
 the release gate in API #74. Rule counts and switch observations do not prove
-forwarding or filtering. Follow-on application work remains scoped SDN plan/apply/
-delete (#41), host/DC and alias-policy workflows (#83), richer declared/live
-reports (#140), and the paired UI controls (#101). The existing three runtime
-operations remain the only accepted operation kinds.
+forwarding or filtering. The application now implements reviewed SDN create/apply/
+delete (#41), host/DC and alias-policy workflows (#83), typed declared/live reports
+(#140), and paired UI controls (#101). See [scoped runtime operations](scoped-runtime-operations.md)
+for the eight supported kinds, ownership restrictions and remaining live acceptance.

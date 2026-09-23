@@ -192,12 +192,15 @@ def _start_agent(workspace: Path | None = None) -> SshAgentHandle:
     return handle
 
 
-def _ssh_add(key: Path, passphrase: str, agent_env: dict[str, str]) -> bool:
+def _ssh_add(key: Path, passphrase: str, agent_env: dict[str, str], *, directory: Path) -> bool:
     """ssh-add one key, feeding the passphrase non-interactively via SSH_ASKPASS.
 
     A passphrase-less key ignores the askpass shim and still loads.
     """
-    fd, askpass_path = tempfile.mkstemp(prefix="r42-askpass-", suffix=".sh")
+    # Managed containers deliberately mount /tmp with noexec. The agent's
+    # private workspace directory permits the same execution as the runner;
+    # keep the short-lived helper there without weakening the /tmp mount.
+    fd, askpass_path = tempfile.mkstemp(prefix="r42-askpass-", suffix=".sh", dir=directory)
     try:
         with os.fdopen(fd, "w") as fh:
             fh.write('#!/bin/sh\nprintf "%s" "$SSH_ASKPASS_PASSWORD"\n')
@@ -248,7 +251,7 @@ def unlock_workspace_keys(
     for key in keys:
         field_name = _passphrase_field_for(key.name)
         passphrase = str(passphrases.get(field_name, "")) if field_name else ""
-        if _ssh_add(key, passphrase, handle.env):
+        if _ssh_add(key, passphrase, handle.env, directory=Path(handle.env["SSH_AUTH_SOCK"]).parent):
             loaded += 1
         else:
             logger.warning("ssh_agent could not add key", key=key.name)

@@ -14,6 +14,15 @@ from app.core.errors import Range42Error
 from app.core.models import ProxmoxHost
 
 
+def prepare_scenario_context(workspace: Path, scenario_dir: Path, artifact_dir: Path) -> Path:
+    """Expose native context paths without changing shared or pinned files."""
+    context = artifact_dir / "config"
+    context.mkdir(mode=0o700)
+    (context / "secrets").symlink_to(workspace / "secrets", target_is_directory=True)
+    (context / "scenario").symlink_to(scenario_dir, target_is_directory=True)
+    return context
+
+
 def _guest_password(workspace: Path) -> str:
     """Preserve a configured password, otherwise persist a private random one."""
     from ansible.errors import AnsibleError

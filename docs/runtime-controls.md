@@ -23,7 +23,8 @@ unused. The endpoint performs no Proxmox writes.
 ```
 
 Booleans must be JSON booleans. Undeclared fields, arbitrary bundle paths,
-toggle operations, and host/datacenter firewall actions are rejected. NAT
+and toggle operations are rejected. Administrator host/datacenter and scoped
+policy operations are described in [scoped runtime operations](scoped-runtime-operations.md). NAT
 acknowledgment is required because SDN apply is cluster-wide. Under the reviewed
 native contract, the selected subnet takes the requested state and other subnets
 retain their prior live SNAT state. The older marker-based contract instead
@@ -58,7 +59,7 @@ unreadable guest blocks the sweep before mutation.
 VM enable imports the upstream composite that posts SSH acceptance, sets every
 NIC firewall flag, and finally arms the VM switch. Disable uses its inverse
 sequence and retains SSH acceptance. The datacenter and node switches are
-observed separately and never changed by these endpoints. A configured guest
+observed separately and never changed by guest firewall operations. A configured guest
 firewall with a disabled datacenter switch does not provide active filtering.
 The current composite protects SSH on port 22; custom policies, alternative
 management ports and guest OS firewall behavior need separate review. Disabling

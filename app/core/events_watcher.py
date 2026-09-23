@@ -120,9 +120,10 @@ class EventsWatcher:
     async def run(self) -> None:
         self.job_events_dir.mkdir(parents=True, exist_ok=True)
         while True:
-            stopped_before_scan = self.stop.is_set()
             # A final scan is required after the process exits; the last event
-            # files can arrive between a polling scan and stop.set().
+            # files can arrive while the progress callback awaits its DB flush.
+            # Only finish a scan that started after observing runner exit.
+            final_scan = self.stop.is_set()
             for p in sorted(self.job_events_dir.glob("*.json"), key=lambda p: (
                 int(p.name.split("-", 1)[0]) if p.name.split("-", 1)[0].isdigit() else 0,
                 p.name,
@@ -152,7 +153,7 @@ class EventsWatcher:
             if self.on_progress is not None and self._cursor > self._reported_cursor:
                 await self.on_progress(self._cursor)
                 self._reported_cursor = self._cursor
-            if stopped_before_scan:
+            if final_scan:
                 break
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.poll_ms / 1000)

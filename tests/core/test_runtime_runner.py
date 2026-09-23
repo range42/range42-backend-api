@@ -15,10 +15,13 @@ from tests.routes.test_project_scenario_execution import _boot, seed_scenario
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ownership_changed", [False, True])
-async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch(tmp_path, monkeypatch, ownership_changed):
+@pytest.mark.parametrize("native", [False, True])
+async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch(tmp_path, monkeypatch, ownership_changed, native):
     app, dbmod = await _boot(tmp_path, monkeypatch)
     from app.core import deploy_trigger
     profile = {"fingerprint": "a" * 64, "dependencies": []}
+    if native:
+        profile["contract"] = "native-sdn-20260921"
     finished = []
 
     executable = tmp_path / 'inert-runner'
@@ -40,6 +43,8 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
                 {"vm_id": 3191, "vm_name": "owned-guest"},
             ]}),
         })
+        (ws / "secrets").mkdir(exist_ok=True)
+        (ws / "secrets/default_vault.yml").write_text("vm_fw_mgmt_source: 10.42.0.0/24\n")
         # A fixture bundle is inert. The assertion below checks that the real
         # runner receives it through the backend-generated guarded wrapper.
         bundle = tmp_path / "bundles/firewall/in_proxmox/firewall.enable.vm/main.yml"
@@ -84,6 +89,9 @@ async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch
                 return
             await deploy_trigger.start_attempt(session, attempt=attempt, runner=runner)
         variables = runner.arguments["extravars"]
+        assert variables["BUNDLE_VM_ID"] == 3191
+        vault = Path(runner.arguments["envvars"]["RANGE42_ACTIVE_CONFIG_DIR"]) / "secrets/default_vault.yml"
+        assert yaml.safe_load(vault.read_text())["vm_fw_mgmt_source"] == "10.42.0.0/24"
         wrapper = Path(variables["r42_playbook_path"])
         assert wrapper.is_relative_to(ws / "runner/runtime")
         assert not wrapper.is_relative_to(ws / "runner/runtime/checkout")

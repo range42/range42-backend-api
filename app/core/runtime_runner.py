@@ -24,6 +24,18 @@ class RuntimeRun:
     scenario_dir: Path
     plan: dict
 
+    @property
+    def variables(self) -> dict:
+        # Extra vars outrank a native bundle's vars_files. Only reviewed,
+        # backend-built inputs may select the resource that gets changed.
+        values = {}
+        for step in self.plan.get("steps", [self.plan]):
+            for key, value in step["variables"].items():
+                if key in values and values[key] != value:
+                    raise blocked("The operation has conflicting native inputs")
+                values[key] = value
+        return values
+
 
 def _private_document(path: Path, document) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -47,8 +59,17 @@ async def _verified_plan(deployment, attempt, host, scenario_dir) -> dict:
     profile = await asyncio.to_thread(operation_profile, request["kind"])
     if profile != operation.get("runtime"):
         raise blocked("The installed runtime changed; request this operation again after reviewing the new release", "RUNTIME_REVISION_CHANGED")
-    state = await read_runtime_state(scenario_dir, host, deployment_id=deployment.id)
-    plan = plan_operation(request, state)
+    if request["kind"] in ("firewall_alias", "firewall_rule"):
+        from app.core.runtime_firewall import firewall_plan
+        plan = await firewall_plan(scenario_dir, host, deployment_id=deployment.id, request=request)
+    else:
+        state = await read_runtime_state(scenario_dir, host, deployment_id=deployment.id)
+        if request["kind"] == "sdn_network":
+            from app.core.runtime_networks import read_network_lifecycle
+            state["network_lifecycle"] = await read_network_lifecycle(scenario_dir, host, deployment_id=deployment.id)
+        plan = plan_operation(request, state)
+    from app.core.runtime_review import verify_review
+    verify_review(operation, plan)
     if profile.get("contract"):
         plan["contract"] = profile["contract"]
     overrides = json.loads(host.protected_vmids_override_json) if host.protected_vmids_override_json else None
@@ -101,16 +122,25 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
     scenario_dir = scenario.playbook.parent
     plan = await _verified_plan(deployment, attempt, host, scenario_dir)
     root = Path(os.environ["RANGE42_BUNDLE_DIR"]).resolve()
-    bundle = root / plan["bundle"] / "main.yml"
-    if bundle.is_symlink() or not bundle.is_file() or not bundle.resolve().is_relative_to(root):
-        raise blocked("The requested composite bundle is unavailable", "RUNTIME_CAPABILITY_MISSING")
+    imports = []
+    for step in ([] if "api_change" in plan else plan.get("steps", [plan])):
+        bundle = root / step["bundle"] / "main.yml"
+        if bundle.is_symlink() or not bundle.is_file() or not bundle.resolve().is_relative_to(root):
+            raise blocked("The requested composite bundle is unavailable", "RUNTIME_CAPABILITY_MISSING")
+        imports.append({"ansible.builtin.import_playbook": str(bundle), "vars": step["variables"]})
     directory = artifact_dir / "runtime"
     directory.mkdir(mode=0o700)
     config_dir = directory / "config"
     config_dir.mkdir(mode=0o700)
-    # Only the manifest is new. The original private credentials remain in
-    # the locked workspace and are never copied into the project checkout.
-    (config_dir / "secrets").symlink_to(Path(deployment.workspace_path) / "secrets", target_is_directory=True)
+    # Scoped native operations receive registered credentials and reviewed inputs as
+    # extra vars. A scenario vault must not add unreviewed optional parameters
+    # (VLAN tags, gateway, management rules, etc.) through native vars_files.
+    # Existing guest composites retain their workspace's SSH-source policy.
+    if plan.get("contract") and attempt.operation["request"]["kind"] in (
+            "sdn_network", "host_firewall", "firewall_rule", "firewall_alias", "runtime_observe"):
+        _private_document(config_dir / "secrets/default_vault.yml", {})
+    else:
+        (config_dir / "secrets").symlink_to(Path(deployment.workspace_path) / "secrets", target_is_directory=True)
     vms, _ = runtime_targets(scenario_dir)
     targets = [vm for vm in vms if vm["vm_id"] in plan["vmids"]]
     manifest = config_dir / "scenario/manifest/scenario_vms.json"
@@ -126,13 +156,22 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
                          "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ deployer_cli_user_ssh_known_hosts | quote }}"}}},
     }}})
     plays = [_ownership_guard(targets, deployment.id)] if targets else []
-    if attempt.operation["request"]["kind"] == "sdn_snat":
+    if attempt.operation["request"]["kind"] in ("sdn_snat", "runtime_observe", "sdn_network"):
         plays.append(_ssh_node_guard())
         if plan.get("contract"):
             from app.core.native_sdn import snat_guard_play
             plays.append(snat_guard_play())
-    plays.append({"ansible.builtin.import_playbook": str(bundle), "vars": plan["variables"]})
-    if plan.get("contract") and attempt.operation["request"]["kind"] == "sdn_snat":
+    if "api_change" in plan:
+        from app.core.runtime_networks import lifecycle_guard_play
+        from app.core.runtime_firewall import firewall_change_play
+        plays.extend([lifecycle_guard_play(plan), firewall_change_play(plan)])
+    elif attempt.operation["request"]["kind"] == "sdn_network":
+        from app.core.runtime_networks import lifecycle_guard_play, preserve_nat_plays
+        before, after = preserve_nat_plays(plan)
+        plays.extend([lifecycle_guard_play(plan), before, *imports, after])
+    else:
+        plays.extend(imports)
+    if plan.get("contract") and attempt.operation["request"]["kind"] in ("sdn_snat", "runtime_observe", "sdn_network"):
         from app.core.native_sdn import snat_observation_play
         plays.append(snat_observation_play())
     playbook = directory / "main.yml"
