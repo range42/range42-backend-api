@@ -22,10 +22,14 @@ from tests.core.test_runtime_networks import lifecycle_data, read
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("changed", [None, "foreign_alias", "new_attachment", "pending_controller"])
+@pytest.mark.parametrize("changed", [None, "foreign_alias", "new_attachment", "pending_controller", "interface_order", "interface_address"])
 async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path, changed):
     from app.core import runtime_networks
     data = lifecycle_data()
+    data["/nodes/pve01/network"] = [
+        {"iface": "vmbr11", "cidr": "192.0.2.1/24", "active": 1},
+        {"iface": "vmbr12", "cidr": "198.51.100.1/24", "active": 1},
+    ]
     observation = await read(tmp_path, data)
     plan = runtime_networks.network_plan({"kind": "sdn_network", "action": "delete", "vnet": "r42blue"}, observation)
     guard = runtime_networks.lifecycle_guard_play(plan)
@@ -36,6 +40,11 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
         data["/nodes/pve01/lxc/9001/config"] = {"net0": "bridge=r42blue,name=eth0"}
     elif changed == "pending_controller":
         data["/cluster/sdn/controllers"] = [{"controller": "new", "state": "new"}]
+    elif changed == "interface_order":
+        data["/nodes/pve01/network"].reverse()
+        assert (await read(tmp_path, data))["guards"] == observation["guards"]
+    elif changed == "interface_address":
+        data["/nodes/pve01/network"][0]["cidr"] = "203.0.113.1/24"
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "network-guard-test")])
     now = datetime.now(timezone.utc)
@@ -82,8 +91,9 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
         result = subprocess.run([str(Path(sys.executable).parent / "ansible-playbook"), "-i", str(inventory), str(playbook), "-e", f"@{variables}"],
                                 capture_output=True, text=True, timeout=50,
                                 env={**os.environ, "ANSIBLE_CONFIG": str(config), "RANGE42_PROXMOX_CA_FILE": str(cert_path)})
-        assert (result.returncode == 0) is (changed is None), result.stdout + result.stderr
-        assert marker.exists() is (changed is None)
+        allowed = changed in (None, "interface_order")
+        assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+        assert marker.exists() is allowed
     finally:
         server.shutdown()
         server.server_close()

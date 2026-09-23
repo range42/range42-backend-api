@@ -38,8 +38,20 @@ class _GuardedReads:
             elif path == "/nodes":
                 self.guards.append({"path": path, "nodes": sorted(row["node"] for row in data)})
             else:
+                # PVE returns interface/SDN collections in hash iteration order.
+                # Bind every row's contents, while ignoring that arbitrary order.
+                resource = path.split("?", 1)[0]
+                sort_key = ({"/cluster/sdn/zones": "zone", "/cluster/sdn/vnets": "vnet"}.get(resource)
+                            or ("subnet" if re.fullmatch(r"/cluster/sdn/vnets/[^/]+/subnets", resource) else None)
+                            or ("iface" if re.fullmatch(r"/nodes/[^/]+/network", resource) else None))
+                if sort_key:
+                    if not isinstance(data, list) or any(not isinstance(row, dict) or not isinstance(row.get(sort_key), str) for row in data):
+                        raise ValueError("invalid network collection identity")
+                    if len({row[sort_key] for row in data}) != len(data):
+                        raise ValueError("duplicate network collection identity")
+                    data = sorted(data, key=lambda row: row[sort_key])
                 digest = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
-                self.guards.append({"path": path, "digest": digest})
+                self.guards.append({"path": path, "digest": digest, **({"sort_key": sort_key} if sort_key else {})})
         return response
 
 
@@ -213,8 +225,9 @@ def lifecycle_guard_play(plan):
                  "register": "r42_network_guard_results", "no_log": True},
                 {"name": "Refuse changes since the administrator's review", "ansible.builtin.assert": {"that": [
                     "r42_guard_result.json.data is defined",
-                    "(r42_guard_result.json.data | to_json(sort_keys=True, separators=[',', ':'], ensure_ascii=True) | hash('sha256')) == r42_guard_result.r42_network_guard.digest",
+                    "(r42_guard_data | to_json(sort_keys=True, separators=[',', ':'], ensure_ascii=True) | hash('sha256')) == r42_guard_result.r42_network_guard.digest",
                 ], "fail_msg": "Network configuration, permissions or guest attachments changed since review. Refresh the plan."},
+                 "vars": {"r42_guard_data": "{{ (r42_guard_result.json.data | sort(attribute=r42_guard_result.r42_network_guard.sort_key, case_sensitive=true)) if r42_guard_result.r42_network_guard.sort_key is defined else r42_guard_result.json.data }}"},
                  "loop": "{{ r42_network_guard_results.results | selectattr('r42_network_guard.digest', 'defined') | list }}",
                  "loop_control": {"loop_var": "r42_guard_result"}, "no_log": True},
                 {"name": "Refuse guests created or moved after review", "ansible.builtin.assert": {"that": [
