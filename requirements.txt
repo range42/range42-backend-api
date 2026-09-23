@@ -1,5 +1,5 @@
 # Ansible
-ansible-core==2.19.1
+ansible-core==2.21.4
 ansible-runner==2.4.1
 
 # SSH
