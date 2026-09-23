@@ -80,9 +80,16 @@ async def run_preflight(deployment_id: str,
                 host and host.protected_vmids_override_json
             ) else None
             report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
-            report.checks.extend(await check_scenario_networks(scenario.playbook.parent, host, scope=scope))
-            report.checks.extend(await check_scenario_resources(scenario.playbook.parent, host,
-                                                               deployment_id=dep.id, scope=scope))
+            if scenario.native:
+                report.checks.append(PreflightCheck(check="native_context", result="pass",
+                    detail=f"Existing Range42 context: {scenario.context.label}"))
+                report.checks.append(PreflightCheck(check="native_workflow", result="warn",
+                    detail="This executes the complete saved native workflow, including its template, network and custom stages. "
+                           "Declared VM IDs are not a complete list of affected resources. Generated-scenario capacity and ownership checks do not apply."))
+            else:
+                report.checks.extend(await check_scenario_networks(scenario.playbook.parent, host, scope=scope))
+                report.checks.extend(await check_scenario_resources(scenario.playbook.parent, host,
+                                                                   deployment_id=dep.id, scope=scope))
         except Range42Error as exc:
             report.checks.append(PreflightCheck(
                 check="project_scenario", result="block", code=exc.code,

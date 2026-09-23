@@ -43,7 +43,7 @@ from app.core.redaction import (
 )
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
-from app.core.ssh_agent import unlock_workspace_keys
+from app.core.ssh_agent import unlock_workspace_keys, _decrypt_vault
 from app.core.attempt_cleanup import cleanup_attempt_credentials, record_attempt_cleanup
 from app.utils.checks_playbooks import resolve_scenarios_playbook
 
@@ -68,21 +68,43 @@ def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
     return resolve_scenarios_playbook(scenario_label, playbooks_dir_type="www_app")
 
 
+def resolve_attempt_playbook(scenario_label: str, scope: str) -> Path:
+    main = _resolve_playbook_for_scenario(scenario_label)
+    if scope == "full":
+        return main
+    operation = scope
+    if scope.startswith("rollback_team_"):
+        operation = "rollback_team"
+    allowed = {"failed_teams", "team_reset", "teardown", "rollback_all", "rollback_team",
+               "rollback_shared", "snapshot_all", "snapshot_team", "snapshot_shared"}
+    candidate = main.with_name(f"{operation}.yml") if operation in allowed else None
+    if candidate is None or not candidate.is_file() or candidate.resolve().parent != main.parent:
+        raise Range42Error(code="OPERATION_UNSUPPORTED", status=409,
+                           message=f"Scenario {scenario_label} does not implement {scope}")
+    return candidate
+
+
 async def start_attempt(session: AsyncSession, *, attempt: Attempt,
                         runner: RunnerProtocol | None = None) -> None:
     task = asyncio.current_task()
-    track_attempt(attempt.id, task)
+    attempt_id = attempt.id
+    track_attempt(attempt_id, task)
     try:
         dep = await session.get(Deployment, attempt.deployment_id)
         validate_concrete_scope(dep, attempt.scope)
-        if dep.project_sha and attempt.scope in ("full", "runtime"):
+        if dep.project_sha and (dep.native or attempt.scope in ("full", "runtime")):
             root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
             with ProvisioningLock(root / ".locks") as lock:
                 await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
         else:
             await _start_attempt(session, attempt=attempt, runner=runner)
+    except Exception as exc:
+        await session.rollback()
+        await finish_attempt(attempt_id=attempt_id, rc=None,
+                             error_code=exc.code if isinstance(exc, Range42Error) else "ATTEMPT_START_FAILED")
+        raise
     finally:
-        untrack_attempt(attempt.id, task)
+        untrack_attempt(attempt_id, task)
 
 
 async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
@@ -98,12 +120,6 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         select(Deployment).where(Deployment.id == attempt.deployment_id))
     ).scalar_one()
     validate_concrete_scope(dep, attempt.scope)
-    if attempt.scope != "full" and not dep.project_sha:
-        raise Range42Error(
-            code="PROJECT_SCENARIO_SCOPE_UNSUPPORTED",
-            error="unsupported_scope",
-            message="This operation requires a pinned concrete scenario with an explicit entrypoint",
-        )
     ws = Path(dep.workspace_path)
     events_jsonl = ws / "events.jsonl"
     redactions_jsonl = ws / "redactions.jsonl"
@@ -119,6 +135,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     # from T2-T4) can populate project/, env/cmdline, env/envvars from it.
     scenario = None
     runtime_run = None
+    native_run = None
     if dep.project_sha:
         scenario = await prepare_project_scenario(
             session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
@@ -131,7 +148,14 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         vmid_check = check_vmids(scenario.vmids, host_overrides=overrides)
         if vmid_check.result == "block":
             raise PreflightBlockedError(message=vmid_check.detail)
-        if attempt.scope == "runtime":
+        if scenario.native:
+            from app.core.native_execution import prepare_native_run
+            native = scenario.native
+            native_run = prepare_native_run(scenario.project_root, native["descriptor"], scenario.context,
+                scope=attempt.scope, features=native.get("features", {}), parameters=native.get("parameters", {}),
+                artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout")
+            playbook_path = scenario.playbook
+        elif attempt.scope == "runtime":
             from app.core.runtime_runner import prepare_runtime_run
             runtime_run = await prepare_runtime_run(dep, attempt, target_host, scenario, artifact_dir)
             playbook_path = runtime_run.playbook
@@ -148,9 +172,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 raise PreflightBlockedError(message=blocked.detail)
             playbook_path = scenario.playbook
     else:
-        playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
+        playbook_path = resolve_attempt_playbook(dep.scenario_label, attempt.scope)
 
-    if scenario is not None:
+    if scenario is not None and not scenario.native:
         # Expiring draft leases cannot authorize execution or release a
         # deployment's assignments. Claim/check before SSH or runner launch.
         await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
@@ -177,7 +201,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     envvars.update(ssh_controlmaster_env(deployment_id=dep.id))
     if provisioning_fd is not None:
         envvars["RANGE42_PROVISIONING_LOCK_FD"] = str(provisioning_fd)
-    vault_pass = ws / "secrets" / "vault_pass.txt"
+    vault_pass = (scenario.context.workspace if native_run else ws) / "secrets" / "vault_pass.txt"
     if vault_pass.exists():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault_pass)
 
@@ -192,6 +216,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         "team_count": dep.team_count or 1,
     }
 
+    if not dep.project_sha and attempt.operation and attempt.operation.get("kind") == "legacy":
+        extravars.update(attempt.operation.get("variables", {}))
+
     # Build the tainted-string set for substring redaction. Always includes
     # the vault password and source credentials used for the pinned checkout.
     tainted: set[str] = set()
@@ -201,7 +228,23 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         except OSError:
             pass
 
-    if scenario is not None:
+    if native_run:
+        extravars.pop("r42_playbook_path", None)
+        extravars["r42_native_command"] = native_run.command
+        # Native Vault/SSH inputs belong to the selected context. Do not replace
+        # them with credentials synthesized for generated projects.
+        vault_values = await asyncio.to_thread(_decrypt_vault, scenario.context.workspace / "secrets/default_vault.yml", vault_pass)
+        def strings(value):
+            if isinstance(value, dict):
+                for item in value.values():
+                    yield from strings(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from strings(item)
+            elif isinstance(value, str) and len(value) >= 4:
+                yield value
+        tainted.update(strings(vault_values))
+    elif scenario is not None:
         runtime_vars = target_runtime_variables(target_host, ws)
         extravars.update(runtime_vars)
         if attempt.scope == "full":
@@ -214,13 +257,13 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
         # Custom playbooks may use this to keep run output out of the pinned tree.
         extravars["r42_workspace_dir"] = str(ws)
-        if scenario.checkout_credential:
-            from urllib.parse import quote
-            tainted.update((scenario.checkout_credential, quote(scenario.checkout_credential, safe="")))
     else:
         # Legacy path: pre-rendered inventory (e.g. demo_lab) lives under
         # <ws>/inventory/; do not clone or generate anything.
         extravars["r42_inventory_dir"] = str(ws / "inventory")
+    if scenario and scenario.checkout_credential:
+        from urllib.parse import quote
+        tainted.update((scenario.checkout_credential, quote(scenario.checkout_credential, safe="")))
 
     # Unlock the workspace's passphrase-protected SSH keys into a dedicated
     # ssh-agent (there is none in the container) so ansible-runner can reach the
@@ -233,7 +276,13 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     # unlocked private keys with nothing to reap it. The only remaining window
     # is runner.start() itself, closed below; after that _run()'s finally owns it.
     ssh_agent = None
-    if vault_pass.exists():
+    if native_run:
+        from app.core.ssh_agent import _start_agent
+        # range42-context use loads the selected context's keys. Give it an
+        # owned agent so it cannot clear the API operator's ambient agent.
+        ssh_agent = _start_agent(ws)
+        envvars.update(ssh_agent.env)
+    elif vault_pass.exists():
         ssh_agent = unlock_workspace_keys(ws, vault_pass)
         if ssh_agent is not None:
             envvars.update(ssh_agent.env)
@@ -256,7 +305,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             json.dump(sorted(value for value in tainted if value), stream)
             stream.flush()
             os.fsync(stream.fileno())
-        if scenario is not None:
+        if scenario is not None and not scenario.native:
             runtime_vault = prepare_runtime_vault(ws)
         record_attempt_cleanup(artifact_dir, ssh_agent=ssh_agent, runtime_vault=runtime_vault)
         if runtime_run is not None:
@@ -318,7 +367,11 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         try:
             rc = await handle.wait()
             stop.set()
-            await asyncio.shield(task_watch)
+            stream_error = None
+            try:
+                await asyncio.shield(task_watch)
+            except Exception:
+                stream_error = "EVENT_STREAM_FAILED"
             await asyncio.shield(task_lock)
             # Release shared runtime files before the lock permits another run.
             cleanup()
@@ -326,7 +379,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             if runtime_run is not None:
                 from app.core.runtime_completion import observe_runtime_completion
                 runtime_result = await observe_runtime_completion(attempt_id, writer)
-            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, **runtime_result)
+            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, warning_code=stream_error, **runtime_result)
             cursor = writer.append({"event_type": "attempt_end",
                                     "payload": {"terminal_state": terminal_state, "rc": rc}},
                                    attempt_id=attempt_id, deployment_id=deployment_id)

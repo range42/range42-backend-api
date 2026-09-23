@@ -115,7 +115,8 @@ def cleanup_attempt_credentials(workspace: Path, artifact: Path) -> None:
         cleanup_runtime_vault(RuntimeVaultPlaceholder(
             workspace / "secrets/default_vault.yml", vault["device"], vault["inode"],
         ))
-    for relative in ("env/envvars", "env/extravars", "command", "redaction.json"):
+    for relative in ("env/envvars", "env/extravars", "command", "redaction.json",
+                     "native-context/prepare-vars.json", "native-context/variables.json"):
         shred_envvars(artifact / relative)
     # Ownership metadata holds no credentials. Unlinking also safely removes
     # a replaced symlink without overwriting a file outside this attempt.

@@ -60,6 +60,7 @@ VIEWER_READS = frozenset({
     "/v1/auth/me", "/v1/health", "/v1/health/ready", "/v1/infra/mirror/health",
     "/v1/catalog/sources", "/v1/catalog/entries", "/v1/catalog/entries/{source_id}/{path}",
     "/v1/projects/", "/v1/projects/{project_id}",
+    "/v1/contexts", "/v1/projects/{project_id}/native-scenario",
     "/v1/deployments/", "/v1/deployments/{deployment_id}",
     *[f"/v1/deployments/{{deployment_id}}/{suffix}" for suffix in (
         "allocations", "attempts", "events/download", "events", "preflight", "snapshots", "timings", "runtime", "snapshot-sets")],

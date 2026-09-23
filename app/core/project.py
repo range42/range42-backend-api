@@ -31,6 +31,8 @@ class ProjectScenario:
     inventory: Path
     vmids: list[int]
     checkout_credential: str | None = field(default=None, repr=False, compare=False)
+    native: dict | None = None
+    context: object | None = field(default=None, repr=False)
 
 
 def resolve_project_scenario(
