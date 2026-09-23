@@ -1,26 +1,22 @@
-# Runner migration: in-process to detached CLI subprocess
+# Runner migration: detached execution
 
-v0 used the in-process `ansible_runner.interface.run()` (blocking) and
-`ansible_runner.interface.start()` (background thread in the current
-process). The latter dies with FastAPI. v1 spawns:
+The v1 runtime launches `ansible-runner run` in an independent process session.
+The private directory is `<workspace>/runner/<attempt-id>`; `--artifact-dir`
+points to its parent and `--ident` is the attempt ID. Return codes, process
+identity, and `job_events` therefore remain under that attempt's directory.
+The backend observes the process to completion and writes redacted events to
+`<workspace>/events.jsonl`.
 
-```
-ansible-runner start <private_data_dir>
-```
+See [runner lifecycle persistence](runner-lifecycle.md) for lock ownership,
+credential cleanup, cancellation, and restart recovery. Saved authored
+scenarios use the same lifecycle through [existing Range42 contexts](native-scenarios.md).
 
-via `asyncio.create_subprocess_exec(..., start_new_session=True)`. The
-subprocess daemonises itself, writes `pid`, `status`, `rc` under
-`<private_data_dir>/`, and streams JSON event files to
-`<private_data_dir>/job_events/`. FastAPI reads from `events.jsonl`
-(written by the EventsWatcher); it never reads ansible-runner's files
-directly from the route layer.
-
-On FastAPI restart, `app/core/orphans.py:scan_workspaces()` walks
-`~/range42.config/*/runner/pid` and classifies each:
-
-- Alive (`kill -0` succeeds): re-adopt as observer; spawn a new
-  EventsWatcher against the existing artifact dir.
-- Dead + last events.jsonl line older than 60s: mark attempt
-  state=`unknown` per spec section 12. Never silently fail -- `unknown`
-  blocks teardown until human-resolved.
-- Dead + fresh last event: `completed_unflushed` -- flush and reclassify.
+Legacy installed scenarios retain their explicit operation playbooks:
+`team_reset.yml`, `failed_teams.yml`, `teardown.yml`, and the scoped
+`snapshot_{all,team,shared}.yml` / `rollback_{all,team,shared}.yml` files.
+Unsupported actions return `409 OPERATION_UNSUPPORTED`; an action never falls
+back to the full provisioning playbook. Server routes provide the requested
+team ID, snapshot name, or validated snapshot records as runner variables.
+Snapshot, rollback, reset, and teardown use the same attempt reservation as full
+provisioning, so they cannot replace active work. Teardown preserves inventory,
+credentials, and audit logs. `_universal` remains retired.

@@ -481,6 +481,10 @@ outcome. Events pass through the redaction pipeline with replay deduplication.
 Full provisioning shares a lock inherited by the runner, including across API
 crashes. Graceful API shutdown detaches local observation while preserving the
 runner and its workspace-owned credentials; explicit cancellation signals it.
+Legacy scoped actions require their own operation playbook and use the same
+attempt reservation; unsupported actions return `409 OPERATION_UNSUPPORTED`.
+Teardown preserves workspace inventory, credentials, and logs. See the
+[operation contract](docs/runner-migration.md).
 
 ## Events + SSE
 

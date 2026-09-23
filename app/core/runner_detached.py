@@ -150,10 +150,11 @@ class _SubprocessHandle:
                     os.kill(self._proc.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                await self._proc.wait()
 
 
 async def signal_running_attempt(workspace_path: str | Path, *,
-                                 signal: str = "SIGTERM") -> bool:
+                                 signal: str = "SIGTERM", attempt_id: str | None = None) -> bool:
     """Signal the detached ansible-runner subprocess for a workspace.
 
     Reads the per-attempt pidfile at ``<workspace>/runner/<attempt>/pid``
@@ -163,18 +164,15 @@ async def signal_running_attempt(workspace_path: str | Path, *,
     ``terminal_state=cancelled``.
     """
     ws = Path(workspace_path)
-    pid_candidates = [
-        ws / "runner" / "pid",
-        ws / "runner" / "artifacts" / "pid",
-    ]
-    runner_dir = ws / "runner"
-    if runner_dir.is_dir():
-        pid_candidates.extend(sorted(runner_dir.glob("*/pid"), reverse=True))
-    # Fall back: look inside any artifact dir.
-    artifacts_dir = ws / "runner" / "artifacts"
-    if artifacts_dir.exists():
-        for child in artifacts_dir.iterdir():
-            pid_candidates.append(child / "pid")
+    if attempt_id is not None:
+        if not attempt_id or Path(attempt_id).name != attempt_id or attempt_id in {".", ".."}:
+            return False
+        pid_candidates = [ws / "runner" / attempt_id / "pid"]
+    else:
+        # Compatibility for callers without a persisted attempt identity.
+        pid_candidates = [ws / "runner" / "pid", ws / "runner" / "artifacts" / "pid"]
+        pid_candidates.extend(sorted((ws / "runner").glob("*/pid"), reverse=True))
+        pid_candidates.extend(sorted((ws / "runner/artifacts").glob("*/pid"), reverse=True))
     sig = getattr(__import__("signal"), signal, None)
     if sig is None:
         logger.warning("unknown_signal", signal=signal)

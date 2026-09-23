@@ -68,10 +68,27 @@ def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
     return resolve_scenarios_playbook(scenario_label, playbooks_dir_type="www_app")
 
 
+def resolve_attempt_playbook(scenario_label: str, scope: str) -> Path:
+    main = _resolve_playbook_for_scenario(scenario_label)
+    if scope == "full":
+        return main
+    operation = scope
+    if scope.startswith("rollback_team_"):
+        operation = "rollback_team"
+    allowed = {"failed_teams", "team_reset", "teardown", "rollback_all", "rollback_team",
+               "rollback_shared", "snapshot_all", "snapshot_team", "snapshot_shared"}
+    candidate = main.with_name(f"{operation}.yml") if operation in allowed else None
+    if candidate is None or not candidate.is_file() or candidate.resolve().parent != main.parent:
+        raise Range42Error(code="OPERATION_UNSUPPORTED", status=409,
+                           message=f"Scenario {scenario_label} does not implement {scope}")
+    return candidate
+
+
 async def start_attempt(session: AsyncSession, *, attempt: Attempt,
                         runner: RunnerProtocol | None = None) -> None:
     task = asyncio.current_task()
-    track_attempt(attempt.id, task)
+    attempt_id = attempt.id
+    track_attempt(attempt_id, task)
     try:
         dep = await session.get(Deployment, attempt.deployment_id)
         validate_concrete_scope(dep, attempt.scope)
@@ -81,8 +98,13 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
                 await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
         else:
             await _start_attempt(session, attempt=attempt, runner=runner)
+    except Exception as exc:
+        await session.rollback()
+        await finish_attempt(attempt_id=attempt_id, rc=None,
+                             error_code=exc.code if isinstance(exc, Range42Error) else "ATTEMPT_START_FAILED")
+        raise
     finally:
-        untrack_attempt(attempt.id, task)
+        untrack_attempt(attempt_id, task)
 
 
 async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
@@ -98,12 +120,6 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         select(Deployment).where(Deployment.id == attempt.deployment_id))
     ).scalar_one()
     validate_concrete_scope(dep, attempt.scope)
-    if attempt.scope != "full" and not dep.project_sha:
-        raise Range42Error(
-            code="PROJECT_SCENARIO_SCOPE_UNSUPPORTED",
-            error="unsupported_scope",
-            message="This operation requires a pinned concrete scenario with an explicit entrypoint",
-        )
     ws = Path(dep.workspace_path)
     events_jsonl = ws / "events.jsonl"
     redactions_jsonl = ws / "redactions.jsonl"
@@ -156,7 +172,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 raise PreflightBlockedError(message=blocked.detail)
             playbook_path = scenario.playbook
     else:
-        playbook_path = _resolve_playbook_for_scenario(dep.scenario_label)
+        playbook_path = resolve_attempt_playbook(dep.scenario_label, attempt.scope)
 
     if scenario is not None and not scenario.native:
         # Expiring draft leases cannot authorize execution or release a
@@ -199,6 +215,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         # (set_fact on localhost is not visible to the proxmox-cli plays).
         "team_count": dep.team_count or 1,
     }
+
+    if not dep.project_sha and attempt.operation and attempt.operation.get("kind") == "legacy":
+        extravars.update(attempt.operation.get("variables", {}))
 
     # Build the tainted-string set for substring redaction. Always includes
     # the vault password and source credentials used for the pinned checkout.
@@ -348,7 +367,11 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         try:
             rc = await handle.wait()
             stop.set()
-            await asyncio.shield(task_watch)
+            stream_error = None
+            try:
+                await asyncio.shield(task_watch)
+            except Exception:
+                stream_error = "EVENT_STREAM_FAILED"
             await asyncio.shield(task_lock)
             # Release shared runtime files before the lock permits another run.
             cleanup()
@@ -356,7 +379,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             if runtime_run is not None:
                 from app.core.runtime_completion import observe_runtime_completion
                 runtime_result = await observe_runtime_completion(attempt_id, writer)
-            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, **runtime_result)
+            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, warning_code=stream_error, **runtime_result)
             cursor = writer.append({"event_type": "attempt_end",
                                     "payload": {"terminal_state": terminal_state, "rc": rc}},
                                    attempt_id=attempt_id, deployment_id=deployment_id)

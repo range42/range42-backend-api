@@ -9,6 +9,7 @@ Refuses non-local filesystems (nfs, cifs, fuse) with WORKSPACE_NON_LOCAL_FS.
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 from dataclasses import dataclass
@@ -123,6 +124,29 @@ def _template_files(template: Path) -> dict[Path, bytes]:
     return result
 
 
+def safe_workspace_path(root: Path, codename: str, scenario_label: str) -> Path:
+    """Validate names and containment before touching deployment files."""
+    for value in (codename, scenario_label):
+        if not re.fullmatch(r"[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)*", value):
+            raise WorkspaceError("WORKSPACE_PATH_INVALID", "Invalid workspace name")
+    if '/' in codename or '/' in scenario_label:
+        raise WorkspaceError("WORKSPACE_PATH_INVALID", "Workspace name must be a single directory")
+    root = root.resolve()
+    target = root / f"{codename}-{scenario_label}"
+    if not target.resolve().is_relative_to(root):
+        raise WorkspaceError("WORKSPACE_PATH_INVALID", "Workspace escapes configured root")
+    # Reject existing symlinks inside the workspace as well as in its parents.
+    for part in (target, *target.parents):
+        if part == root:
+            break
+        if part.is_symlink():
+            raise WorkspaceError("WORKSPACE_PATH_INVALID", "Workspace contains a symlink")
+    for sub in ("inventory", "secrets", "ssh_keys", "bin", "runner", "events.jsonl", "redactions.jsonl"):
+        if (target / sub).is_symlink():
+            raise WorkspaceError("WORKSPACE_PATH_INVALID", "Workspace contains a symlink")
+    return target
+
+
 @dataclass
 class Workspace:
     path: Path
@@ -134,6 +158,7 @@ class Workspace:
                workspace_root: Path | None = None,
                inherit_template: bool = True) -> "Workspace":
         root = Path(workspace_root or settings.workspace_root)
+        target = safe_workspace_path(root, codename, scenario_label)
         root.mkdir(parents=True, exist_ok=True)
         fs = detect_fs_type(root)
         if not is_local_fs(fs):
@@ -144,7 +169,6 @@ class Workspace:
         dirname = f"{codename}-{scenario_label}"
         if Path(dirname).name != dirname:
             raise WorkspaceError("WORKSPACE_PATH_INVALID", "Workspace name must be a single directory")
-        target = root / dirname
         subdirs = ("inventory", "secrets", "ssh_keys", "bin", "runner")
         for path in (target, *(target / name for name in subdirs)):
             if path.is_symlink() or (path.exists() and not path.is_dir()):
@@ -226,7 +250,7 @@ class Workspace:
     def resolve(cls, *, codename: str, scenario_label: str,
                 workspace_root: Path | None = None) -> "Workspace":
         root = Path(workspace_root or settings.workspace_root)
-        return cls(path=root / f"{codename}-{scenario_label}",
+        return cls(path=safe_workspace_path(root, codename, scenario_label),
                    codename=codename, scenario_label=scenario_label)
 
 

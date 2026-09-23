@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 
 
 async def _boot(tmp_path, monkeypatch):
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     from importlib import reload

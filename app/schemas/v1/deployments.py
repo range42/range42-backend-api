@@ -23,7 +23,7 @@ class NativeDeployment(BaseModel):
 
 class DeploymentCreate(BaseModel):
     codename: str = Field(pattern=r"^[A-Z][A-Z0-9_-]{1,31}$")
-    scenario_label: str = Field(min_length=1, max_length=128)
+    scenario_label: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)*$")
     project_id: str
     target_host_id: str
     team_count: int = Field(ge=1, le=64)

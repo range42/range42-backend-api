@@ -120,6 +120,7 @@ class EventsWatcher:
     async def run(self) -> None:
         self.job_events_dir.mkdir(parents=True, exist_ok=True)
         while True:
+            stopped_before_scan = self.stop.is_set()
             # A final scan is required after the process exits; the last event
             # files can arrive between a polling scan and stop.set().
             for p in sorted(self.job_events_dir.glob("*.json"), key=lambda p: (
@@ -151,7 +152,7 @@ class EventsWatcher:
             if self.on_progress is not None and self._cursor > self._reported_cursor:
                 await self.on_progress(self._cursor)
                 self._reported_cursor = self._cursor
-            if self.stop.is_set():
+            if stopped_before_scan:
                 break
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.poll_ms / 1000)

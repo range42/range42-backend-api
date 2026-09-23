@@ -4,6 +4,12 @@ from httpx import ASGITransport, AsyncClient
 
 
 async def _boot(tmp_path, monkeypatch):
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
+    pb = tmp_path / "playbooks/scenarios/x"
+    pb.mkdir(parents=True)
+    for name in ["main", "teardown"]:
+        (pb / f"{name}.yml").write_text("- hosts: localhost\n  tasks: []\n")
+    monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(tmp_path / "playbooks"))
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
     monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path))
     from importlib import reload
@@ -62,15 +68,13 @@ async def test_teardown_without_concrete_entrypoint_fails_and_preserves_workspac
     try:
         ws = await _seed(dbmod, tmp_path, codename="AURORA")
         assert ws.exists()
+        (tmp_path / "playbooks/scenarios/x/teardown.yml").unlink()
         async with AsyncClient(transport=ASGITransport(app=app),
                                base_url="http://t") as c:
             r = await c.request("DELETE", "/v1/deployments/dep-1",
                                 json={"confirm_codename": "AURORA"})
-            assert r.status_code == 202, r.text
-            att = r.json()
-            assert att["scope"] == "teardown"
-            assert att["state"] == "failed"
-            assert att["sub_reason"] == "PROJECT_SCENARIO_SCOPE_UNSUPPORTED"
+            assert r.status_code == 409, r.text
+            assert r.json()["code"] == "OPERATION_UNSUPPORTED"
             assert ws.exists()
     finally:
         await dbmod.dispose_engine()

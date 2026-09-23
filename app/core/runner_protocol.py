@@ -1,7 +1,7 @@
 """Protocol for invoking ansible-runner.
 
 Two implementations:
-  - RealRunner (Task 20): spawns `ansible-runner start` via asyncio.create_subprocess_exec.
+  - RealRunner (Task 20): spawns `ansible-runner run` via asyncio.create_subprocess_exec.
   - FakeRunner (tests/fixtures): emits a canned event list synchronously.
 
 Both produce a RunnerHandle with an async event stream, pid, rc, and kill().

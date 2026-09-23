@@ -107,6 +107,11 @@ def untrack_attempt(attempt_id: str, task: asyncio.Task) -> None:
         _TASKS.pop(attempt_id, None)
 
 
+def attempt_is_tracked(attempt_id: str) -> bool:
+    task = _TASKS.get(attempt_id)
+    return task is not None and not task.done()
+
+
 async def stop_observers() -> None:
     tasks = list(_TASKS.values())
     for task in tasks:
@@ -241,8 +246,8 @@ async def reconcile_once() -> list[ReconcileResult]:
         classification = "alive" if alive else "completed_unflushed" if rc is not None else "unknown"
         results.append(ReconcileResult(Path(dep.workspace_path), pid, classification, None))
         if alive:
-            if attempt.state == "cancelled":
-                await signal_running_attempt(dep.workspace_path)
+            if attempt.state == "cancelled" or attempt.sub_reason == "cancel_requested":
+                await signal_running_attempt(dep.workspace_path, attempt_id=attempt.id)
             async with get_session_factory()() as session:
                 lock = await session.get(WorkspaceLock, dep.id)
                 if lock is None:
