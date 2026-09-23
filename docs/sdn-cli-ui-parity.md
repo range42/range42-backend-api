@@ -1,5 +1,10 @@
 # SDN CLI, API and UI parity audit — 2026-09-10
 
+Historical source audit. The 22 September native contract and current application
+behavior are documented in [native SDN integration](native-sdn-integration.md)
+and [runtime controls](runtime-controls.md); the older revisions below do not
+describe the incoming native release's preservation semantics.
+
 This is a source audit, not a claim that every operation has been exercised on the shared hypervisor. Remote branch refs were fetched without resetting integration worktrees:
 
 | Repository / branch | Reviewed revision |

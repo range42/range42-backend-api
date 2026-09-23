@@ -40,6 +40,29 @@ def test_storage_map_is_manifest_derived_and_legacy_inputs_stay_unchanged(tmp_pa
     assert storage_runtime_variables(tmp_path) == {}
 
 
+@pytest.mark.parametrize('arm,sources', [(False, None), (True, ['203.0.113.7/32']), (False, [])])
+def test_native_firewall_preferences_pin_arming_and_exact_networks_without_overriding_inherited_sources(tmp_path, monkeypatch, arm, sources):
+    from app.core import runtime_operations
+    from app.core.scenario_preferences import storage_runtime_variables
+    monkeypatch.setattr(runtime_operations, 'operation_profile', lambda kind: {'contract': 'native-sdn-20260921'})
+    value = write_manifest(tmp_path)
+    for vm in value['vms']:
+        for nic in vm['nics']:
+            nic['prefix'] = 23
+    (tmp_path / 'manifest/scenario_vms.json').write_text(json.dumps(value))
+    (tmp_path / 'manifest/scenario_firewall.json').write_text(json.dumps({
+        'version': 1, 'arm_vms': arm, 'prepare_management_access': False, 'ssh_sources': sources,
+    }))
+    variables = storage_runtime_variables(tmp_path)
+    assert variables['FIREWALL_ARM_VMS'] == ('YES' if arm else 'NO')
+    assert variables['r42_fw_prepare_management_access'] is False
+    assert variables['r42_fw_scenario_networks'] == ['10.42.0.0/23', '10.42.2.0/23']
+    if sources is None:
+        assert 'range42_fw_vm_ssh_sources' not in variables
+    else:
+        assert variables['range42_fw_vm_ssh_sources'] == sources
+
+
 def test_storage_variable_injection_is_rejected_before_runner_setup(tmp_path):
     from app.core.errors import Range42Error
     from app.core.scenario_preferences import storage_runtime_variables

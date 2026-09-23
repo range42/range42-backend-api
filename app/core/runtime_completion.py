@@ -20,6 +20,11 @@ def assess_runtime_result(request: dict, plan: dict, state: dict, events) -> dic
         count = None
         for event in events:
             response = event.get("payload", {}).get("res", {})
+            if plan.get("contract") == "native-sdn-20260921":
+                from app.core.native_sdn import native_snat_count
+                if "r42_native_snat_observation" in response:
+                    count = native_snat_count(response["r42_native_snat_observation"], plan["subnet"], state.get("node_name"))
+                continue
             sample = response.get("network_delete_extra_snat_rules") or response.get("ansible_facts", {}).get("network_delete_extra_snat_rules")
             if (isinstance(sample, dict) and sample.get("subnet_cidr") == plan["subnet"]
                     and sample.get("snat_host") == "r42-proxmox-cli"

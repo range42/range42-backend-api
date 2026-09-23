@@ -7,9 +7,11 @@ import pytest
 from tests.core.test_scenario_networks import target
 
 
-async def check(tmp_path, data, *, scope="full", marker="range42-deployment:dep-1", occupied=False, planned=None):
+async def check(tmp_path, data, *, scope="full", marker="range42-deployment:dep-1", occupied=False, planned=None, firewall=None):
     from app.core.scenario_resources import check_scenario_resources
     (tmp_path / "manifest").mkdir()
+    if firewall is not None:
+        (tmp_path / "manifest/scenario_firewall.json").write_text(json.dumps(firewall))
     (tmp_path / "manifest/scenario_vms.json").write_text(json.dumps({"vms": [
         {"vm_id": 3191, "vm_name": "r42-ui-smoke", "template_vm_id": 9901, **(planned or {})},
     ]}))
@@ -46,6 +48,41 @@ def template(**overrides):
 
 def vm(**overrides):
     return {"vmid": 3191, "node": "pve01", "name": "r42-ui-smoke", "type": "qemu", **overrides}
+
+
+@pytest.mark.asyncio
+async def test_host_management_rules_require_explicit_installation_authority(tmp_path, monkeypatch):
+    from app.core import runtime_operations
+    monkeypatch.setattr(runtime_operations, "operation_profile", lambda kind: {"contract": "native-sdn-20260921"})
+    monkeypatch.delenv("RANGE42_SCENARIO_MANAGEMENT_ACCESS", raising=False)
+    result, requests = await check(tmp_path, [template()], firewall={
+        "version": 1, "prepare_management_access": True, "arm_vms": False, "ssh_sources": None,
+    })
+    assert result[-1].code == "FIREWALL_MANAGEMENT_NOT_AUTHORIZED"
+    assert not requests
+
+
+@pytest.mark.asyncio
+async def test_native_firewall_stages_require_the_recognized_contract(tmp_path, monkeypatch):
+    from app.core import runtime_operations
+    monkeypatch.setattr(runtime_operations, "operation_profile", lambda kind: {"operations": ["vm_firewall"]})
+    result, requests = await check(tmp_path, [template()], firewall={
+        "version": 1, "prepare_management_access": False, "arm_vms": False, "ssh_sources": None,
+    })
+    assert result[-1].code == "FIREWALL_RUNTIME_UNSUPPORTED"
+    assert not requests
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sources", [["203.0.113.7/24"], ["{{ secret }}"], "203.0.113.7/32"])
+async def test_unsafe_firewall_preferences_block_before_pve(tmp_path, monkeypatch, sources):
+    from app.core import runtime_operations
+    monkeypatch.setattr(runtime_operations, "operation_profile", lambda kind: {"contract": "native-sdn-20260921"})
+    result, requests = await check(tmp_path, [template()], firewall={
+        "version": 1, "prepare_management_access": False, "arm_vms": False, "ssh_sources": sources,
+    })
+    assert result[-1].code == "FIREWALL_POLICY_INVALID"
+    assert not requests
 
 
 @pytest.mark.asyncio

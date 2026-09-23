@@ -20,12 +20,26 @@ jobs:
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
       - run: ruff check app/ tests/
+      - name: Checkout reviewed native playbooks contract
+        uses: actions/checkout@v6
+        with:
+          repository: range42/range42-playbooks
+          ref: 6dcf31b5b53600f41be1ce7553d489dba4ad803b
+          path: runtime-contract/playbooks
+      - name: Checkout reviewed native controller contract
+        uses: actions/checkout@v6
+        with:
+          repository: range42/range42-ansible_roles-proxmox_controller
+          ref: 617b57cddecbe4ddedd1f72becc7023bbcdf2114
+          path: runtime-contract/controller
       # tests/overlay runs the TS/Python parity vectors, which live in the
       # sibling range42-deployer-ui checkout — schema-and-operators.yml owns
       # that job and guarantees the checkout. Collecting them here would fail,
       # since tests/overlay/conftest.py deliberately fails rather than skips
       # when the vectors are missing and CI is set.
       - run: pytest --tb=short -q --ignore=tests/overlay
+        env:
+          RANGE42_NATIVE_CONTRACT_FIXTURE: ${{ github.workspace }}/runtime-contract
 
       # The committed spec bootstraps the Kong gateway config, but nothing
       # regenerated or verified it — it had rotted back to the pre-v1 API

@@ -24,9 +24,10 @@ unused. The endpoint performs no Proxmox writes.
 
 Booleans must be JSON booleans. Undeclared fields, arbitrary bundle paths,
 toggle operations, and host/datacenter firewall actions are rejected. NAT
-acknowledgment is required because SDN apply is cluster-wide and the upstream
-bundle reconciles surplus live SNAT rules for all declared subnets on the host.
-Other subnets retain their own declared desired state.
+acknowledgment is required because SDN apply is cluster-wide. Under the reviewed
+native contract, the selected subnet takes the requested state and other subnets
+retain their prior live SNAT state. The older marker-based contract instead
+reconciles other subnets to their declarations. The UI describes the detected contract.
 
 Each accepted request becomes a normal durable attempt with `scope: runtime`.
 The ordinary attempt-create DTO cannot request that scope or supply operation
@@ -90,8 +91,24 @@ preserving older attempts.
 
 The installed release needs `RANGE42_BUNDLE_RUNTIME_MANIFEST` generated using
 the exact exported playbooks/controller/catalog/collections and Ansible paths;
-see [bundle attachments](bundle-attachments.md). Its playbooks must include
-`bundles/runtime-capabilities.json`. NAT additionally requires
+see [bundle attachments](bundle-attachments.md). The application recognizes the
+unchanged native playbooks `6dcf31b5b53600f41be1ce7553d489dba4ad803b` and controller
+`617b57cddecbe4ddedd1f72becc7023bbcdf2114` by the actual bundle and selected role
+tree digests (`native-sdn-20260921`). No new capability files in those repositories
+are required. The first role in Ansible's search path must match. Unknown or
+changed sources remain unavailable; a revision label alone is insufficient.
+
+Native NAT operations first read the selected node's POSTROUTING chain and refuse
+source-scoped rules other than the supported simple SNAT/MASQUERADE shapes.
+Negation, comments, extra predicates and source-scoped non-NAT jumps are refused
+before the composite. Source-free rules are outside the native sweep. This
+application guard limits the native source-only reconciliation to its supported
+inputs. External writers still require coordination. After the composite, a
+separate native list action supplies the node-bound NAT rule count; the native
+deletion count or its pre-apply read cannot alone establish completion.
+
+Legacy installations can still advertise `bundles/runtime-capabilities.json`.
+That NAT contract additionally requires
 `snat_reconciles_all_declared_subnets: true`. The first controller role selected
 by `ANSIBLE_ROLES_PATH` must also advertise `snat_rule_matching:
 exact_source_nat_target_v1` in its `runtime-capabilities.json`. That version
@@ -103,3 +120,9 @@ remain unverified. Read-only status remains available
 when runtime mutation capabilities are absent. A changed profile requires a
 new operation request; an already reserved operation cannot silently execute
 against another release.
+
+`GET /v1/proxmox/runtime-capabilities` is available to viewers and returns the
+verified contract, operation list, bootstrap feature list and whether this
+installation permits scenario management-rule preparation. Unavailable support
+is explicit and does not expose local source paths. See [native scenario
+integration](native-sdn-integration.md) for authoring and validation details.

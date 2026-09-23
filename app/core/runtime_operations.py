@@ -47,6 +47,11 @@ def _controller_exact_snat(profile: dict) -> bool:
 
 def operation_profile(kind: str) -> dict:
     profile, fingerprint = runtime_snapshot()
+    from app.core.native_sdn import native_contract
+    contract = native_contract(profile)
+    if contract and kind in ("vm_firewall", "scenario_firewall", "sdn_snat"):
+        return {"fingerprint": fingerprint, "dependencies": dependencies(profile), "contract": contract,
+                "operations": ["vm_firewall", "scenario_firewall", "sdn_snat"]}
     try:
         root = Path(profile["environment"]["RANGE42_BUNDLE_DIR"])
         marker = root / "runtime-capabilities.json"
