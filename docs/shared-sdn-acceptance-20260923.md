@@ -8,8 +8,8 @@ changed. The reviewed upstream native sources were installed unchanged.
 
 | Component | Revision |
 | --- | --- |
-| Backend API | `4e70f1358c7ef5dedab122e8443b3e6bf9abbe86` |
-| Deployer UI | `86e1499fce7cf1920d4d939f63c70072af7630df` |
+| Backend API | `d06d936bae89b6aed7599b1f28a0803a5e384568` |
+| Deployer UI | `13ad4fb248486b61d04a8ee6071e810684e21fd4` |
 | Playbooks | `6dcf31b5b53600f41be1ce7553d489dba4ad803b` |
 | Proxmox controller | `617b57cddecbe4ddedd1f72becc7023bbcdf2114` |
 | Core roles | `3ba5d6bd42c08c181cc7f726fb57be979fbd8f0f` |
@@ -21,8 +21,10 @@ Context code-base devkit reference: `ce77237201b43b6d5b14d1f76e1a91aba70dc0e3`
 (local development checkout: `61941035a9d51dd6394a6d19b06d24f68f3434b5`).
 Devkit was not executed in this API-owned workflow and is not qualified by this run.
 
-The managed backend update retained its credential files, schema
-`0008_audit_records`, read-only root, UID 1000 and existing state. The updater's
+The initial managed backend update retained its credential files, schema
+`0008_audit_records`, read-only root, UID 1000 and existing state. The final
+installation below applies the already merged native-context migration to
+`0009_native_contexts`, with the updater's database backup and credential checks. The updater's
 admission/drain, backup, readiness and rollback guards remained enabled. Before
 updating, the old installation record needed a metadata-only normalization of
 Docker's three DNS arrays from null to empty lists, after exact container/image,
@@ -186,3 +188,35 @@ The final served UI loaded the runtime report at 1280px and 390px without page
 errors or write requests; both panels fit their viewport. Shared report reads
 were slow during concurrent acceptance activity (one measured 83 seconds); this
 run verifies correctness, not a response-time target.
+
+## Integration with the newly merged dev branches
+
+The base workflow and saved-scenario PRs were merged into `dev` while acceptance
+was running. Their three remote branches per repository were verified as
+ancestors of `dev` and removed; redundant API #139 and UI #99 were closed.
+API #141 and UI #102 now target `dev`; their scoped successors remain #143 and
+#104. Current `dev` was merged into both remaining stacks without changing the
+other local worktrees. Environment contracts were preserved, the equivalent
+final-drain fixes reconciled, and OpenAPI regenerated.
+
+Integrated API `d06d936` passed 1,696 tests with five optional skips, Ruff, both
+CI workflows and all three real Docker smoke cases. Integrated UI `13ad4fb`
+passed 1,955 unit tests with 10 skips, migrated type checks, production build,
+the real-cache Chromium regression and CI. All four remaining SDN PRs are ready
+for review and have no merge conflicts.
+
+Those exact application revisions were then installed. API image:
+`sha256:152e0ab18ecb79bcaf366a4d63561d180229d99d281a9abd09dd32ef0994ee6b`.
+UI image:
+`sha256:190964a39067117cd355dd3ba2d7c8353e74362b893d89de2632fb1dc129ed3f`.
+API runtime fingerprint and credentials stayed unchanged. The UI image copy
+needed `COPY --chmod=644 config.json ...`: nginx could not read the prior private
+file mode. Both the public index and configuration now return 200 and match the
+expected bytes; backend URL/node configuration is unchanged.
+
+Native read-only attempt `8838ff4b04da43b2` succeeded on the integrated API.
+The integrated served UI again reviewed and emitted the 13 concrete scenario
+files without a write request or browser error. Final readiness, clean resource
+and credential cleanup checks passed. The earlier full guest lifecycle is
+qualified at its recorded revisions; the later integrated heads received these
+regression, packaging and read-only checks, without recreating the guests.
