@@ -82,6 +82,41 @@ async def test_attempt_teardown_requires_confirmation_before_reservation(tmp_pat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("vmid,override", [(100, None), (5000, "[[5000, 5005]]")])
+async def test_teardown_rejects_protected_manifest_before_runner_or_key_unlock(tmp_path, monkeypatch, vmid, override):
+    from app.core import deploy_trigger
+    from app.core.models import ProxmoxHost
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "1")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Protected teardown must be refused before unlocking keys or constructing a runner")
+
+    monkeypatch.setattr(deploy_trigger, "unlock_workspace_keys", forbidden)
+    monkeypatch.setattr(deploy_trigger, "DetachedRunner", forbidden)
+    try:
+        ws, _ = await seed_scenario(dbmod, tmp_path, vmids=(vmid,), extra_files={
+            "teardown.yml": "- hosts: guest\n  gather_facts: false\n  tasks: []\n",
+        })
+        async with dbmod.get_session_factory()() as session:
+            host = await session.get(ProxmoxHost, "h")
+            host.protected_vmids_override_json = override
+            await session.commit()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            dep = (await client.get("/v1/deployments/dep-1")).json()
+            response = await client.request("DELETE", "/v1/deployments/dep-1",
+                                            json={"confirm_codename": dep["codename"]})
+            assert response.status_code == 202, response.text
+            attempt = response.json()
+            assert attempt["state"] == "failed"
+            assert attempt["sub_reason"] == "PREFLIGHT_BLOCKED"
+            assert attempt["rc"] is None
+            assert ws.is_dir()
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("endpoint,payload", [
     ("teams/1/reset", {}), ("snapshot", {"scope": "all"}), ("rollback", {"scope": "all"}),
 ])
