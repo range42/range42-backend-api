@@ -1,16 +1,15 @@
-"""Global VMID allocation mutex + SSH ControlMaster namespace helpers.
+"""Legacy pure VMID scans and SSH ControlMaster namespace helpers.
 
-A single asyncio.Lock serialises the range scan so concurrent deploy
-workers cannot hand out the same VMID. Allocation scans upward from
-'start' skipping the union of 'reserved' and the protected ranges.
-
-Spec refs: §7 concurrency discipline, §8 concurrency primitives.
+The in-process lock only serializes scans of the caller's reserved set; it does
+not persist or own reservations. Durable authoring leases are implemented in
+allocation_reservations and exposed by the typed Proxmox reservation API.
 """
 from __future__ import annotations
 
 import asyncio
 import os
 from pathlib import Path
+import shlex
 
 from app.core.vmid_guard import DEFAULT_PROTECTED_RANGES
 
@@ -54,15 +53,18 @@ async def allocate_vmids_locked(**kwargs) -> list[int]:
 def ssh_controlmaster_env(
     *, deployment_id: str, home: Path | None = None
 ) -> dict[str, str]:
+    """Namespace connection reuse without overriding inventory host-key trust."""
     root = Path(home or os.path.expanduser("~")) / ".ssh" / "range42"
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"control-{deployment_id}-%r@%h:%p"
+    # OpenSSH parses the -o value after Ansible splits the argument string.
+    control_path = str(path).replace("\\", "\\\\").replace('"', '\\"')
+    control_option = shlex.quote(f'ControlPath="{control_path}"')
     return {
+        "ANSIBLE_HOST_KEY_CHECKING": "True",
         "ANSIBLE_SSH_ARGS": (
             "-o ControlMaster=auto "
-            f"-o ControlPath={path} "
-            "-o ControlPersist=60s "
-            "-o StrictHostKeyChecking=no "
-            "-o UserKnownHostsFile=/dev/null"
+            f"-o {control_option} "
+            "-o ControlPersist=60s"
         )
     }

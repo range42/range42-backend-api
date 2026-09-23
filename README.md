@@ -142,6 +142,7 @@ VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
 The committed `openapi.json` at the repository root reflects the current API surface. It is used to bootstrap the Kong API gateway configuration, and **CI fails if it is out of date** — regenerate and commit it whenever you add or modify a route:
 
 ```bash
+RANGE42_AUTH_MODE=development \
 PROJECT_ROOT_DIR=$PWD \
 API_BACKEND_WWWAPP_PLAYBOOKS_DIR=$PWD \
 API_BACKEND_PUBLIC_PLAYBOOKS_DIR=$PWD \
@@ -153,7 +154,7 @@ print(json.dumps(create_app().openapi(), indent=2))
 " > openapi.json
 ```
 
-The environment variables are only there to satisfy import-time reads — several route modules resolve paths at module scope, so the command dies without them. The generated document does not depend on their values.
+The path variables satisfy import-time reads. The command uses development authentication mode only for schema generation; it does not start an HTTP service or load operator credentials. The generated document does not depend on these values. Production authentication remains required by default.
 
 ---
 
@@ -426,19 +427,64 @@ Highlights:
 Canonical error envelope per spec section 18.1 -- every /v1 error includes
 `{error, message, code, details[], trace_id, timestamp}`.
 
+### Git catalog onboarding
+
+`POST /v1/catalog/sources/default` registers the public
+`https://github.com/range42/range42-catalog` repository on `main` without a
+token. It returns `200` with the existing or newly created source, and repeated
+requests reuse that registration. Registration does not clone the repository;
+refresh or browse it when ready.
+
+For another repository, send `POST /v1/catalog/sources` with the Git server URL
+and a repository binding:
+
+```json
+{
+  "provider": "github",
+  "base_url": "https://github.com",
+  "auth_kind": "none",
+  "repos": [{"owner": "range42", "repo": "range42-catalog", "branch": "main"}]
+}
+```
+
+Register one repository per source so catalog entries have an unambiguous
+source and path. `branch` defaults to `main`; `owner` supports nested GitLab
+groups. Use the repository name without `.git`. Legacy requests without `repos`
+remain accepted, but refreshing an empty source returns `400` with
+`SOURCE_REPOS_REQUIRED` and registration instructions.
+
+`GET /v1/catalog/sources` returns a page with `items`, `total`, `offset`, and
+`limit`. Every source response includes `repos` with repository IDs, names,
+branches, and `last_refreshed_at`. Refresh a registered source with
+`POST /v1/catalog/sources/{id}/refresh`, then browse
+`GET /v1/catalog/entries?source_id={id}`. Refresh reports how many repositories
+and recognized manifests it found; browsing currently clones again and is
+not a persistent catalog cache.
+
+Catalog entry summaries and details include the checked-out Git commit in
+`sha`, so project attachments can pin the version that was browsed.
+
+Private HTTPS repositories use `auth_kind: "pat"` with `token_ref` on creation.
+Rotate credentials through `PATCH /v1/catalog/sources/{id}` with
+`{"auth_kind":"pat","token_ref":"..."}`, or clear them with
+`{"auth_kind":"none"}`. Responses expose only `has_token`, never the token.
+Put credentials in `token_ref`, not in the server URL. Catalog registration
+is separate from deployment inventory credentials and host configuration.
+
 ## Detached runner
 
-See [docs/runner-migration.md](docs/runner-migration.md). The v1 runtime
-spawns `ansible-runner run <private_data_dir> --ident execution --playbook <path>`
-in a separate process session. The backend waits for that process, persists
-its exit status, renews the workspace lock while it runs, and releases the
-lock on completion. Events live under
-`<private_data_dir>/artifacts/execution/job_events/` and are redacted before
-being appended to `events.jsonl`.
-
-Scoped actions require their own scenario playbooks; unsupported actions
-return `409 OPERATION_UNSUPPORTED`. Teardown preserves workspace credentials,
-inventory, and logs. See the runner documentation for the operation contract.
+See [the runner lifecycle](docs/runner-lifecycle.md). The v1 runtime spawns
+`ansible-runner run` in an independent process session with per-attempt
+artifacts. After a hard API crash, recovery verifies process identity before
+adopting a live runner, restores recorded exit results, or reports an unknown
+outcome. Events pass through the redaction pipeline with replay deduplication.
+Full provisioning shares a lock inherited by the runner, including across API
+crashes. Graceful API shutdown detaches local observation while preserving the
+runner and its workspace-owned credentials; explicit cancellation signals it.
+Legacy scoped actions require their own operation playbook and use the same
+attempt reservation; unsupported actions return `409 OPERATION_UNSUPPORTED`.
+Teardown preserves workspace inventory, credentials, and logs. See the
+[operation contract](docs/runner-migration.md).
 
 ## Events + SSE
 
@@ -459,3 +505,5 @@ HTTP 409 and code `WORKSPACE_NON_LOCAL_FS`.
 ## License
 
 [GPL-3.0](LICENSE)
+
+Named API token roles and durable mutation audit are documented in [named access and audit](docs/named-access-and-audit.md). Existing single-token deployments remain compatible.

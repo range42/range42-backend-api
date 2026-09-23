@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "scenario_id": "course-1",
+  "intent": {
+    "teams": [
+      {
+        "id": "blue",
+        "users": [
+          {
+            "id": "alice"
+          },
+          {
+            "id": "bob"
+          }
+        ]
+      },
+      {
+        "id": "red",
+        "users": [
+          {
+            "id": "eve"
+          }
+        ]
+      }
+    ],
+    "node_scopes": {
+      "vm1": "per_user"
+    },
+    "network_scopes": {
+      "net1": "per_team"
+    }
+  },
+  "instances": [
+    {
+      "instance_key": "vm-8d4b18f26b612fea797435babb91a24250604133337208f03ba0676010614fa9",
+      "source_node_id": "vm1",
+      "team_id": "blue",
+      "user_id": "alice",
+      "vm_id": 3101,
+      "hostname": "workstation-8d4b18f26b61",
+      "nics": [
+        {
+          "index": 0,
+          "nic_key": "nic-primary",
+          "network_instance_key": "net-51be5051728d3ed43564a8abf8e07a11db1820c4d245d1c465008bc560f205cd"
+        }
+      ]
+    },
+    {
+      "instance_key": "vm-f41ec66e19c3ff98d405c9a5683580cb528da98803a90a8d0dffdd463041bfea",
+      "source_node_id": "vm1",
+      "team_id": "blue",
+      "user_id": "bob",
+      "vm_id": 3102,
+      "hostname": "workstation-f41ec66e19c3",
+      "nics": [
+        {
+          "index": 0,
+          "nic_key": "nic-primary",
+          "network_instance_key": "net-51be5051728d3ed43564a8abf8e07a11db1820c4d245d1c465008bc560f205cd"
+        }
+      ]
+    },
+    {
+      "instance_key": "vm-982df81e340fe3001970c3c59599b34c5c43dd529f6d6f4ed4a3ebeeb4084a24",
+      "source_node_id": "vm1",
+      "team_id": "red",
+      "user_id": "eve",
+      "vm_id": 3103,
+      "hostname": "workstation-982df81e340f",
+      "nics": [
+        {
+          "index": 0,
+          "nic_key": "nic-primary",
+          "network_instance_key": "net-c2d15c526933f8d2c9370b2f3ae33a349e33397b2d22e0466cc506cefcd0ed12"
+        }
+      ]
+    }
+  ],
+  "networks": [
+    {
+      "instance_key": "net-51be5051728d3ed43564a8abf8e07a11db1820c4d245d1c465008bc560f205cd",
+      "source_node_id": "net1",
+      "team_id": "blue",
+      "user_id": null,
+      "vnet": "blue1",
+      "subnet": "10.42.10.0/24",
+      "gateway": "10.42.10.1",
+      "snat": false
+    },
+    {
+      "instance_key": "net-c2d15c526933f8d2c9370b2f3ae33a349e33397b2d22e0466cc506cefcd0ed12",
+      "source_node_id": "net1",
+      "team_id": "red",
+      "user_id": null,
+      "vnet": "red1",
+      "subnet": "10.42.11.0/24",
+      "gateway": "10.42.11.1",
+      "snat": true
+    }
+  ]
+}

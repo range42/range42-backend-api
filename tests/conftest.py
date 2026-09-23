@@ -6,6 +6,14 @@ from fastapi.testclient import TestClient
 
 _PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
 
+# Tests explicitly opt into local development; production remains closed.
+os.environ.setdefault("RANGE42_AUTH_MODE", "development")
+# Fixed, public test key: never used by production.
+os.environ.setdefault("RANGE42_CREDENTIAL_KEY", "dGVzdC1vbmx5LW5vdC1hLXByb2R1Y3Rpb24ta2V5ISE=")
+
+# Synthetic forge names used by fixtures are explicitly approved in tests.
+os.environ.setdefault("RANGE42_GIT_ALLOWED_HOSTS", "github.com,gitlab.com,codeberg.org,g.com,x,gitlab.example")
+
 # Set ALL env vars that are read at module-import time.
 # Routes call Path(os.getenv("PROJECT_ROOT_DIR")).resolve() at import time.
 os.environ.setdefault("PROJECT_ROOT_DIR", _PROJECT_ROOT)

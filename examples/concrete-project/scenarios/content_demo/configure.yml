@@ -1,0 +1,24 @@
+---
+- name: Run additional orchestration and verify the result
+  hosts: content_demo
+  gather_facts: false
+  tasks:
+    - name: Read the processed content
+      ansible.builtin.slurp:
+        src: "{{ r42_demo_output_dir }}/processed.txt"
+      register: processed_content
+
+    - name: Verify the processed content
+      ansible.builtin.assert:
+        that:
+          - >-
+            (processed_content.content | b64decode | trim) ==
+            (lookup('ansible.builtin.file', 'files/message.txt') | upper | trim)
+        success_msg: The copied file and scenario script produced the expected content.
+
+    - name: Write the orchestration result
+      ansible.builtin.copy:
+        content: >-
+          {{ {'scenario': 'content_demo', 'content_verified': true} | to_nice_json }}
+        dest: "{{ r42_demo_output_dir }}/orchestration.json"
+        mode: "0600"

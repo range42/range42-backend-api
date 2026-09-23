@@ -378,3 +378,52 @@ async def test_task_status_stopped_error(tmp_path, monkeypatch):
             assert r.json()["exitstatus"] == "command failed"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('vmtype', 'observed', 'expected'), [
+    ('qemu', {'status': 'running', 'qmpstatus': 'paused'}, 'paused'),
+    ('qemu', {'status': 'running', 'qmpstatus': 'suspended'}, 'paused'),
+    ('qemu', {'status': 'running', 'qmpstatus': 'running'}, 'running'),
+    ('qemu', {'status': 'stopped'}, 'stopped'),
+    ('qemu', {'status': 'running'}, 'unknown'),
+    ('qemu', {'status': 'running', 'qmpstatus': 'io-error'}, 'unknown'),
+    ('qemu', {'status': 'unexpected', 'qmpstatus': 'running'}, 'unknown'),
+    ('lxc', {'status': 'running'}, 'running'),
+    ('lxc', {'status': 'stopped'}, 'stopped'),
+])
+async def test_current_guest_status_observes_vm_run_state(tmp_path, monkeypatch, vmtype, observed, expected):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    class Current(_FakeProxmox):
+        async def get(self, url, headers=None):
+            self.calls.append(('GET', url, None))
+            assert url == f'https://pve01:8006/api2/json/nodes/pve01/{vmtype}/4001/status/current'
+            return _FakeResp(200, observed)
+    monkeypatch.setattr(httpx, 'AsyncClient', Current)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as c:
+            hid = await _create_host(c)
+            r = await c.get(f'/v1/proxmox/hosts/{hid}/vms/4001/status?vmtype={vmtype}')
+            assert r.status_code == 200, r.text
+            assert r.json() == {'vmid': 4001, 'node': 'pve01', 'type': vmtype, 'status': expected}
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('upstream_status', [401, 403, 404, 500])
+async def test_current_guest_status_keeps_upstream_failure_visible(tmp_path, monkeypatch, upstream_status):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    class Current(_FakeProxmox):
+        async def get(self, url, headers=None):
+            return _FakeResp(upstream_status, {'private': 'must not appear'})
+    monkeypatch.setattr(httpx, 'AsyncClient', Current)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as c:
+            hid = await _create_host(c)
+            r = await c.get(f'/v1/proxmox/hosts/{hid}/vms/4001/status?vmtype=qemu')
+            assert r.status_code == 502
+            assert r.json()['code'] == ('AUTH_FAILED' if upstream_status in (401, 403) else 'PROXMOX_ERROR')
+            assert 'must not appear' not in r.text
+    finally:
+        await dbmod.dispose_engine()

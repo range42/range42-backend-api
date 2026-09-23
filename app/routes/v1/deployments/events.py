@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import stat
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
+from starlette.background import BackgroundTask
+from starlette.responses import StreamingResponse
 
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
@@ -42,6 +46,46 @@ def _filter_event(ev: dict, *, team: int | None, stage: str | None,
     if node is not None and ev.get("node_id") != node:
         return False
     return True
+
+
+def _snapshot_lines(stream, size: int):
+    """Export complete canonical records present at opening, never live-tail."""
+    remaining = size
+    while remaining > 0:
+        line = stream.readline(remaining)
+        if not line:
+            break
+        remaining -= len(line)
+        if not line.endswith(b"\n"):
+            break
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            yield line
+
+
+@router.get("/{deployment_id}/events/download", response_class=StreamingResponse)
+async def download_events(deployment_id: str, session: AsyncSession = Depends(_session)):
+    dep = await session.get(Deployment, deployment_id)
+    if dep is None:
+        raise Range42Error(error="not_found", code="NOT_FOUND", status=404, message="Deployment not found")
+    path = Path(dep.workspace_path) / "events.jsonl"
+    headers = {"Content-Disposition": 'attachment; filename="events.jsonl"', "Cache-Control": "no-store"}
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return StreamingResponse(iter(()), media_type="application/x-ndjson", headers=headers)
+    except OSError:
+        raise Range42Error(error="events_unavailable", code="EVENTS_UNAVAILABLE", status=409, message="The deployment event file is unavailable") from None
+    stream = os.fdopen(fd, "rb")
+    info = os.fstat(stream.fileno())
+    if not stat.S_ISREG(info.st_mode):
+        stream.close()
+        raise Range42Error(error="events_unavailable", code="EVENTS_UNAVAILABLE", status=409, message="The deployment event file is unavailable")
+    return StreamingResponse(_snapshot_lines(stream, info.st_size), media_type="application/x-ndjson",
+                             headers=headers, background=BackgroundTask(stream.close))
 
 
 @router.get(

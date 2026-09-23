@@ -156,25 +156,24 @@ class TaintedStringLayer:
     of which key carried them. Build the tainted set at attempt start from
     cloudinit vars, vault password, and Source PAT.
 
-    Unlike ConfigDenylistLayer (matches by key name), this layer scans
-    the *content* of free-text fields and substring-replaces any known
-    tainted value. Targeted fields are stdout/stderr/msg (strings) and
-    stdout_lines/stderr_lines (lists of strings).
+    Unlike ConfigDenylistLayer (matches by key name), this layer scans every
+    string value, including translated log text, module invocation headers,
+    arbitrary result fields and strings nested inside lists.
+    Ansible's rendered JSON output may escape those values before they reach
+    translated log text, so include JSON string bodies in both Unicode modes.
     """
 
     name = "tainted_string"
-
-    # Fields where free-text content may contain secret values
-    _SCAN_FIELDS = ("stdout", "stderr", "msg")
-    _SCAN_LINES_FIELDS = ("stdout_lines", "stderr_lines")
 
     def __init__(self, tainted_strings: set[str]) -> None:
         # Filter empty strings (would match everywhere) — sort by length
         # descending so longer secrets are replaced before any shorter
         # substrings of them, avoiding partial-redaction artefacts.
-        self._tainted = tuple(
-            sorted((t for t in tainted_strings if t), key=len, reverse=True)
-        )
+        needles = {t for t in tainted_strings if t}
+        for secret in tuple(needles):
+            for ensure_ascii in (True, False):
+                needles.add(json.dumps(secret, ensure_ascii=ensure_ascii)[1:-1])
+        self._tainted = tuple(sorted(needles, key=len, reverse=True))
 
     def redact(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
         if not self._tainted:
@@ -188,32 +187,25 @@ class TaintedStringLayer:
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
                 sub = f"{path}.{k}" if path else k
-                if k in self._SCAN_FIELDS and isinstance(v, str):
+                if isinstance(v, str):
                     obj[k] = self._redact_string(v, sub, fired)
-                elif k in self._SCAN_LINES_FIELDS and isinstance(v, list):
-                    obj[k] = [
-                        self._redact_string(s, f"{sub}[{i}]", fired)
-                        if isinstance(s, str)
-                        else s
-                        for i, s in enumerate(v)
-                    ]
                 elif isinstance(v, (dict, list)):
                     self._walk(v, sub, fired)
         elif isinstance(obj, list):
             for i, item in enumerate(obj):
-                self._walk(item, f"{path}[{i}]", fired)
+                if isinstance(item, str):
+                    obj[i] = self._redact_string(item, f"{path}[{i}]", fired)
+                else:
+                    self._walk(item, f"{path}[{i}]", fired)
 
     def _redact_string(self, s: str, field_path: str, fired: list[dict[str, str]]) -> str:
         out = s
         for t in self._tainted:
             if t and t in out:
                 out = out.replace(t, "[REDACTED:tainted_string]")
-                # Audit rule_id includes a short prefix for traceability
-                # without leaking the full secret.
-                prefix = t[:4] if len(t) > 4 else "***"
                 fired.append(
                     {
-                        "rule_id": f"tainted_string:{prefix}***",
+                        "rule_id": "tainted_string:known-secret",
                         "field_path": field_path,
                     }
                 )

@@ -14,7 +14,7 @@ Two scenarios are exercised:
    ``DetachedRunner`` (with ``asyncio.create_subprocess_exec`` stubbed so no
    real ansible-runner CLI is spawned) to verify the full
    ``private_data_dir`` layout end-to-end: ``project/`` symlink,
-   ``env/cmdline``, KEY=VALUE ``env/envvars`` (0600), and 0600 ``env/extravars``.
+   runner CLI arguments, mapping ``env/envvars`` (0600), and 0600 ``env/extravars``.
    A controllable ``FakeProc`` lets us inspect the artifact dir *before* the
    ``_run`` finally-block shreds the env files (T10).
 """
@@ -25,6 +25,22 @@ import json
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+async def runner_cleanup(monkeypatch):
+    """Finish runner callbacks before the test loop and database are closed."""
+    from app.core import db
+    from app.core.deploy_trigger import _BACKGROUND_TASKS
+
+    release_events = []
+    yield release_events
+    for event in release_events:
+        event.set()
+    tasks = [task for task in _BACKGROUND_TASKS if task.get_loop() is asyncio.get_running_loop()]
+    if tasks:
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5)
+    await db.dispose_engine()
 
 
 # ---------------------------------------------------------------------------
@@ -182,9 +198,9 @@ async def test_demo_lab_smoke_with_capturing_runner(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_demo_lab_smoke_with_real_detached_runner(tmp_path, monkeypatch):
+async def test_demo_lab_smoke_with_real_detached_runner(tmp_path, monkeypatch, runner_cleanup):
     """Like the smoke test above but uses the real ``DetachedRunner`` so we
-    exercise the ``project/`` symlink + ``env/cmdline`` + KEY=VALUE envvars
+    exercise the ``project/`` symlink + runner CLI arguments + mapping envvars
     + 0600 perms end-to-end.
 
     A controllable ``FakeProc`` blocks in ``wait()`` until we release it,
@@ -218,6 +234,7 @@ async def test_demo_lab_smoke_with_real_detached_runner(tmp_path, monkeypatch):
     from app.core import runner_detached as runner_detached_module
 
     release = asyncio.Event()
+    runner_cleanup.append(release)
 
     class _FakeProc:
         pid = 12345
@@ -228,10 +245,10 @@ async def test_demo_lab_smoke_with_real_detached_runner(tmp_path, monkeypatch):
             self.returncode = 0
             return 0
 
-    captured = []
+    calls = []
 
     async def _fake_spawn(*args, **kwargs):
-        captured.extend(args)
+        calls.append(args)
         return _FakeProc()
 
     monkeypatch.setattr(
@@ -264,12 +281,13 @@ async def test_demo_lab_smoke_with_real_detached_runner(tmp_path, monkeypatch):
     assert (project_dir / "scenarios" / "demo_lab" / "main.yml").is_file(), \
         "project/ does not point to a tree containing the demo_lab playbook"
 
-    # ASSERT: env/cmdline references demo_lab and inventory
-    cmdline = (pdd / "env" / "cmdline").read_text()
-    assert not cmdline
-    assert captured[captured.index("--playbook") + 1] == "scenarios/demo_lab/main.yml"
+    # Runner arguments are passed to ansible-runner, not ansible-playbook.
+    argv = calls[0]
+    assert argv[1] == "run"
+    assert argv[argv.index("--playbook") + 1] == "scenarios/demo_lab/main.yml"
+    assert argv[argv.index("--inventory") + 1] == str(pdd / "inventory")
 
-    # ASSERT: env/envvars is a JSON mapping, 0600
+    # ASSERT: env/envvars is a YAML-compatible JSON mapping, 0600
     envvars_path = pdd / "env" / "envvars"
     assert envvars_path.is_file()
     envvars_content = envvars_path.read_text()

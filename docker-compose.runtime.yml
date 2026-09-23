@@ -1,0 +1,28 @@
+# Optional execution runtime. All paths refer to one reviewed, immutable export.
+# Use together with docker-compose.yml; see docs/container-packaging.md.
+services:
+  api:
+    volumes:
+      - type: bind
+        source: ${RANGE42_RUNTIME_DIR:?Set RANGE42_RUNTIME_DIR to the installed runtime export}
+        target: /runtime
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${RANGE42_WORKSPACE_TEMPLATE_DIR:?Set RANGE42_WORKSPACE_TEMPLATE_DIR to a private credential template}
+        target: /run/range42-template
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      API_BACKEND_PUBLIC_PLAYBOOKS_DIR: /runtime/range42-playbooks
+      API_BACKEND_WWWAPP_PLAYBOOKS_DIR: /runtime/range42-playbooks
+      RANGE42_BUNDLE_DIR: /runtime/range42-playbooks/bundles
+      RANGE42_BUNDLE_RUNTIME_MANIFEST: /runtime/bundle-runtime.json
+      RANGE42_WORKSPACE_TEMPLATE_DIR: /run/range42-template
+      RANGE42_PROXMOX_CA_FILE: /runtime/proxmox-ca.pem
+      RANGE42_INVENTORY__DOCKER__CTF: /runtime/range42-catalog/03_container_layer/docker/_ctf
+      ANSIBLE_CONFIG: /runtime/ansible.cfg
+      ANSIBLE_COLLECTIONS_PATH: /runtime/collections
+      ANSIBLE_ROLES_PATH: /runtime/range42-ansible_roles-proxmox_controller/roles:/runtime/range42-catalog/02_ansible_layer/admin/roles:/runtime/range42-catalog/02_ansible_layer/trainee/roles:/runtime/range42/roles

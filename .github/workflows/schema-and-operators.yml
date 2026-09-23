@@ -2,7 +2,7 @@ name: schema-and-operators
 
 on:
   push:
-    branches: [main, dev, 'feature/**']
+    branches: [main, dev, 'feat/**', 'fix/**', 'feature/**']
   pull_request:
     branches: [main, dev]
 

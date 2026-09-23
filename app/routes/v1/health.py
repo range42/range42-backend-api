@@ -4,8 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+
+from app.core.proxmox_tls import proxmox_verify
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -45,17 +47,17 @@ async def readiness(session: AsyncSession = Depends(_session)):
         checks["workspace_writable"] = {"ok": True}
     except Exception as e:  # noqa: BLE001
         checks["workspace_writable"] = {"ok": False, "err": str(e)}
-    # Proxmox reachability — best-effort across registered hosts.
+    # Readiness requires successful authenticated access to every registered host.
     hosts = (await session.execute(select(ProxmoxHost))).scalars().all()
     host_results: list[dict] = []
-    async with httpx.AsyncClient(verify=False, timeout=3) as cli:
+    async with httpx.AsyncClient(verify=proxmox_verify(), timeout=3) as cli:
         for h in hosts:
             try:
                 r = await cli.get(
                     f"{h.api_url.rstrip('/')}/api2/json/version",
                     headers={"Authorization": f"PVEAPIToken={h.token_ref}"},
                 )
-                host_results.append({"id": h.id, "ok": r.status_code < 500,
+                host_results.append({"id": h.id, "ok": r.is_success,
                                      "status": r.status_code})
             except httpx.ConnectError:
                 host_results.append({"id": h.id, "ok": False,
@@ -67,7 +69,11 @@ async def readiness(session: AsyncSession = Depends(_session)):
         "ok": all(x["ok"] for x in host_results) if host_results else True,
         "hosts": host_results,
     }
-    sources = (await session.execute(select(Source))).scalars().all()
-    checks["git"] = {"ok": True, "sources_registered": len(sources)}
-    overall = all(c.get("ok") for c in checks.values())
+    source_count = (await session.execute(select(func.count()).select_from(Source))).scalar_one()
+    # Registration does not establish repository connectivity or credentials.
+    checks["git"] = {
+        "ok": None, "required": False, "connectivity": "not_checked",
+        "sources_registered": source_count,
+    }
+    overall = all(c.get("ok") is True for c in checks.values() if c.get("required", True))
     return {"ready": overall, "checks": checks, "timestamp": _now()}

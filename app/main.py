@@ -17,9 +17,12 @@ from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.auth import BearerAuthMiddleware, configured_api_token
+from app.core.access import configured_principals
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware_trace import TraceIdMiddleware
+from app.core.maintenance import MaintenanceGate, MaintenanceMiddleware
 from app.core.runner import vault_manager
 from app.routes import router as api_router
 from app.routes.ws_status import router as ws_router
@@ -52,7 +55,8 @@ async def lifespan(app: FastAPI):
 
     # v1 state layer
     from app.core.db import get_engine, dispose_engine
-    get_engine()
+    from app.core.credential_store import encrypt_legacy_credentials
+    await encrypt_legacy_credentials(get_engine())
     logger.info("v1 state engine ready", db_url=settings.db_url)
 
     # v1 orphan reconcile: run once synchronously at boot so the structured
@@ -74,8 +78,11 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.shutdown(wait=False)
+        await app.state.maintenance_gate.drain()
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
+        from app.core.orphans import stop_observers
+        await stop_observers()
         await dispose_engine()
 
 
@@ -83,16 +90,28 @@ def create_app() -> FastAPI:
     """Application factory. Creates and configures the FastAPI application."""
     configure_logging(json_output=True)
 
+    token = configured_api_token(settings)
+    principals = configured_principals(settings)
+    if settings.auth_mode == "required" or principals:
+        from app.core.credential_store import credential_cipher
+        credential_cipher(settings)
+    maintenance_gate = MaintenanceGate(
+        Path(settings.maintenance_lock_file) if settings.maintenance_lock_file else None
+    )
     middleware = [
         Middleware(
             CORSMiddleware,
             allow_origin_regex=settings.cors_origin_regex,
+            allow_origins=list(settings.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-            allow_headers=["Content-Type", "Accept", "Authorization"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Accept", "Authorization", "Last-Event-ID", "X-Range42-Trace-Id", "X-Range42-Reservation-Token"],
+            expose_headers=["X-Range42-Trace-Id", "X-Range42-Audit-Id", "X-Range42-Audit-State"],
             max_age=600,
         ),
         Middleware(TraceIdMiddleware),
+        Middleware(BearerAuthMiddleware, token=token, principals=principals, audit_enabled=settings.audit_enabled),
+        Middleware(MaintenanceMiddleware, gate=maintenance_gate),
     ]
 
     _app = FastAPI(
@@ -108,6 +127,7 @@ def create_app() -> FastAPI:
     )
 
     install_exception_handlers(_app)
+    _app.state.maintenance_gate = maintenance_gate
     _app.include_router(api_router)
     _app.include_router(ws_router)
 

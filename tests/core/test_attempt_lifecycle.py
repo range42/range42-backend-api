@@ -1,312 +1,371 @@
+"""Durable runner lifecycle survives the request session closing."""
 import asyncio
-import json
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock
+from datetime import datetime, timezone
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import select
 
-from app.core import deploy_trigger
 from app.core.db import build_engine, session_factory
-from app.core.errors import Range42Error
 from app.core.models import Attempt, Base, Deployment, Project, ProxmoxHost, Source, WorkspaceLock
 
 
-@pytest.fixture
-async def lifecycle(tmp_path, monkeypatch):
-    engine = build_engine(f'sqlite+aiosqlite:///{tmp_path}/state.db')
+@pytest_asyncio.fixture
+async def lifecycle_db(tmp_path, monkeypatch):
+    engine = build_engine(f"sqlite+aiosqlite:///{tmp_path / 'state.db'}")
+    factory = session_factory(engine)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    sf = session_factory(engine)
-    playbook = tmp_path / 'playbooks/scenarios/demo/main.yml'
-    playbook.parent.mkdir(parents=True)
-    playbook.write_text('- hosts: localhost\n  tasks: []\n')
-    monkeypatch.setenv('API_BACKEND_WWWAPP_PLAYBOOKS_DIR', str(tmp_path / 'playbooks'))
-    ws = tmp_path / 'workspace'
-    (ws / 'inventory').mkdir(parents=True)
-    async with sf() as s:
-        s.add(Source(id='s', provider='github', base_url='url', auth_kind='none'))
-        s.add(ProxmoxHost(id='h', name='h', api_url='url', node_name='h', token_ref='t'))
-        await s.commit()
-        s.add(Project(id='p', name='p', source_id='s', branch_strategy='shared_repo_subdir'))
-        await s.commit()
-        s.add(Deployment(id='d', codename='AA', scenario_label='demo', project_id='p',
-                         target_host_id='h', workspace_path=str(ws), state='pending'))
-        await s.commit()
-        s.add(Attempt(id='a', deployment_id='d', scope='full', state='pending'))
-        await s.commit()
-    yield sf, ws, playbook
-    for task in list(deploy_trigger._BACKGROUND_TASKS):
-        task.cancel()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
-    await engine.dispose()
+    async with factory() as session:
+        session.add(Source(id="s", provider="github", base_url="https://github.com", auth_kind="none"))
+        session.add(ProxmoxHost(id="h", name="pve", api_url="https://pve:8006", node_name="pve", token_ref="t"))
+        await session.commit()
+        session.add(Project(id="p", name="p", source_id="s", branch_strategy="shared_repo_subdir"))
+        await session.commit()
+        session.add(Deployment(id="dep", codename="ALPHA", scenario_label="demo", project_id="p",
+                               target_host_id="h", current_attempt_id="att", workspace_path=str(tmp_path)))
+        await session.commit()
+        session.add(Attempt(id="att", deployment_id="dep", scope="full", state="pending"))
+        session.add(WorkspaceLock(deployment_id="dep", owner="attempt-att", heartbeat_interval_s=30))
+        await session.commit()
+    try:
+        yield factory
+    finally:
+        await engine.dispose()
 
 
-class ControlledRunner:
-    def __init__(self, rc=0):
-        self.done = asyncio.Event()
-        self.rc = rc
-        self.pid = 12345
-
-    async def start(self, *, private_data_dir, **kwargs):
-        self.artifact_dir = private_data_dir / 'artifacts' / 'execution'
-        (self.artifact_dir / 'job_events').mkdir(parents=True)
-        return self
-
-    async def wait(self):
-        await self.done.wait()
-        (self.artifact_dir / 'job_events' / '1.json').write_text(json.dumps({
-            'event': 'runner_on_ok', 'event_data': {'task': 'last task', 'host': 'localhost'}}))
-        return self.rc
-
-
-@pytest.mark.parametrize('rc, expected', [(0, 'succeeded'), (2, 'failed')])
-async def test_execution_persists_state_drains_events_and_releases_lock(lifecycle, rc, expected):
-    sf, ws, _ = lifecycle
-    runner = ControlledRunner(rc)
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    async with sf() as s:
-        assert (await s.get(Attempt, 'a')).state == 'deploying'
-        assert (await s.get(Deployment, 'd')).current_attempt_id == 'a'
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
-    async with sf() as s:
-        att = await s.get(Attempt, 'a')
-        assert att.state == expected
-        assert att.rc == rc and att.ended_at is not None
-        assert (await s.get(Deployment, 'd')).state == expected
-        assert await s.get(WorkspaceLock, 'd') is None
-    assert 'last task' in (ws / 'events.jsonl').read_text()
+@pytest.mark.asyncio
+async def test_runner_start_persists_process_and_active_states(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    before = datetime.now(timezone.utc)
+    assert await attempt_lifecycle.mark_attempt_running(
+        attempt_id="att", pid=1234, artifact_dir=tmp_path / "runner" / "att",
+    ) is True
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        assert attempt.state == "deploying"
+        assert attempt.pid == 1234
+        assert attempt.artifact_dir == str(tmp_path / "runner" / "att")
+        assert attempt.started_at.replace(tzinfo=timezone.utc) >= before
+        assert attempt.ended_at is None
+        assert (await session.get(Deployment, "dep")).state == "deploying"
+        assert await session.get(WorkspaceLock, "dep") is not None
 
 
-async def test_setup_failure_marks_failed_and_releases_lock(lifecycle):
-    sf, _, playbook = lifecycle
-    playbook.unlink()
-    async with sf() as s:
-        with pytest.raises(Exception):
-            await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'))
-    async with sf() as s:
-        assert (await s.get(Attempt, 'a')).state == 'failed'
-        assert await s.get(WorkspaceLock, 'd') is None
+@pytest.mark.asyncio
+async def test_recovered_exit_reclaims_owned_runtime_credentials_before_unlock(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle, orphans
+    from app.core.attempt_cleanup import record_attempt_cleanup
+    from app.core.runner_detached import _process_identity
+    from app.core.scenario_runtime import prepare_runtime_vault
+    from app.core.ssh_agent import _start_agent
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db)
+    artifact = tmp_path / "runner/att"
+    artifact.mkdir(parents=True)
+    (artifact / "rc").write_text("0")
+    (artifact / "pid").write_text("999999999")
+    (artifact / "redaction.json").write_text("[]")
+    agent = _start_agent()
+    vault = prepare_runtime_vault(tmp_path)
+    record_attempt_cleanup(artifact, ssh_agent=agent, runtime_vault=vault)
+    original_finish = orphans.finish_attempt
+
+    async def checked_finish(**kwargs):
+        assert _process_identity(agent.pid) is None
+        assert not vault.path.exists()
+        return await original_finish(**kwargs)
+
+    monkeypatch.setattr(orphans, "finish_attempt", checked_finish)
+    try:
+        await orphans.reconcile_once()
+        async with lifecycle_db() as session:
+            assert (await session.get(Attempt, "att")).state == "succeeded"
+            assert await session.get(WorkspaceLock, "dep") is None
+        assert not (artifact / "cleanup.json").exists()
+    finally:
+        agent.close()
 
 
-async def test_long_run_renews_lock(lifecycle, monkeypatch):
-    sf, _, _ = lifecycle
-    monkeypatch.setattr(deploy_trigger, 'HEARTBEAT_INTERVAL_S', .02, raising=False)
-    runner = ControlledRunner()
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    async with sf() as s:
-        lock = await s.get(WorkspaceLock, 'd')
-        lock.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=120)
-        await s.commit()
-    await asyncio.sleep(.1)
-    async with sf() as s:
-        lock = await s.get(WorkspaceLock, 'd')
-        age = datetime.now(timezone.utc) - lock.heartbeat_at.replace(tzinfo=timezone.utc)
-        assert age.total_seconds() < 1
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("rc", "expected"), [(0, "succeeded"), (2, "failed"), (-15, "failed")])
+async def test_process_exit_persists_terminal_state_and_releases_lock(lifecycle_db, monkeypatch, rc, expected):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    assert await attempt_lifecycle.finish_attempt(attempt_id="att", rc=rc, event_cursor_tip=8) == expected
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        assert attempt.state == expected
+        assert attempt.rc == rc
+        assert attempt.ended_at is not None
+        assert attempt.event_cursor_tip == 8
+        assert (await session.get(Deployment, "dep")).state == expected
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_teardown_without_operation_playbook_preserves_workspace(lifecycle):
-    from app.routes.v1.deployments.teardown import teardown
-    from app.schemas.v1.deployments import TeardownRequest
-    sf, ws, _ = lifecycle
-    (ws / 'inventory/hosts').write_text('precious inventory')
-    async with sf() as s:
-        with pytest.raises(Range42Error) as error:
-            await teardown('d', TeardownRequest(confirm_codename='AA'), s)
-        assert error.value.code == 'OPERATION_UNSUPPORTED'
-    assert (ws / 'inventory/hosts').read_text() == 'precious inventory'
+@pytest.mark.asyncio
+async def test_monitoring_error_fails_attempt_without_inventing_process_exit_code(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    state = await attempt_lifecycle.finish_attempt(attempt_id="att", rc=None, error_code="RUNNER_MONITOR_FAILED")
+    assert state == "failed"
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        assert attempt.rc is None
+        assert attempt.sub_reason == "RUNNER_MONITOR_FAILED"
+        assert attempt.ended_at is not None
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_supported_teardown_starts_runner_and_preserves_workspace(lifecycle, monkeypatch):
-    from app.routes.v1.deployments.teardown import teardown
-    from app.schemas.v1.deployments import TeardownRequest
-    sf, ws, playbook = lifecycle
-    playbook.with_name('teardown.yml').write_text('- hosts: localhost\n  tasks: []\n')
-    runner = ControlledRunner()
-    monkeypatch.setattr(deploy_trigger, 'DetachedRunner', lambda: runner)
-    async with sf() as s:
-        response = await teardown('d', TeardownRequest(confirm_codename='AA'), s)
-        assert response.state == 'deploying'
-        assert (await s.get(Deployment, 'd')).current_attempt_id == response.id
-    assert ws.exists()
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rc", [0, -15])
+async def test_process_exit_preserves_requested_cancellation(lifecycle_db, monkeypatch, rc):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    cancelled_at = datetime(2026, 9, 10, 8, 0)
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        attempt.state = "cancelled"
+        attempt.ended_at = cancelled_at
+        await session.commit()
+    assert await attempt_lifecycle.finish_attempt(attempt_id="att", rc=rc) == "cancelled"
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        assert attempt.state == "cancelled"
+        assert attempt.ended_at == cancelled_at
+        assert attempt.rc == rc
+        assert (await session.get(Deployment, "dep")).state == "cancelled"
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_cancel_does_not_claim_success_when_signal_fails(lifecycle, monkeypatch):
-    from app.routes.v1.deployments.snapshots import cancel_current_attempt
-    sf, _, _ = lifecycle
-    async with sf() as s:
-        dep = await s.get(Deployment, 'd')
-        dep.current_attempt_id = 'a'
-        await s.commit()
-        monkeypatch.setattr('app.core.runner_detached.signal_running_attempt', AsyncMock(return_value=False))
-        with pytest.raises(Range42Error):
-            await cancel_current_attempt('d', s)
-        assert (await s.get(Attempt, 'a')).state == 'pending'
+@pytest.mark.asyncio
+async def test_cancelled_background_task_is_terminal(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    assert await attempt_lifecycle.finish_attempt(attempt_id="att", rc=None, cancelled=True) == "cancelled"
+    async with lifecycle_db() as session:
+        assert (await session.get(Attempt, "att")).ended_at is not None
+        assert (await session.get(Deployment, "dep")).state == "cancelled"
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_busy_workspace_does_not_replace_current_attempt(lifecycle):
-    from app.routes.v1.deployments.attempts import create_attempt
-    from app.schemas.v1.deployments import AttemptCreate
-    sf, _, _ = lifecycle
-    runner = ControlledRunner()
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    async with sf() as s:
-        with pytest.raises(Range42Error) as error:
-            await create_attempt('d', AttemptCreate(scope='full'), s)
-        assert error.value.status == 409
-    async with sf() as s:
-        assert (await s.get(Deployment, 'd')).current_attempt_id == 'a'
-        assert len((await s.scalars(select(Attempt))).all()) == 1
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
+@pytest.mark.asyncio
+async def test_old_attempt_never_overwrites_new_attempt_or_releases_its_lock(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    async with lifecycle_db() as session:
+        dep = await session.get(Deployment, "dep")
+        dep.current_attempt_id = "new"
+        dep.state = "pending"
+        (await session.get(WorkspaceLock, "dep")).owner = "attempt-new"
+        await session.commit()
+    await attempt_lifecycle.mark_attempt_running(attempt_id="att", pid=1234, artifact_dir=tmp_path)
+    async with lifecycle_db() as session:
+        assert (await session.get(Deployment, "dep")).state == "pending"
+    await attempt_lifecycle.finish_attempt(attempt_id="att", rc=0)
+    async with lifecycle_db() as session:
+        assert (await session.get(Deployment, "dep")).state == "pending"
+        assert (await session.get(WorkspaceLock, "dep")).owner == "attempt-new"
 
 
-async def test_concurrent_submissions_only_start_one_runner(lifecycle, monkeypatch):
-    from app.routes.v1.deployments.attempts import create_attempt
-    from app.schemas.v1.deployments import AttemptCreate
-    sf, _, _ = lifecycle
-    runner = ControlledRunner()
-    monkeypatch.setattr(deploy_trigger, 'DetachedRunner', lambda: runner)
-
-    async def submit():
-        async with sf() as s:
-            try:
-                return await create_attempt('d', AttemptCreate(scope='full'), s)
-            except Range42Error as error:
-                return error.status
-
-    outcomes = await asyncio.gather(submit(), submit(), return_exceptions=True)
-    assert sum(getattr(item, 'state', None) == 'deploying' for item in outcomes) == 1
-    assert 409 in outcomes
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
+@pytest.mark.asyncio
+async def test_late_start_cannot_resurrect_terminal_attempt(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    await attempt_lifecycle.finish_attempt(attempt_id="att", rc=None, cancelled=True)
+    assert await attempt_lifecycle.mark_attempt_running(attempt_id="att", pid=1234, artifact_dir=tmp_path) is False
+    async with lifecycle_db() as session:
+        assert (await session.get(Attempt, "att")).state == "cancelled"
+        assert (await session.get(Deployment, "dep")).state == "cancelled"
 
 
-@pytest.mark.parametrize('scope', ['teardown', 'rollback_all', 'rollback_team'])
-async def test_generic_attempt_cannot_bypass_operation_guards(lifecycle, scope):
-    from app.routes.v1.deployments.attempts import create_attempt
-    from app.schemas.v1.deployments import AttemptCreate
-    sf, _, playbook = lifecycle
-    playbook.with_name(scope + '.yml').write_text('- hosts: localhost\n  tasks: []\n')
-    async with sf() as s:
-        with pytest.raises(Range42Error) as error:
-            await create_attempt('d', AttemptCreate(scope=scope, team_id=1), s)
-        assert error.value.code == 'USE_SCOPED_ENDPOINT'
+@pytest.mark.asyncio
+async def test_repeated_completion_preserves_result_and_advances_event_cursor(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    await attempt_lifecycle.finish_attempt(attempt_id="att", rc=0, event_cursor_tip=10)
+    async with lifecycle_db() as session:
+        ended_at = (await session.get(Attempt, "att")).ended_at
+    assert await attempt_lifecycle.finish_attempt(attempt_id="att", rc=1, event_cursor_tip=4) == "succeeded"
+    async with lifecycle_db() as session:
+        attempt = (await session.execute(select(Attempt))).scalar_one()
+        assert attempt.rc == 0
+        assert attempt.event_cursor_tip == 10
+        assert attempt.ended_at == ended_at
 
 
-async def test_cancel_completion_race_preserves_terminal_state(lifecycle, monkeypatch):
-    from app.routes.v1.deployments.snapshots import cancel_current_attempt
-    sf, _, _ = lifecycle
-    runner = ControlledRunner()
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-
-    async def signal(*args, **kwargs):
-        runner.done.set()
-        await asyncio.sleep(.05)
-        return True
-
-    monkeypatch.setattr('app.core.runner_detached.signal_running_attempt', signal)
-    async with sf() as s:
-        await cancel_current_attempt('d', s)
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
-    async with sf() as s:
-        att = await s.get(Attempt, 'a')
-        assert att.state == 'cancelled'
-        assert att.ended_at is not None
-        assert (await s.get(Deployment, 'd')).state == 'cancelled'
+@pytest.mark.asyncio
+async def test_missing_attempt_is_not_recreated(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    assert await attempt_lifecycle.mark_attempt_running(attempt_id="missing", pid=1, artifact_dir=tmp_path) is False
+    assert await attempt_lifecycle.finish_attempt(attempt_id="missing", rc=0) is None
 
 
-async def test_event_observer_failure_still_persists_runner_result(lifecycle, monkeypatch):
-    sf, _, _ = lifecycle
-    runner = ControlledRunner()
-    monkeypatch.setattr(deploy_trigger.EventsWatcher, 'run', AsyncMock(side_effect=OSError('unreadable events')))
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
-    async with sf() as s:
-        att = await s.get(Attempt, 'a')
-        assert att.state == 'succeeded' and att.rc == 0
-        assert att.sub_reason == 'EVENT_STREAM_FAILED'
-        assert await s.get(WorkspaceLock, 'd') is None
+@pytest.mark.asyncio
+async def test_unobserved_exit_is_unknown_instead_of_inventing_failure(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    assert await attempt_lifecycle.finish_attempt(
+        attempt_id="att", rc=None, unknown=True, error_code="RUNNER_EXIT_UNOBSERVED",
+    ) == "unknown"
+    async with lifecycle_db() as session:
+        assert (await session.get(Deployment, "dep")).state == "unknown"
+        assert (await session.get(Attempt, "att")).rc is None
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_rollback_shared_only_passes_shared_snapshots(lifecycle, monkeypatch):
-    from app.core.models import Snapshot
-    from app.routes.v1.deployments.snapshots import rollback
-    from app.schemas.v1.deployments import RollbackRequest
-    sf, _, playbook = lifecycle
-    playbook.with_name('rollback_shared.yml').write_text('- hosts: localhost\n  tasks: []\n')
-    runner = ControlledRunner()
-    captured = {}
-    original_start = runner.start
-
-    async def capture(**kwargs):
-        captured.update(kwargs['extravars'])
-        return await original_start(**kwargs)
-
-    runner.start = capture
-    monkeypatch.setattr(deploy_trigger, 'DetachedRunner', lambda: runner)
-    async with sf() as s:
-        s.add(Snapshot(id='shared', deployment_id='d', vm_id=201, name='shared'))
-        s.add(Snapshot(id='team', deployment_id='d', vm_id=202, team_id=1, name='team'))
-        await s.commit()
-        await rollback('d', RollbackRequest(scope='shared'), s)
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS))
-    assert captured['r42_snapshots'] == [{'vm_id': 201, 'name': 'shared'}]
-
-
-async def test_rollback_requires_team_for_team_scope(lifecycle):
-    from app.routes.v1.deployments.snapshots import rollback
-    from app.schemas.v1.deployments import RollbackRequest
-    sf, _, _ = lifecycle
-    async with sf() as s:
-        with pytest.raises(Range42Error) as error:
-            await rollback('d', RollbackRequest(scope='team'), s)
-        assert error.value.code == 'TEAM_REQUIRED'
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("rc", "expected"), [("0", "succeeded"), ("2", "failed"), (None, "unknown")])
+async def test_restart_reconciles_per_attempt_result(lifecycle_db, tmp_path, monkeypatch, rc, expected):
+    from app.core import attempt_lifecycle, orphans
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db, raising=False)
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    from dataclasses import replace
+    monkeypatch.setattr(orphans, "settings", replace(orphans.settings, workspace_root=tmp_path))
+    artifact = tmp_path / "runner" / "att"
+    artifact.mkdir(parents=True)
+    (artifact / "pid").write_text("99999999")
+    if rc is not None:
+        (artifact / "rc").write_text(rc)
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        attempt.state = "deploying"
+        attempt.pid = 99999999
+        attempt.artifact_dir = str(artifact)
+        await session.commit()
+    await orphans.reconcile_once()
+    # A repeated reconciliation is idempotent, including its final event.
+    await orphans.reconcile_once()
+    async with lifecycle_db() as session:
+        assert (await session.get(Attempt, "att")).state == expected
+        assert (await session.get(Deployment, "dep")).state == expected
+        assert await session.get(WorkspaceLock, "dep") is None
+    from app.core.events import EventsReader
+    events = list(EventsReader(tmp_path / "events.jsonl").read_range())
+    assert len([event for event in events if event["event_type"] == "attempt_end"]) == 1
 
 
-async def test_failure_after_spawn_stops_runner_before_releasing_workspace(lifecycle, monkeypatch):
-    from pathlib import Path
-    sf, _, _ = lifecycle
-    runner = ControlledRunner()
-    runner.kill = AsyncMock()
-    write = Path.write_text
+@pytest.mark.asyncio
+async def test_restart_adopts_live_process_and_redacts_replayed_output(lifecycle_db, tmp_path, monkeypatch):
+    import json
+    import sys
+    from app.core import attempt_lifecycle, orphans
+    from app.core.events import EventsReader
+    from app.core.runner_detached import record_process_identity
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db)
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    artifact = tmp_path / "runner" / "att"
+    events_dir = artifact / "job_events"
+    events_dir.mkdir(parents=True)
+    (artifact / "redaction.json").write_text(json.dumps(["recovered-secret"]))
+    (events_dir / "1-event.json").write_text(json.dumps({"event": "verbose", "stdout": "value=recovered-secret"}))
+    proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "import time; time.sleep(30)")
+    try:
+        record_process_identity(artifact, proc.pid)
+        async with lifecycle_db() as session:
+            attempt = await session.get(Attempt, "att")
+            attempt.state = "deploying"
+            attempt.pid = proc.pid
+            attempt.artifact_dir = str(artifact)
+            await session.commit()
+        await orphans.reconcile_once()
+        assert "att" in orphans._TASKS
+        task = orphans._TASKS["att"]
+        await orphans.reconcile_once()
+        assert orphans._TASKS["att"] is task
+        (artifact / "rc").write_text("0")
+        proc.terminate()
+        await proc.wait()
+        await asyncio.wait_for(task, timeout=3)
+        async with lifecycle_db() as session:
+            assert (await session.get(Attempt, "att")).state == "succeeded"
+        saved = (tmp_path / "events.jsonl").read_text()
+        assert "recovered-secret" not in saved
+        assert len(list(EventsReader(tmp_path / "events.jsonl").read_range())) == 2
+        assert not (artifact / "redaction.json").exists()
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        await orphans.stop_observers()
 
-    def fail_pid(path, *args, **kwargs):
-        if path.name == 'pid':
-            raise OSError('pid file cannot be written')
-        return write(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, 'write_text', fail_pid)
-    async with sf() as s:
-        with pytest.raises(OSError):
-            await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    runner.kill.assert_awaited_once()
-    async with sf() as s:
-        assert await s.get(WorkspaceLock, 'd') is None
-        assert (await s.get(Attempt, 'a')).state == 'failed'
+@pytest.mark.asyncio
+async def test_restart_reconciles_setup_interrupted_before_spawn(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle, orphans
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db)
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    async with lifecycle_db() as session:
+        (await session.get(Attempt, "att")).started_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        await session.commit()
+    await orphans.reconcile_once()
+    async with lifecycle_db() as session:
+        assert (await session.get(Attempt, "att")).state == "unknown"
+        assert await session.get(WorkspaceLock, "dep") is None
 
 
-async def test_unwritable_event_log_does_not_lose_terminal_state(lifecycle):
-    sf, ws, _ = lifecycle
-    runner = ControlledRunner()
-    async with sf() as s:
-        await deploy_trigger.start_attempt(s, attempt=await s.get(Attempt, 'a'), runner=runner)
-    (ws / 'events.jsonl').unlink()
-    (ws / 'events.jsonl').mkdir()
-    runner.done.set()
-    await asyncio.gather(*list(deploy_trigger._BACKGROUND_TASKS), return_exceptions=True)
-    async with sf() as s:
-        assert (await s.get(Attempt, 'a')).state == 'succeeded'
-        assert await s.get(WorkspaceLock, 'd') is None
+@pytest.mark.asyncio
+async def test_restart_finishes_cancelled_attempt_still_holding_lock(lifecycle_db, tmp_path, monkeypatch):
+    from app.core import attempt_lifecycle, orphans
+    monkeypatch.setattr(orphans, "get_session_factory", lambda: lifecycle_db)
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    artifact = tmp_path / "runner" / "att"
+    artifact.mkdir(parents=True)
+    (artifact / "rc").write_text("254")
+    async with lifecycle_db() as session:
+        attempt = await session.get(Attempt, "att")
+        attempt.state, attempt.pid, attempt.artifact_dir = "cancelled", 99999999, str(artifact)
+        await session.commit()
+    await orphans.reconcile_once()
+    async with lifecycle_db() as session:
+        assert (await session.get(Attempt, "att")).rc == 254
+        assert (await session.get(Deployment, "dep")).state == "cancelled"
+        assert await session.get(WorkspaceLock, "dep") is None
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_renews_only_the_owned_attempt_lock(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    before = datetime.now(timezone.utc)
+    assert await attempt_lifecycle.heartbeat_attempt(attempt_id="att", deployment_id="dep") is True
+    async with lifecycle_db() as session:
+        renewed = (await session.get(WorkspaceLock, "dep")).heartbeat_at
+        assert renewed.replace(tzinfo=timezone.utc) >= before
+    assert await attempt_lifecycle.heartbeat_attempt(attempt_id="other", deployment_id="dep") is False
+    async with lifecycle_db() as session:
+        assert (await session.get(WorkspaceLock, "dep")).heartbeat_at == renewed
+
+
+@pytest.mark.asyncio
+async def test_background_heartbeat_stops_when_signalled(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    before = datetime.now(timezone.utc)
+    stop = asyncio.Event()
+    task = asyncio.create_task(attempt_lifecycle.keep_attempt_lock(
+        attempt_id="att", deployment_id="dep", stop=stop, interval_s=0.01,
+    ))
+    try:
+        async with asyncio.timeout(2):
+            while True:
+                async with lifecycle_db() as session:
+                    ts = (await session.get(WorkspaceLock, "dep")).heartbeat_at
+                if ts.replace(tzinfo=timezone.utc) >= before:
+                    break
+                await asyncio.sleep(0.01)
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=1)
+    assert task.exception() is None
+
+
+@pytest.mark.asyncio
+async def test_background_heartbeat_ends_if_lock_ownership_is_lost(lifecycle_db, monkeypatch):
+    from app.core import attempt_lifecycle
+    monkeypatch.setattr(attempt_lifecycle, "get_session_factory", lambda: lifecycle_db)
+    await asyncio.wait_for(attempt_lifecycle.keep_attempt_lock(
+        attempt_id="other", deployment_id="dep", stop=asyncio.Event(), interval_s=30,
+    ), timeout=1)

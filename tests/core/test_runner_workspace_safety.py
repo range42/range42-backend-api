@@ -34,7 +34,7 @@ async def test_cancel_uses_current_attempt_pid(tmp_path):
     pidfile = tmp_path / 'runner' / 'attempt' / 'pid'
     pidfile.parent.mkdir(parents=True)
     pidfile.write_text('12345')
-    with patch('app.core.runner_detached.os.kill') as kill:
+    with patch('app.core.runner_detached.process_matches', return_value=True), patch('app.core.runner_detached.os.kill') as kill:
         assert await signal_running_attempt(tmp_path, attempt_id='attempt')
         kill.assert_called_once()
 
@@ -94,3 +94,19 @@ async def test_real_runner_cancel_stops_playbook(tmp_path, monkeypatch):
         assert not marker.exists()
     finally:
         await handle.kill()
+
+
+@pytest.mark.parametrize('label', ['../outside', '/absolute', 'has spaces'])
+def test_resolve_rejects_invalid_workspace_names(tmp_path, label):
+    with pytest.raises(WorkspaceError):
+        Workspace.resolve(codename='AA', scenario_label=label, workspace_root=tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_cancel_never_falls_back_to_another_attempt(tmp_path):
+    other = tmp_path / 'runner/other'
+    other.mkdir(parents=True)
+    (other / 'pid').write_text('12345')
+    with patch('app.core.runner_detached.process_matches', return_value=True), patch('app.core.runner_detached.os.kill') as kill:
+        assert not await signal_running_attempt(tmp_path, attempt_id='missing')
+        kill.assert_not_called()

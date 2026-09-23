@@ -1,23 +1,109 @@
-"""Run ansible-runner in a separate session without double-forking.
+"""Run Ansible in a separate session while tracking the actual playbook process.
 
-The process survives a web-worker exit, while its PID and wait status still
-identify the actual runner. Artifacts use a deterministic execution directory.
+The runner's foreground ``run`` command keeps its PID and exit status attached
+to the handle. ``start_new_session`` separates it from the API's session, and
+the persisted PID supports reconciliation after an API restart.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import select
+import shlex
 import shutil
 import signal
+import tempfile
 from pathlib import Path
 from typing import Any, AsyncIterator
+
+import yaml
 
 from app.core.config import settings
 from app.core.errors import RunnerSetupError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _process_identity(pid: int) -> dict[str, int | str] | None:
+    """Linux PID identity survives API restarts and rejects recycled PIDs."""
+    if pid <= 0:
+        return None
+    try:
+        # comm may contain spaces or parentheses; fields after its final ')'
+        # begin with state (field 3), and starttime is field 22.
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        if fields[0] == "Z":
+            return None
+        return {"pid": pid, "start_time": fields[19],
+                "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip()}
+    except (OSError, IndexError):
+        return None
+
+
+def record_process_identity(artifact_dir: Path, pid: int) -> bool:
+    identity = _process_identity(pid)
+    if identity is None:
+        return False  # A very short-lived runner may already have exited.
+    fd, temporary = tempfile.mkstemp(prefix=".process-", dir=artifact_dir)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(identity, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, artifact_dir / "process.json")
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return True
+
+
+def process_matches(artifact_dir: Path, pid: int) -> bool:
+    try:
+        recorded = json.loads((artifact_dir / "process.json").read_text())
+    except (OSError, ValueError):
+        return False
+    current = _process_identity(pid)
+    return current is not None and recorded == current
+
+
+def signal_process_identity(identity: dict, sig: int = signal.SIGTERM) -> bool:
+    """Signal an exact Linux process through a pidfd, never a recycled PID."""
+    pid = identity.get("pid")
+    if type(pid) is not int or not 0 < pid < 2**31:
+        return False
+    try:
+        descriptor = os.pidfd_open(pid)
+    except (AttributeError, OSError):
+        return False
+    try:
+        # Open first, then verify. Even if the original exits after this check,
+        # the descriptor cannot address a replacement that inherits its PID.
+        if _process_identity(pid) != identity:
+            return False
+        signal.pidfd_send_signal(descriptor, sig)
+        # Agents are daemonized, not waitable children. A readable pidfd means
+        # termination is complete before the workspace can start another run.
+        select.select([descriptor], [], [], 1)
+        return True
+    except (AttributeError, OSError):
+        return False
+    finally:
+        os.close(descriptor)
+
+
+class _LiteralCredential(str):
+    """Credential data must never be evaluated as an Ansible template."""
+
+
+class _ExtraVarsDumper(yaml.SafeDumper):
+    """Keep the Ansible-specific tag local to runner extra variables."""
+
+
+_ExtraVarsDumper.add_representer(
+    _LiteralCredential,
+    lambda dumper, value: dumper.represent_scalar("!unsafe", str(value)),
+)
 
 
 class _SubprocessHandle:
@@ -68,32 +154,39 @@ class _SubprocessHandle:
 
 
 async def signal_running_attempt(workspace_path: str | Path, *,
-                                 signal: str = "SIGTERM",
-                                 attempt_id: str | None = None) -> bool:
+                                 signal: str = "SIGTERM", attempt_id: str | None = None) -> bool:
     """Signal the detached ansible-runner subprocess for a workspace.
 
-    Reads ``runner/<attempt_id>/pid``, written by deployment startup.
-    Legacy callers without an attempt ID use ``runner/pid`` only. Returns
-    whether a signal was delivered; the observer records terminal state.
+    Reads the per-attempt pidfile at ``<workspace>/runner/<attempt>/pid``
+    (or the legacy runner pidfile) and sends SIGTERM (or SIGKILL for force).
+    Returns True if a signal was sent, False if no pidfile or process.
+    The events watcher then writes attempt_end with
+    ``terminal_state=cancelled``.
     """
     ws = Path(workspace_path)
-    # Never signal an older attempt when cancelling a specific deployment run.
     if attempt_id is not None:
-        if Path(attempt_id).name != attempt_id or attempt_id in (".", ".."):
+        if not attempt_id or Path(attempt_id).name != attempt_id or attempt_id in {".", ".."}:
             return False
         pid_candidates = [ws / "runner" / attempt_id / "pid"]
     else:
-        pid_candidates = [ws / "runner" / "pid"]
+        # Compatibility for callers without a persisted attempt identity.
+        pid_candidates = [ws / "runner" / "pid", ws / "runner" / "artifacts" / "pid"]
+        pid_candidates.extend(sorted((ws / "runner").glob("*/pid"), reverse=True))
+        pid_candidates.extend(sorted((ws / "runner/artifacts").glob("*/pid"), reverse=True))
     sig = getattr(__import__("signal"), signal, None)
     if sig is None:
         logger.warning("unknown_signal", signal=signal)
         return False
     for p in pid_candidates:
+        # A completed attempt's numeric PID can later belong to a different
+        # process. Its recorded runner result means it must not be signalled.
+        if (p.parent / "rc").is_file():
+            continue
         try:
             pid = int(p.read_text().strip())
         except (FileNotFoundError, ValueError, OSError):
             continue
-        if pid <= 1:
+        if pid <= 0 or not process_matches(p.parent, pid):
             continue
         try:
             os.kill(pid, sig)
@@ -111,28 +204,51 @@ class DetachedRunner:
     async def start(self, *, private_data_dir: Path,
                     extravars: dict[str, Any],
                     envvars: dict[str, str]) -> _SubprocessHandle:
-        private_data_dir = Path(private_data_dir)
-        private_data_dir.mkdir(parents=True, exist_ok=True)
+        private_data_dir = Path(private_data_dir).resolve()
+        private_data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # ansible-runner appends ident to artifact-dir. Point that pair at
+        # this attempt so the watcher reads job_events, rc and status here.
+        argv = [
+            self.runner_bin, "run", str(private_data_dir),
+            "--artifact-dir", str(private_data_dir.parent),
+            "--ident", private_data_dir.name,
+        ]
+        # RAW command mode keeps native context wrappers under ansible-runner's
+        # existing event, exit-code, cancellation and restart-recovery lifecycle.
+        native_command = (extravars or {}).get("r42_native_command")
+        if native_command:
+            if not isinstance(native_command, list) or not all(isinstance(arg, str) and "\0" not in arg for arg in native_command):
+                raise RunnerSetupError(message="Invalid native runner command")
+            args_path = private_data_dir / "args"
+            args_path.write_text(shlex.join(native_command))
+            args_path.chmod(0o600)
+            # The CLI requires -p even in RAW mode. RunnerConfig reads args
+            # first, so this marker is never interpreted as a playbook path.
+            argv.extend(["--playbook", "__native_context__"])
+        else:
+            (private_data_dir / "args").unlink(missing_ok=True)
 
-        playbook_rel = None
-
-        # Populate project/ with the playbook tree so ansible-runner can
-        # resolve the playbook by relative path. We resolve the playbook
-        # root by walking up from r42_playbook_path until we find the
-        # directory whose child is `scenarios/` (the playbooks repo root).
+        # Pinned projects supply an explicit root. Installed scenarios retain
+        # the legacy root inference so relative imports/assets keep working.
         playbook_path_str = (extravars or {}).get("r42_playbook_path", "")
         if playbook_path_str:
-            playbook_path = Path(playbook_path_str)
+            playbook_path = Path(playbook_path_str).resolve()
             if not playbook_path.is_file():
                 raise RunnerSetupError(
                     message=f"r42_playbook_path missing or not a file: {playbook_path}"
                 )
 
-            playbook_root = playbook_path.parent
-            while playbook_root.parent.name and playbook_root.parent.name != "scenarios":
-                playbook_root = playbook_root.parent
-            if playbook_root.parent.name == "scenarios":
-                playbook_root = playbook_root.parent.parent
+            explicit_root = (extravars or {}).get("r42_project_dir")
+            if explicit_root:
+                playbook_root = Path(explicit_root).resolve()
+            else:
+                scenarios = next(
+                    (parent for parent in playbook_path.parents if parent.name == "scenarios"),
+                    None,
+                )
+                playbook_root = scenarios.parent if scenarios else playbook_path.parent
+            if not playbook_path.is_relative_to(playbook_root):
+                raise RunnerSetupError(message="r42_playbook_path is outside the project directory")
 
             project_dir = private_data_dir / "project"
             if project_dir.exists() or project_dir.is_symlink():
@@ -145,15 +261,20 @@ class DetachedRunner:
             # Symlink for speed; ansible-runner is happy with this on Linux.
             project_dir.symlink_to(playbook_root, target_is_directory=True)
 
-            # Compute the playbook's path relative to the project root so
-            # ansible-runner can locate it via -p <relative path>.
             playbook_rel = playbook_path.relative_to(playbook_root)
+            argv.extend(["--playbook", str(playbook_rel)])
 
-            # Runner automatically discovers private_data_dir/inventory and
-            # passes its absolute path to ansible-playbook.
+            inventory_path_str = (extravars or {}).get("r42_inventory_path")
             inventory_dir_str = (extravars or {}).get("r42_inventory_dir")
-            if inventory_dir_str:
-                inventory_src = Path(inventory_dir_str)
+            if inventory_path_str:
+                inventory_src = Path(inventory_path_str).resolve()
+                if not inventory_src.is_file():
+                    raise RunnerSetupError(
+                        message=f"r42_inventory_path missing or not a file: {inventory_src}"
+                    )
+                argv.extend(["--inventory", str(inventory_src)])
+            elif inventory_dir_str:
+                inventory_src = Path(inventory_dir_str).resolve()
                 if not inventory_src.is_dir():
                     raise RunnerSetupError(
                         message=(
@@ -168,33 +289,45 @@ class DetachedRunner:
                     elif inventory_dir.is_dir():
                         shutil.rmtree(inventory_dir)
                 inventory_dir.symlink_to(inventory_src, target_is_directory=True)
-
-            env_dir = private_data_dir / "env"
-            env_dir.mkdir(exist_ok=True, mode=0o700)
-
-            # Clear obsolete runner CLI flags from older private-data dirs.
-            cmdline_path = env_dir / "cmdline"
-            cmdline_path.write_text("")
-            cmdline_path.chmod(0o600)
+                argv.extend(["--inventory", str(inventory_dir)])
 
         env_dir = private_data_dir / "env"
-        env_dir.mkdir(parents=True, exist_ok=True)
+        env_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if native_command:
+            # Runner polls its SIGTERM cancellation callback between pexpect
+            # reads. The default five-second read races our five-second kill
+            # deadline for quiet native commands, orphaning their process group.
+            # Poll promptly so runner kills the command group and publishes rc
+            # before the API's forced termination fallback.
+            settings_path = env_dir / "settings"
+            settings_path.write_text(json.dumps({"pexpect_timeout": 1}))
+            settings_path.chmod(0o600)
+        # Old attempts incorrectly put runner's -p option in Ansible's
+        # cmdline file. Remove it when preparing a reused private directory.
+        (env_dir / "cmdline").unlink(missing_ok=True)
         extravars_path = env_dir / "extravars"
-        extravars_path.write_text(json.dumps(extravars or {}))
+        prepared_vars = dict(extravars or {})
+        for key in ("default_admin_vm_ci_password", "proxmox_api_token_secret"):
+            value = prepared_vars.get(key)
+            if isinstance(value, str):
+                prepared_vars[key] = _LiteralCredential(value)
+        # Runner passes this file directly to Ansible with -e @env/extravars.
+        # Only resolved credentials are literal; normal variables may template.
+        extravars_path.write_text(yaml.dump(prepared_vars, Dumper=_ExtraVarsDumper))
         extravars_path.chmod(0o600)
 
-        # ansible-runner loads this file as a YAML/JSON mapping.
+        # ArtifactLoader expects a YAML mapping; JSON preserves strings and
+        # multiline values and is accepted by that loader.
         envvars_path = env_dir / "envvars"
-        envvars_path.write_text(json.dumps(envvars or {}))
+        prepared_env = {k: str(v) for k, v in (envvars or {}).items()}
+        envvars_path.write_text(json.dumps(prepared_env))
         envvars_path.chmod(0o600)
 
         merged_env = dict(os.environ)
-        merged_env.update({k: str(v) for k, v in (envvars or {}).items()})
+        merged_env.update(prepared_env)
 
         logger.info("spawning runner", bin=self.runner_bin, dir=str(private_data_dir))
-        argv = [self.runner_bin, "run", str(private_data_dir), "--ident", "execution"]
-        if playbook_rel is not None:
-            argv.extend(["--playbook", str(playbook_rel)])
+        lock_fd = prepared_env.get("RANGE42_PROVISIONING_LOCK_FD")
         proc = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.DEVNULL,
@@ -202,5 +335,8 @@ class DetachedRunner:
             cwd=str(private_data_dir),
             env=merged_env,
             start_new_session=True,
+            pass_fds=(int(lock_fd),) if lock_fd is not None else (),
         )
-        return _SubprocessHandle(private_data_dir / "artifacts" / "execution", proc)
+        (private_data_dir / "pid").write_text(str(proc.pid))
+        record_process_identity(private_data_dir, proc.pid)
+        return _SubprocessHandle(private_data_dir, proc)

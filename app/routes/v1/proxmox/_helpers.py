@@ -5,10 +5,13 @@ sibling modules reuse one copy instead of cross-importing privates.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 
 import httpx
-from sqlalchemy import select
+from fastapi import Depends
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session_factory
@@ -26,6 +29,35 @@ async def _session() -> AsyncSession:
         yield session
 
 
+async def _assert_snapshot_member_free(session: AsyncSession, vmid: int) -> None:
+    from app.core.snapshot_models import SnapshotOperation, SnapshotSet
+    members = await session.scalars(select(SnapshotSet.members).join(
+        SnapshotOperation, SnapshotOperation.set_id == SnapshotSet.id
+    ).where(SnapshotOperation.state.in_({"running", "needs_review"})))
+    for rows in members:
+        if (not isinstance(rows, list) or any(not isinstance(row, dict) or type(row.get("vm_id")) is not int for row in rows)
+                or any(row["vm_id"] == vmid for row in rows)):
+            raise Range42Error(status=409, code="SNAPSHOT_MEMBER_BUSY", error="snapshot_member_busy",
+                               message="A snapshot-set operation owns this guest. Reconcile it before another mutation.")
+
+
+async def _mutation_session(vmid: int, session: AsyncSession = Depends(_session)) -> AsyncSession:
+    """Fence raw VM writes against finite set dispatch and durable remote work.
+
+    Internal snapshot dispatch calls the primitive with its already-held
+    session; HTTP callers cannot bypass this dependency through request data.
+    """
+    from app.core.config import Settings
+    from app.core.locks import ProvisioningLock
+    with ProvisioningLock(Settings().workspace_root / ".locks"):
+        try:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            await _assert_snapshot_member_free(session, vmid)
+            yield session
+        finally:
+            await session.rollback()
+
+
 async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:
     row = (
         await session.execute(select(ProxmoxHost).where(ProxmoxHost.id == host_id))
@@ -40,6 +72,30 @@ async def _get_host(host_id: str, session: AsyncSession) -> ProxmoxHost:
 
 def _auth_headers(row: ProxmoxHost) -> dict[str, str]:
     return {"Authorization": f"PVEAPIToken={row.token_ref}"}
+
+
+def _config_target_digest(row: ProxmoxHost, vmid: int, vmtype: str) -> str:
+    """Stable across guest config changes, invalidated by target re-registration.
+
+    Include credential/protection changes without exposing either value. This
+    is a context guard, not authorization or a durable task ownership record.
+    """
+    binding = (row.id, row.api_url.rstrip("/"), row.node_name, row.token_ref,
+               row.protected_vmids_override_json, vmid, vmtype)
+    return hashlib.sha256(json.dumps(binding, separators=(",", ":")).encode()).hexdigest()
+
+
+def _config_task_vmid(upid: str, node: str, *, kinds: tuple[str, ...] = ('qmconfig',)) -> int | None:
+    """Bind explicitly supported QEMU workers to their literal target VMID."""
+    if not isinstance(upid, str) or len(upid) > 512:
+        return None
+    workers = '|'.join(re.escape(kind) for kind in kinds)
+    match = re.fullmatch(
+        rf"UPID:{re.escape(node)}:[A-Fa-f0-9]+:[A-Fa-f0-9]+:[A-Fa-f0-9]+:(?:{workers}):([0-9]{{3,9}}):[^:\s]+:", upid,
+    )
+    if match and 100 <= int(match[1]) <= 999999999:
+        return int(match[1])
+    return None
 
 
 def _assert_vmid_safe(row: ProxmoxHost, vmid: int, action: str) -> None:

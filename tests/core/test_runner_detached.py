@@ -1,5 +1,6 @@
-import pytest
 import json
+
+import pytest
 from pathlib import Path
 from app.core import runner_detached as runner_detached_module
 from app.core.runner_detached import DetachedRunner
@@ -13,7 +14,7 @@ async def test_detached_runner_writes_pid_and_exits(tmp_path, monkeypatch):
     script = tmp_path / "fake-runner.sh"
     script.write_text(
         "#!/bin/sh\n"
-        "# $1 is the subcommand (start), $2 is the private_data_dir\n"
+        "# $1 is the subcommand (run), $2 is the private_data_dir\n"
         "mkdir -p \"$2/job_events\"\n"
         "echo $$ > \"$2/pid\"\n"
         "echo 0 > \"$2/rc\"\n"
@@ -101,7 +102,7 @@ async def test_detached_runner_writes_project_dir(tmp_path: Path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_detached_runner_passes_playbook_to_cli(tmp_path: Path, monkeypatch):
+async def test_detached_runner_passes_runner_options_as_argv(tmp_path: Path, monkeypatch):
     playbook_root = tmp_path / "playbooks"
     (playbook_root / "scenarios" / "_universal").mkdir(parents=True)
     pb = playbook_root / "scenarios" / "_universal" / "main.yml"
@@ -120,10 +121,10 @@ async def test_detached_runner_passes_playbook_to_cli(tmp_path: Path, monkeypatc
         async def wait(self):
             return 0
 
-    captured = []
+    calls = []
 
     async def _fake_spawn(*args, **kwargs):
-        captured.extend(args)
+        calls.append((args, kwargs))
         return _FakeProc()
 
     monkeypatch.setattr(
@@ -143,14 +144,18 @@ async def test_detached_runner_passes_playbook_to_cli(tmp_path: Path, monkeypatc
         envvars={},
     )
 
-    cmdline = (private_data_dir / "env" / "cmdline").read_text()
-    assert not cmdline
-    assert captured[1] == "run"
-    assert captured[captured.index("--playbook") + 1] == "scenarios/_universal/main.yml"
+    argv, kwargs = calls[0]
+    assert argv[1:3] == ("run", str(private_data_dir))
+    assert argv[argv.index("--playbook") + 1] == "scenarios/_universal/main.yml"
+    assert argv[argv.index("--inventory") + 1] == str(private_data_dir / "inventory")
+    assert argv[argv.index("--artifact-dir") + 1] == str(private_data_dir.parent)
+    assert argv[argv.index("--ident") + 1] == private_data_dir.name
+    assert kwargs["start_new_session"] is True
+    assert not (private_data_dir / "env" / "cmdline").exists()
 
 
 @pytest.mark.asyncio
-async def test_detached_runner_envvars_mapping(tmp_path: Path, monkeypatch):
+async def test_detached_runner_envvars_are_a_yaml_mapping(tmp_path: Path, monkeypatch):
     playbook_root = tmp_path / "playbooks"
     (playbook_root / "scenarios" / "x").mkdir(parents=True)
     pb = playbook_root / "scenarios" / "x" / "main.yml"
@@ -187,6 +192,7 @@ async def test_detached_runner_envvars_mapping(tmp_path: Path, monkeypatch):
     envvars_path = private_data_dir / "env" / "envvars"
     content = envvars_path.read_text()
 
+    # JSON is a YAML mapping, as required by ansible-runner's ArtifactLoader.
     assert json.loads(content) == {"FOO": "bar", "QUX": "with spaces"}
 
     # Permissions are 0600
@@ -235,8 +241,8 @@ async def test_detached_runner_extravars_perms_0600(tmp_path: Path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_detached_runner_envvars_preserves_newline_in_value(tmp_path: Path, monkeypatch):
-    """The runner mapping safely encodes multiline values."""
+async def test_detached_runner_envvars_round_trip_multiline_values(tmp_path: Path, monkeypatch):
+    """A YAML mapping preserves multiline values without injecting new keys."""
     playbook_root = tmp_path / "playbooks"
     (playbook_root / "scenarios" / "x").mkdir(parents=True)
     pb = playbook_root / "scenarios" / "x" / "main.yml"
@@ -266,19 +272,19 @@ async def test_detached_runner_envvars_preserves_newline_in_value(tmp_path: Path
     await runner.start(
         private_data_dir=private_data_dir,
         extravars={"r42_playbook_path": str(pb), "r42_inventory_dir": str(tmp_path / "inv")},
-        envvars={"BAD": "line1\nline2"},
+        envvars={"MULTILINE": "line1\nline2"},
     )
-
-    assert json.loads((private_data_dir / "env/envvars").read_text())["BAD"] == "line1\nline2"
+    assert json.loads((private_data_dir / "env" / "envvars").read_text()) == {
+        "MULTILINE": "line1\nline2",
+    }
 
 
 @pytest.mark.asyncio
 async def test_detached_runner_writes_inventory_symlink(tmp_path: Path, monkeypatch):
     """DetachedRunner must symlink inventory/ from r42_inventory_dir extravar.
 
-    The cmdline writes ``-i inventory`` (relative path) so ansible-runner
-    expects ``<private_data_dir>/inventory/`` to exist. Without this symlink
-    a real ansible-runner invocation fails with "inventory not found".
+    Legacy deployments supply an inventory directory. It remains reachable
+    through the runner's inventory symlink and explicit --inventory argument.
     """
     playbook_root = tmp_path / "playbooks"
     (playbook_root / "scenarios" / "x").mkdir(parents=True)
@@ -325,7 +331,7 @@ async def test_detached_runner_writes_inventory_symlink(tmp_path: Path, monkeypa
     assert inv_link.exists(), "inventory/ subdir not created"
     assert inv_link.is_symlink() or inv_link.is_dir(), \
         "inventory/ should be a symlink or directory"
-    # And ansible-runner's relative path -i inventory must find hosts.yml
+    # The inventory argument must find hosts.yml.
     assert (inv_link / "hosts.yml").is_file()
 
 
@@ -373,3 +379,78 @@ async def test_detached_runner_raises_when_inventory_dir_missing(
             },
             envvars={},
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("symlink_escape", [False, True])
+async def test_detached_runner_rejects_playbook_outside_explicit_project(
+    tmp_path, symlink_escape,
+):
+    from app.core.errors import RunnerSetupError
+
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.yml"
+    outside.write_text("- hosts: all\n  tasks: []\n")
+    playbook = outside
+    if symlink_escape:
+        playbook = project / "main.yml"
+        playbook.symlink_to(outside)
+
+    with pytest.raises(RunnerSetupError, match="outside.*project"):
+        await DetachedRunner().start(
+            private_data_dir=tmp_path / "attempt",
+            extravars={"r42_project_dir": str(project), "r42_playbook_path": str(playbook)},
+            envvars={},
+        )
+
+
+@pytest.mark.asyncio
+async def test_signal_running_attempt_finds_per_attempt_pid(tmp_path, monkeypatch):
+    attempt = tmp_path / "runner" / "attempt-123"
+    attempt.mkdir(parents=True)
+    (attempt / "pid").write_text("12345")
+    calls = []
+    monkeypatch.setattr(runner_detached_module.os, "kill", lambda pid, sig: calls.append((pid, sig)))
+    monkeypatch.setattr(runner_detached_module, "process_matches", lambda path, pid: True)
+
+    assert await runner_detached_module.signal_running_attempt(tmp_path)
+    assert calls == [(12345, runner_detached_module.signal.SIGTERM)]
+
+
+@pytest.mark.asyncio
+async def test_signal_does_not_trust_a_pid_without_process_identity(tmp_path, monkeypatch):
+    artifact = tmp_path / "runner" / "attempt"
+    artifact.mkdir(parents=True)
+    (artifact / "pid").write_text("12345")
+    calls = []
+    monkeypatch.setattr(runner_detached_module.os, "kill", lambda *args: calls.append(args))
+    assert not await runner_detached_module.signal_running_attempt(tmp_path)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pid", ["0", "-1"])
+async def test_signal_running_attempt_ignores_nonpositive_pid(tmp_path, monkeypatch, pid):
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    (runner / "pid").write_text(pid)
+    calls = []
+    monkeypatch.setattr(runner_detached_module.os, "kill", lambda *args: calls.append(args))
+
+    assert not await runner_detached_module.signal_running_attempt(tmp_path)
+    assert not calls
+
+
+@pytest.mark.asyncio
+async def test_signal_running_attempt_skips_completed_attempt_pid(tmp_path, monkeypatch):
+    runner = tmp_path / "runner"
+    completed = runner / "completed-attempt"
+    completed.mkdir(parents=True)
+    (completed / "pid").write_text("12345")
+    (completed / "rc").write_text("0")
+    calls = []
+    monkeypatch.setattr(runner_detached_module.os, "kill", lambda *args: calls.append(args))
+
+    assert not await runner_detached_module.signal_running_attempt(tmp_path)
+    assert not calls

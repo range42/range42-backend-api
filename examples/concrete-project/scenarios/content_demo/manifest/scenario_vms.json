@@ -1,0 +1,6 @@
+{
+  "scenario": "content_demo",
+  "version": 1,
+  "description": "Local content, script and imported Ansible playbook example; provisions no VMs or networks.",
+  "vms": []
+}

@@ -11,23 +11,30 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select, update, case
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.allocation import ssh_controlmaster_env
+from app.core.attempt_lifecycle import advance_attempt_cursor, finish_attempt, keep_attempt_lock, mark_attempt_running
 from app.core.config import settings
-from app.core.errors import ProjectCheckoutError, Range42Error
+from app.core.db import get_session_factory
+from app.core.errors import PreflightBlockedError, Range42Error
 from app.core.events import EventsWriter
 from app.core.events_watcher import EventsWatcher
-from app.core.inventory_writer import write_inventory
-from app.core.locks import acquire_lock, heartbeat, release_lock
+from app.core.locks import ProvisioningLock, acquire_lock
 from app.core.logging import get_logger
-from app.core.models import Attempt, Deployment, Project, ProxmoxHost, Source
-from app.core.project import checkout_project
+from app.core.models import Attempt, Deployment, ProxmoxHost
+from app.core.orphans import track_attempt, untrack_attempt
+from app.core.preflight import check_vmids
+from app.core.scenario import prepare_project_scenario, validate_concrete_scope
+from app.core.scenario_networks import check_scenario_networks
+from app.core.scenario_resources import check_scenario_resources
+from app.core.deployment_allocations import ensure_for_attempt
+from app.core.scenario_runtime import cleanup_runtime_vault, prepare_runtime_vault, target_runtime_variables
 from app.core.redaction import (
     ConfigDenylistLayer,
     RedactionAuditWriter,
@@ -36,22 +43,20 @@ from app.core.redaction import (
 )
 from app.core.runner_detached import DetachedRunner
 from app.core.runner_protocol import RunnerProtocol
-from app.core.ssh_agent import unlock_workspace_keys
-from app.core.workspace import shred_envvars
+from app.core.ssh_agent import unlock_workspace_keys, _decrypt_vault
+from app.core.attempt_cleanup import cleanup_attempt_credentials, record_attempt_cleanup
 from app.utils.checks_playbooks import resolve_scenarios_playbook
 
 logger = get_logger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
-HEARTBEAT_INTERVAL_S = 30
 
 
 def _resolve_playbook_for_scenario(scenario_label: str) -> Path:
     """Resolve a scenario_label to its playbook path.
 
     Uses the existing checks_playbooks.resolve_scenarios_playbook() validator
-    (regex: ``^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$``) so ``_universal`` is
-    accepted and traversal attempts (e.g. ``../etc/passwd``) are rejected.
+    so retired scenarios and traversal attempts are rejected.
 
     :param scenario_label: The Deployment.scenario_label value.
     :type scenario_label: str
@@ -80,63 +85,106 @@ def resolve_attempt_playbook(scenario_label: str, scope: str) -> Path:
 
 
 async def start_attempt(session: AsyncSession, *, attempt: Attempt,
-                        runner: RunnerProtocol | None = None,
-                        lock_acquired: bool = False,
-                        operation_vars: dict[str, Any] | None = None) -> None:
-    """Own the workspace until actual execution ends, including setup errors."""
-    owner = f"attempt-{attempt.id}"
-    if not lock_acquired:
-        await acquire_lock(session, deployment_id=attempt.deployment_id,
-                           owner=owner, interval_s=30)
-    dep = await session.get(Deployment, attempt.deployment_id)
-    attempt.state = "deploying"
-    attempt.started_at = datetime.now(timezone.utc)
-    dep.current_attempt_id = attempt.id
-    dep.state = "deploying"
-    await session.commit()
-    dep_id, att_id = dep.id, attempt.id
+                        runner: RunnerProtocol | None = None) -> None:
+    task = asyncio.current_task()
+    attempt_id = attempt.id
+    track_attempt(attempt_id, task)
     try:
-        await _launch_attempt(session, attempt=attempt, runner=runner,
-                              operation_vars=operation_vars)
-    except BaseException:
+        dep = await session.get(Deployment, attempt.deployment_id)
+        validate_concrete_scope(dep, attempt.scope)
+        if dep.project_sha and (dep.native or attempt.scope in ("full", "runtime")):
+            root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
+            with ProvisioningLock(root / ".locks") as lock:
+                await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
+        else:
+            await _start_attempt(session, attempt=attempt, runner=runner)
+    except Exception as exc:
         await session.rollback()
-        attempt = await session.get(Attempt, att_id)
-        dep = await session.get(Deployment, dep_id)
-        attempt.state = "failed"
-        attempt.ended_at = datetime.now(timezone.utc)
-        attempt.sub_reason = "RUNNER_SETUP_FAILED"
-        dep.state = "failed"
-        await release_lock(session, deployment_id=dep.id, owner=owner)
-        await session.commit()
-        private = Path(dep.workspace_path) / "runner" / attempt.id
-        for name in ("envvars", "extravars"):
-            shred_envvars(private / "env" / name)
+        await finish_attempt(attempt_id=attempt_id, rc=None,
+                             error_code=exc.code if isinstance(exc, Range42Error) else "ATTEMPT_START_FAILED")
         raise
+    finally:
+        untrack_attempt(attempt_id, task)
 
 
-async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
-                          runner: RunnerProtocol | None = None,
-                          operation_vars: dict[str, Any] | None = None) -> None:
+async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
+                         runner: RunnerProtocol | None = None,
+                         provisioning_fd: int | None = None) -> None:
     """Spawn the detached runner for an attempt and begin event watching.
 
-    The caller owns the workspace lock. Prepare inputs, start the runner,
-    and observe it using independent database sessions until completion.
+    Acquires the workspace lock, writes an attempt_start event, starts
+    the runner subprocess, and spawns the EventsWatcher as a background
+    asyncio Task. Returns immediately — attempt lifecycle runs async.
     """
     dep = (await session.execute(
         select(Deployment).where(Deployment.id == attempt.deployment_id))
     ).scalar_one()
+    validate_concrete_scope(dep, attempt.scope)
     ws = Path(dep.workspace_path)
     events_jsonl = ws / "events.jsonl"
     redactions_jsonl = ws / "redactions.jsonl"
     artifact_dir = ws / "runner" / attempt.id
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    artifact_dir.chmod(0o700)
 
-    playbook_path = resolve_attempt_playbook(dep.scenario_label, attempt.scope)
+    await acquire_lock(session, deployment_id=dep.id,
+                       owner=f"attempt-{attempt.id}", interval_s=30)
+    await session.commit()
+
+    # Resolve scenario_label -> playbook path so the runner (DetachedRunner
+    # from T2-T4) can populate project/, env/cmdline, env/envvars from it.
+    scenario = None
+    runtime_run = None
+    native_run = None
+    if dep.project_sha:
+        scenario = await prepare_project_scenario(
+            session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
+            project_sha=attempt.project_sha if attempt.scope == "configure" else None,
+        )
+        target_host = await session.get(ProxmoxHost, dep.target_host_id)
+        overrides = json.loads(target_host.protected_vmids_override_json) if (
+            target_host and target_host.protected_vmids_override_json
+        ) else None
+        vmid_check = check_vmids(scenario.vmids, host_overrides=overrides)
+        if vmid_check.result == "block":
+            raise PreflightBlockedError(message=vmid_check.detail)
+        if scenario.native:
+            from app.core.native_execution import prepare_native_run
+            native = scenario.native
+            native_run = prepare_native_run(scenario.project_root, native["descriptor"], scenario.context,
+                scope=attempt.scope, features=native.get("features", {}), parameters=native.get("parameters", {}),
+                artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout")
+            playbook_path = scenario.playbook
+        elif attempt.scope == "runtime":
+            from app.core.runtime_runner import prepare_runtime_run
+            runtime_run = await prepare_runtime_run(dep, attempt, target_host, scenario, artifact_dir)
+            playbook_path = runtime_run.playbook
+        else:
+            network_checks = await check_scenario_networks(scenario.playbook.parent, target_host, scope=attempt.scope)
+            blocked = next((check for check in network_checks if check.result == "block"), None)
+            if blocked:
+                raise PreflightBlockedError(message=blocked.detail)
+            resource_checks = await check_scenario_resources(
+                scenario.playbook.parent, target_host, deployment_id=dep.id, scope=attempt.scope,
+            )
+            blocked = next((check for check in resource_checks if check.result == "block"), None)
+            if blocked:
+                raise PreflightBlockedError(message=blocked.detail)
+            playbook_path = scenario.playbook
+    else:
+        playbook_path = resolve_attempt_playbook(dep.scenario_label, attempt.scope)
+
+    if scenario is not None and not scenario.native:
+        # Expiring draft leases cannot authorize execution or release a
+        # deployment's assignments. Claim/check before SSH or runner launch.
+        await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
+                                 create=attempt.scope == "full", checked_host=target_host)
 
     writer = EventsWriter(events_jsonl)
     audit = RedactionAuditWriter(redactions_jsonl)
     writer.append({"event_type": "attempt_start",
-                   "payload": {"scope": attempt.scope, "team_id": attempt.team_id}},
+                   "payload": {"scope": attempt.scope, "team_id": attempt.team_id,
+                               **({"operation": attempt.operation} if attempt.operation else {})}},
                   attempt_id=attempt.id, deployment_id=dep.id)
 
     envvars: dict[str, str] = {
@@ -144,8 +192,16 @@ async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
         "ANSIBLE_FORKS": "25",
         "ANSIBLE_PIPELINING": "True",
     }
+    ca_file = os.getenv("RANGE42_PROXMOX_CA_FILE")
+    if ca_file:
+        # Ansible URI modules use Python's SSL trust; SDK-based modules use
+        # requests. Both must trust the same CA as the verified preflight.
+        ca_path = str(Path(ca_file).resolve())
+        envvars.update(SSL_CERT_FILE=ca_path, REQUESTS_CA_BUNDLE=ca_path)
     envvars.update(ssh_controlmaster_env(deployment_id=dep.id))
-    vault_pass = ws / "secrets" / "vault_pass.txt"
+    if provisioning_fd is not None:
+        envvars["RANGE42_PROVISIONING_LOCK_FD"] = str(provisioning_fd)
+    vault_pass = (scenario.context.workspace if native_run else ws) / "secrets" / "vault_pass.txt"
     if vault_pass.exists():
         envvars["ANSIBLE_VAULT_PASSWORD_FILE"] = str(vault_pass)
 
@@ -160,11 +216,11 @@ async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
         "team_count": dep.team_count or 1,
     }
 
-    extravars.update(operation_vars or {})
+    if not dep.project_sha and attempt.operation and attempt.operation.get("kind") == "legacy":
+        extravars.update(attempt.operation.get("variables", {}))
 
     # Build the tainted-string set for substring redaction. Always includes
-    # the vault password (when present); _universal scenarios additionally
-    # add the Source PAT used for project clone.
+    # the vault password and source credentials used for the pinned checkout.
     tainted: set[str] = set()
     if vault_pass.is_file():
         try:
@@ -172,87 +228,42 @@ async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
         except OSError:
             pass
 
-    # Universal scenario: clone the project repo at the pinned project_sha and
-    # render hosts.yml from the topology. Legacy scenarios (demo_lab, blank_*)
-    # keep using the pre-rendered inventory at <ws>/inventory/ unchanged.
-    if dep.scenario_label == "_universal":
-        project = (await session.execute(
-            select(Project).where(Project.id == dep.project_id))
-        ).scalar_one()
-        source = (await session.execute(
-            select(Source).where(Source.id == project.source_id))
-        ).scalar_one()
-        target_host = (await session.execute(
-            select(ProxmoxHost).where(ProxmoxHost.id == dep.target_host_id))
-        ).scalar_one()
-
-        # Guard against missing required fields (typed errors, not cryptic git failures)
-        if not dep.project_sha:
-            raise ProjectCheckoutError(
-                message="project_sha is not set on this deployment; cannot clone for _universal scenario"
-            )
-        if not project.repo_owner or not project.repo_name:
-            raise ProjectCheckoutError(
-                message=f"project repo_owner/repo_name not set (got owner={project.repo_owner!r}, name={project.repo_name!r}); cannot construct clone URL"
-            )
-
-        # v1 simplification: source.token_ref is treated as the actual token
-        # string (acknowledged debt — no secret store yet).
-        if source.token_ref:
-            tainted.add(str(source.token_ref))
-        repo_url = (
-            f"{source.base_url.rstrip('/')}/"
-            f"{project.repo_owner}/{project.repo_name}.git"
-        )
-        project_dir = ws / "project"
-        topology_path = checkout_project(
-            repo_url=repo_url,
-            sha=dep.project_sha,
-            dest=project_dir,
-            token=source.token_ref,
-        )
-
-        topology = json.loads(topology_path.read_text())
-
-        # Extract Proxmox host/IP from api_url
-        # (e.g. "https://192.168.1.10:8006" -> "192.168.1.10").
-        api_url = str(target_host.api_url)
-        if "://" in api_url:
-            proxmox_address = api_url.split("://", 1)[1].split(":", 1)[0]
-        else:
-            proxmox_address = api_url.split(":", 1)[0]
-
-        # Proxmox API creds for the _universal playbook's node-network tasks
-        # (the proxmox_controller role reads proxmox_api_* as plain vars; the
-        # generated inventory carries no token). token_ref: "user!tokenid=secret".
-        extravars["proxmox_api_host"] = api_url.split("://", 1)[-1].rstrip("/")
-        extravars["proxmox_node"] = target_host.node_name
-        _tok = target_host.token_ref or ""
-        if "!" in _tok and "=" in _tok:
-            _userpart, _secret = _tok.split("=", 1)
-            _user, _tokid = _userpart.split("!", 1)
-            extravars["proxmox_api_user"] = _user
-            extravars["proxmox_api_token_id"] = _tokid
-            extravars["proxmox_api_token_secret"] = _secret
-            tainted.add(_secret)
-
-        inventory_dir = ws / "inventory"
-        inventory_dir.mkdir(parents=True, exist_ok=True)
-        write_inventory(
-            topology=topology,
-            team_count=dep.team_count or 1,
-            codename=dep.codename,
-            proxmox_address=proxmox_address,
-            ssh_keys_dir=ws / "ssh_keys",
-            dest=inventory_dir / "hosts.yml",
-        )
-
-        extravars["r42_topology_path"] = str(topology_path)
-        extravars["r42_inventory_dir"] = str(inventory_dir)
+    if native_run:
+        extravars.pop("r42_playbook_path", None)
+        extravars["r42_native_command"] = native_run.command
+        # Native Vault/SSH inputs belong to the selected context. Do not replace
+        # them with credentials synthesized for generated projects.
+        vault_values = await asyncio.to_thread(_decrypt_vault, scenario.context.workspace / "secrets/default_vault.yml", vault_pass)
+        def strings(value):
+            if isinstance(value, dict):
+                for item in value.values():
+                    yield from strings(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from strings(item)
+            elif isinstance(value, str) and len(value) >= 4:
+                yield value
+        tainted.update(strings(vault_values))
+    elif scenario is not None:
+        runtime_vars = target_runtime_variables(target_host, ws)
+        extravars.update(runtime_vars)
+        if attempt.scope == "full":
+            from app.core.scenario_preferences import storage_runtime_variables
+            extravars.update(storage_runtime_variables(scenario.playbook.parent))
+        tainted.update((target_host.token_ref, runtime_vars["proxmox_api_token_secret"]))
+        tainted.add(runtime_vars["default_admin_vm_ci_password"])
+        extravars["r42_project_dir"] = str(runtime_run.playbook.parent if runtime_run else scenario.project_root)
+        extravars["r42_inventory_path"] = str(runtime_run.inventory if runtime_run else scenario.inventory)
+        envvars["RANGE42_ACTIVE_CONFIG_DIR"] = str(runtime_run.config_dir if runtime_run else ws)
+        # Custom playbooks may use this to keep run output out of the pinned tree.
+        extravars["r42_workspace_dir"] = str(ws)
     else:
         # Legacy path: pre-rendered inventory (e.g. demo_lab) lives under
         # <ws>/inventory/; do not clone or generate anything.
         extravars["r42_inventory_dir"] = str(ws / "inventory")
+    if scenario and scenario.checkout_credential:
+        from urllib.parse import quote
+        tainted.update((scenario.checkout_credential, quote(scenario.checkout_credential, safe="")))
 
     # Unlock the workspace's passphrase-protected SSH keys into a dedicated
     # ssh-agent (there is none in the container) so ansible-runner can reach the
@@ -265,106 +276,135 @@ async def _launch_attempt(session: AsyncSession, *, attempt: Attempt,
     # unlocked private keys with nothing to reap it. The only remaining window
     # is runner.start() itself, closed below; after that _run()'s finally owns it.
     ssh_agent = None
-    if vault_pass.exists():
+    if native_run:
+        from app.core.ssh_agent import _start_agent
+        # range42-context use loads the selected context's keys. Give it an
+        # owned agent so it cannot clear the API operator's ambient agent.
+        ssh_agent = _start_agent(ws)
+        envvars.update(ssh_agent.env)
+    elif vault_pass.exists():
         ssh_agent = unlock_workspace_keys(ws, vault_pass)
         if ssh_agent is not None:
             envvars.update(ssh_agent.env)
 
     runner = runner or DetachedRunner()
     handle = None
+    runtime_vault = None
+
+    def cleanup() -> None:
+        # The in-memory handles also cover failures before metadata publication.
+        if ssh_agent is not None:
+            ssh_agent.close()
+        cleanup_runtime_vault(runtime_vault)
+        cleanup_attempt_credentials(ws, artifact_dir)
+
     try:
-        handle = await runner.start(
+        # Save the original redaction context before the detached process can
+        # emit output. Database credentials can rotate while it is running.
+        with os.fdopen(os.open(artifact_dir / "redaction.json", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
+            json.dump(sorted(value for value in tainted if value), stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if scenario is not None and not scenario.native:
+            runtime_vault = prepare_runtime_vault(ws)
+        record_attempt_cleanup(artifact_dir, ssh_agent=ssh_agent, runtime_vault=runtime_vault)
+        if runtime_run is not None:
+            from app.core.runtime_runner import recheck_runtime_run
+            await recheck_runtime_run(dep, attempt, target_host, runtime_run)
+        launch = asyncio.create_task(runner.start(
             private_data_dir=artifact_dir,
             extravars=extravars,
             envvars=envvars,
-        )
+        ))
+        try:
+            handle = await asyncio.shield(launch)
+        except asyncio.CancelledError:
+            # Complete process/PID publication if shutdown overlaps spawning.
+            # The next API instance can then adopt the independent runner.
+            handle = await launch
+            raise
         (artifact_dir / "pid").write_text(str(handle.pid or 0))
-
-        layers = [ConfigDenylistLayer(settings.redaction_denylist),
-                  VaultTaggedLayer(),
-                  TaintedStringLayer(tainted_strings=tainted)]
-        stop = asyncio.Event()
-        watcher = EventsWatcher(
-            job_events_dir=Path(getattr(handle, "artifact_dir", artifact_dir / "artifacts" / "execution")) / "job_events",
-            writer=writer, audit=audit, layers=layers,
-            deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
+        running = await mark_attempt_running(
+            attempt_id=attempt.id, pid=handle.pid, artifact_dir=artifact_dir,
         )
-
-        # Background work must never reuse the request's session.
-        factory = async_sessionmaker(session.bind, expire_on_commit=False)
-        dep_id, att_id = dep.id, attempt.id
-        owner = f"attempt-{att_id}"
-        attempt.pid = handle.pid
-        attempt.artifact_dir = str(getattr(handle, "artifact_dir", artifact_dir))
-        await session.commit()
-
+        await session.refresh(attempt)
+        if not running:
+            # Cancellation can arrive while Git/runner setup is in progress.
+            await handle.kill()
+            cleanup()
+            await finish_attempt(attempt_id=attempt.id, rc=None)
+            return
+    except asyncio.CancelledError:
+        if handle is None:
+            cleanup()
+        # A launched runner keeps its credentials and lock through API shutdown.
+        raise
     except BaseException:
-        # No observer owns this subprocess yet. Stop it before the caller
-        # marks setup failed and releases the workspace for another attempt.
         if handle is not None:
             await handle.kill()
-        if ssh_agent is not None:
-            ssh_agent.close()
+        cleanup()
         raise
 
-    async def _renew() -> None:
-        while True:
-            await asyncio.sleep(HEARTBEAT_INTERVAL_S)
-            async with factory() as db:
-                if not await heartbeat(db, deployment_id=dep_id, owner=owner):
-                    return
-                await db.commit()
-
+    layers = [ConfigDenylistLayer(settings.redaction_denylist),
+              VaultTaggedLayer(),
+              TaintedStringLayer(tainted_strings=tainted)]
+    stop = asyncio.Event()
+    # Background work retains values, not ORM attributes from the request.
+    attempt_id, deployment_id = attempt.id, dep.id
+    watcher = EventsWatcher(
+        job_events_dir=artifact_dir / "job_events",
+        writer=writer, audit=audit, layers=layers,
+        deployment_id=dep.id, attempt_id=attempt.id, stop=stop,
+        on_progress=lambda cursor: advance_attempt_cursor(attempt_id=attempt_id, event_cursor_tip=cursor),
+    )
     async def _run() -> None:
         task_watch = asyncio.create_task(watcher.run())
-        task_heartbeat = asyncio.create_task(_renew())
-        completed = False
+        task_lock = asyncio.create_task(keep_attempt_lock(
+            attempt_id=attempt_id, deployment_id=deployment_id, stop=stop,
+        ))
+        rc = None
+        detached = False
         try:
             rc = await handle.wait()
-            completed = True
             stop.set()
-            stream_failed = False
+            stream_error = None
             try:
-                await task_watch
+                await asyncio.shield(task_watch)
             except Exception:
-                stream_failed = True
-                logger.exception("attempt event collection failed", attempt_id=att_id)
-            async with factory() as db:
-                terminal = (await db.execute(update(Attempt).where(Attempt.id == att_id).values(
-                    state=case((Attempt.sub_reason == "cancel_requested", "cancelled"),
-                               else_="succeeded" if rc == 0 else "failed"),
-                    rc=rc, ended_at=datetime.now(timezone.utc),
-                    sub_reason="EVENT_STREAM_FAILED" if stream_failed else None,
-                ).returning(Attempt.state))).scalar_one()
-                await db.execute(update(Deployment).where(
-                    Deployment.id == dep_id, Deployment.current_attempt_id == att_id,
-                ).values(state=terminal))
-                # Write the last event while still owning the workspace. A new
-                # writer must recover its cursor after this append.
-                try:
-                    writer.append({"event_type": "attempt_end",
-                                   "payload": {"terminal_state": terminal, "rc": rc}},
-                                  attempt_id=att_id, deployment_id=dep_id)
-                except OSError:
-                    logger.exception("attempt terminal event write failed", attempt_id=att_id)
-                    await db.execute(update(Attempt).where(Attempt.id == att_id).values(
-                        sub_reason="EVENT_STREAM_FAILED"))
-                await release_lock(db, deployment_id=dep_id, owner=owner)
-                await db.commit()
-            logger.info("attempt finished", attempt_id=att_id, rc=rc)
+                stream_error = "EVENT_STREAM_FAILED"
+            await asyncio.shield(task_lock)
+            # Release shared runtime files before the lock permits another run.
+            cleanup()
+            runtime_result = {}
+            if runtime_run is not None:
+                from app.core.runtime_completion import observe_runtime_completion
+                runtime_result = await observe_runtime_completion(attempt_id, writer)
+            terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, warning_code=stream_error, **runtime_result)
+            cursor = writer.append({"event_type": "attempt_end",
+                                    "payload": {"terminal_state": terminal_state, "rc": rc}},
+                                   attempt_id=attempt_id, deployment_id=deployment_id)
+            await finish_attempt(attempt_id=attempt_id, rc=rc, event_cursor_tip=cursor)
+            logger.info("attempt finished", attempt_id=attempt_id, rc=rc)
+        except asyncio.CancelledError:
+            # Stopping observation is not a user cancellation. The Cancel API
+            # signals the runner itself and records cancellation in the DB.
+            detached = True
+            raise
+        except Exception as exc:
+            await handle.kill()
+            cleanup()
+            await finish_attempt(attempt_id=attempt_id, rc=rc, error_code="ATTEMPT_MONITOR_FAILED")
+            logger.warning("attempt monitor failed", attempt_id=attempt_id,
+                           exception_type=type(exc).__name__)
         finally:
             stop.set()
-            task_heartbeat.cancel()
-            await asyncio.gather(task_heartbeat, return_exceptions=True)
-            await asyncio.gather(task_watch, return_exceptions=True)
-            # On web-worker shutdown the separate runner session remains alive.
-            # Keep its agent and inputs until an observer sees actual completion.
-            if completed:
-                if ssh_agent is not None:
-                    ssh_agent.close()
-                shred_envvars(artifact_dir / "env" / "envvars")
-                shred_envvars(artifact_dir / "env" / "extravars")
+            # Both workers observe stop. Let any active database transaction
+            # and its session close before the API disposes the engine.
+            await asyncio.gather(task_watch, task_lock, return_exceptions=True)
+            if not detached:
+                cleanup()
 
     task = asyncio.create_task(_run())
+    track_attempt(attempt_id, task)
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(_BACKGROUND_TASKS.discard)

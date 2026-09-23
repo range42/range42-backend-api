@@ -1,42 +1,42 @@
 services:
   api:
-    image: ${IMAGE_NAME:-ghcr.io/range42/range42-backend-api:latest}
+    image: ${RANGE42_CONTAINER_IMAGE:-range42-backend-api:local}
     build:
       context: .
       target: runtime
       args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
+        APP_UID: ${RANGE42_CONTAINER_UID:-1000}
+        APP_GID: ${RANGE42_CONTAINER_GID:-1000}
+    # Explicitly single-process; do not scale against the same SQLite workspace.
+    init: true
     ports:
-      - "${PORT:-8000}:8000"
+      - "${RANGE42_LISTEN_ADDRESS:-127.0.0.1}:${RANGE42_CONTAINER_PORT:-8000}:8000"
     volumes:
-      # SSH keys — must be readable by the container user (UID 1000 by default).
-      # Set SSH_KEY_PATH to override the source directory.
-      - ${SSH_KEY_PATH:-~/.ssh}:/home/range42/.ssh:ro
-      # Inventory contains per-deployment host credentials. Uncomment to
-      # override the baked-in inventory without rebuilding the image:
-      # - ${INVENTORY_PATH:-./inventory}:/app/inventory:ro
-    # A deploy bundle renders a .env in the compose project dir; load it as the
-    # runtime source of truth. required:false keeps plain `docker compose up`
-    # working with no .env. Only vars actually present in .env are set — so
-    # unset RANGE42_* fall back to the app defaults instead of being forced to
-    # an empty string (which the app would treat as a real, broken value).
-    env_file:
-      - path: .env
-        required: false
+      - state:/var/lib/range42
+    secrets:
+      - api_token
+      - credential_key
     environment:
-      - PROJECT_ROOT_DIR=/app
-      # Overridable via .env so a deploy bundle can point the backend at a
-      # bind-mounted playbooks tree (e.g. /home/range42/range42-playbooks).
-      # The baked-in /app/ has no scenarios/, so real deploys MUST override this.
-      - API_BACKEND_WWWAPP_PLAYBOOKS_DIR=${API_BACKEND_WWWAPP_PLAYBOOKS_DIR:-/app/}
-      - API_BACKEND_PUBLIC_PLAYBOOKS_DIR=${API_BACKEND_PUBLIC_PLAYBOOKS_DIR:-/app/}
-      - API_BACKEND_INVENTORY_DIR=${API_BACKEND_INVENTORY_DIR:-/app/inventory/}
-      - API_BACKEND_VAULT_FILE=${API_BACKEND_VAULT_FILE:-}
-      # Production: use VAULT_PASSWORD_FILE pointing to a mounted secret file.
-      # VAULT_PASSWORD is visible via `docker inspect` — dev/testing only.
-      - VAULT_PASSWORD_FILE=${VAULT_PASSWORD_FILE:-}
-      - VAULT_PASSWORD=${VAULT_PASSWORD:-}
-      - CORS_ORIGIN_REGEX=${CORS_ORIGIN_REGEX:-}
-      - DEBUG=${DEBUG:-false}
+      RANGE42_AUTH_MODE: required
+      RANGE42_API_TOKEN_FILE: /run/secrets/api_token
+      RANGE42_CREDENTIAL_KEY_FILE: /run/secrets/credential_key
+      RANGE42_CORS_ORIGINS: ${RANGE42_CORS_ORIGINS:-}
+      RANGE42_GIT_ALLOWED_HOSTS: ${RANGE42_GIT_ALLOWED_HOSTS:-github.com,gitlab.com,codeberg.org}
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 60s
     restart: unless-stopped
+
+volumes:
+  state:
+
+secrets:
+  api_token:
+    file: ${RANGE42_CONTAINER_SECRETS_DIR:-./.container-secrets}/api-token
+  credential_key:
+    file: ${RANGE42_CONTAINER_SECRETS_DIR:-./.container-secrets}/credential-key

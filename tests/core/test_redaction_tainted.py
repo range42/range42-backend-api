@@ -4,6 +4,10 @@ Catches secret values that leak via stdout/stderr/msg/debug regardless of
 which key carried them. Tainted set is built per attempt from cloudinit
 vars, vault password, and Source PAT.
 """
+import json
+
+import pytest
+
 from app.core.redaction import TaintedStringLayer
 
 
@@ -102,6 +106,43 @@ def test_rule_id_includes_prefix_for_audit():
     # rule_id should start with tainted_string: but not contain full secret
     assert fired[0]["rule_id"].startswith("tainted_string:")
     assert "abcdef-very-long-secret" not in fired[0]["rule_id"]
+
+
+def test_tainted_values_are_removed_from_translated_text_headers_and_nested_lists():
+    layer = TaintedStringLayer(tainted_strings={"test-api-secret", "test-guest-password"})
+    event = {"event_type": "log_line", "payload": {
+        "text": "API response debug contains test-api-secret",
+        "res": {"invocation": {"module_args": {"headers": {
+            "Authorization": "PVEAPIToken=user@pve!test=test-api-secret",
+        }}}, "arbitrary_output": [["test-guest-password"], {"value": "test-api-secret"}], "rc": 0},
+    }}
+    redacted, fired = layer.redact(event)
+    assert "test-api-secret" not in str(redacted)
+    assert "test-guest-password" not in str(redacted)
+    assert redacted["payload"]["res"]["rc"] == 0
+    assert {entry["field_path"] for entry in fired} == {
+        "payload.text", "payload.res.invocation.module_args.headers.Authorization",
+        "payload.res.arbitrary_output[0][0]", "payload.res.arbitrary_output[1].value",
+    }
+
+
+def test_tainted_audit_identifiers_do_not_reveal_secret_prefix():
+    layer = TaintedStringLayer(tainted_strings={"abcd-private-value"})
+    _, fired = layer.redact({"payload": {"msg": "abcd-private-value"}})
+    assert "abcd" not in str(fired)
+
+
+@pytest.mark.parametrize("ensure_ascii", [True, False])
+def test_json_rendered_credential_is_removed_from_translated_stdout(ensure_ascii):
+    secret = 'credential-{{literal}}-line\nslash\\-quote"-café'
+    rendered = json.dumps({"debug_value": secret}, ensure_ascii=ensure_ascii)
+    event = {"event_type": "log_line", "payload": {"text": rendered}}
+
+    redacted, fired = TaintedStringLayer({secret}).redact(event)
+
+    assert redacted["payload"]["text"] == '{"debug_value": "[REDACTED:tainted_string]"}'
+    assert fired == [{"rule_id": "tainted_string:known-secret", "field_path": "payload.text"}]
+    assert event["payload"]["text"] == rendered
 
 
 def test_non_string_values_pass_through():

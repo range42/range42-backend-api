@@ -7,7 +7,7 @@ async def _boot(tmp_path, monkeypatch):
     monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
     pb = tmp_path / "playbooks/scenarios/x"
     pb.mkdir(parents=True)
-    for name in ['main', 'teardown']:
+    for name in ["main", "teardown"]:
         (pb / f"{name}.yml").write_text("- hosts: localhost\n  tasks: []\n")
     monkeypatch.setenv("API_BACKEND_WWWAPP_PLAYBOOKS_DIR", str(tmp_path / "playbooks"))
     monkeypatch.setenv("RANGE42_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
@@ -62,20 +62,19 @@ async def test_teardown_rejects_wrong_codename(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_teardown_accepts_correct_codename(tmp_path, monkeypatch):
+async def test_teardown_without_concrete_entrypoint_fails_and_preserves_workspace(tmp_path, monkeypatch):
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "1")
     app, dbmod = await _boot(tmp_path, monkeypatch)
     try:
         ws = await _seed(dbmod, tmp_path, codename="AURORA")
         assert ws.exists()
+        (tmp_path / "playbooks/scenarios/x/teardown.yml").unlink()
         async with AsyncClient(transport=ASGITransport(app=app),
                                base_url="http://t") as c:
             r = await c.request("DELETE", "/v1/deployments/dep-1",
                                 json={"confirm_codename": "AURORA"})
-            assert r.status_code == 202, r.text
-            att = r.json()
-            assert att["scope"] == "teardown"
-            assert att["state"] == "pending"
-            # Workspace and recovery inputs are retained.
+            assert r.status_code == 409, r.text
+            assert r.json()["code"] == "OPERATION_UNSUPPORTED"
             assert ws.exists()
     finally:
         await dbmod.dispose_engine()
@@ -105,5 +104,37 @@ async def test_teardown_missing_deployment(tmp_path, monkeypatch):
             r = await c.request("DELETE", "/v1/deployments/bogus",
                                 json={"confirm_codename": "X"})
             assert r.status_code == 404
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("active_state", ["pending", "deploying", "cancelling", None])
+async def test_teardown_preserves_active_workspace_and_attempt(tmp_path, monkeypatch, active_state):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        ws = await _seed(dbmod, tmp_path)
+        marker = ws / "pinned-playbook.yml"
+        marker.write_text("- hosts: all\n")
+        from app.core.models import Attempt, Deployment, WorkspaceLock
+        async with dbmod.get_session_factory()() as session:
+            if active_state is not None:
+                session.add(Attempt(id="active", deployment_id="dep-1", scope="full", state=active_state))
+                dep = await session.get(Deployment, "dep-1")
+                dep.current_attempt_id = "active"
+                dep.state = "deploying"
+            else:
+                # A cancelled attempt's process may still own the workspace.
+                session.add(WorkspaceLock(deployment_id="dep-1", owner="attempt-cancelled", heartbeat_interval_s=30))
+            await session.commit()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            response = await client.request("DELETE", "/v1/deployments/dep-1", json={"confirm_codename": "AURORA"})
+            assert response.status_code == 409, response.text
+            assert response.json()["code"] == "ATTEMPT_IN_PROGRESS"
+            assert marker.read_text() == "- hosts: all\n"
+            dep = (await client.get("/v1/deployments/dep-1")).json()
+            assert dep["current_attempt_id"] == ("active" if active_state else None)
+            attempts = (await client.get("/v1/deployments/dep-1/attempts")).json()["items"]
+            assert len(attempts) == (1 if active_state else 0)
     finally:
         await dbmod.dispose_engine()

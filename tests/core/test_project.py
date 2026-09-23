@@ -125,4 +125,5 @@ def test_run_git_redacts_token_in_error_message(tmp_path):
         for detail in err.details:
             for v in detail.values():
                 assert fake_token not in str(v), f"Token leaked in details: {detail}"
-    assert "[REDACTED]" in str(err.message) or "git not installed" in str(err.message)
+    assert err.message in {"Git repository operation failed.", "git not installed"}
+    assert err.__cause__ is None

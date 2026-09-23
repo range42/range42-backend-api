@@ -77,6 +77,12 @@ async def test_snapshot_enqueues_attempt(tmp_path, monkeypatch):
                              json={"scope": "all"})
             assert r.status_code == 202, r.text
             assert r.json()["scope"] == "snapshot_all"
+            # A second scope cannot replace the pending snapshot. Finish it
+            # before requesting the next action through the same reservation.
+            busy = await c.post("/v1/deployments/dep-1/snapshot", json={"scope": "team", "team_id": 1})
+            assert busy.status_code == 409
+            from app.core.attempt_lifecycle import finish_attempt
+            await finish_attempt(attempt_id=r.json()["id"], rc=0)
 
             r = await c.post("/v1/deployments/dep-1/snapshot",
                              json={"scope": "team", "team_id": 1})
