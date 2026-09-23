@@ -55,7 +55,9 @@ not adopted or deletable through this operation.
 Both actions apply once through the native bundle and reconcile the selected
 subnet. Shared zones are never deleted. The wrapper captures live counts for all
 known SDN and legacy-interface IPv4 subnets, including zero-count neighbors, and preserves other sources'
-prior counts after apply. Unsupported or mixed native NAT shapes are refused.
+prior counts after apply. Simple SNAT/MASQUERADE rules may include Docker's
+negated egress interface. Source negation, extra predicates and different raw
+rules for one source (including different translated addresses) are refused.
 Final readback must verify the selected identity/absence, clean pending state,
 selected live NAT count and preservation of other source counts. A partially
 completed mutation remains visible with recovery guidance; no automatic rollback

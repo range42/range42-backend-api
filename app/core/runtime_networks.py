@@ -238,7 +238,7 @@ def preserve_nat_plays(plan):
               "vars": {"r42_lifecycle_subnets": plan["all_subnets"]}, "tasks": [
                   {"ansible.builtin.set_fact": {"r42_lifecycle_raw_shapes": "{{ r42_native_nat_before.stdout_lines | select('match', '^-A POSTROUTING -s ') | unique | list }}"}},
                   {"ansible.builtin.assert": {"that": [
-                      r"(r42_lifecycle_raw_shapes | length) == (r42_lifecycle_raw_shapes | map('regex_replace', '^-A POSTROUTING -s (\S+) .*$', '\1') | unique | length)",
+                      r"(r42_lifecycle_raw_shapes | length) == (r42_lifecycle_raw_shapes | map('regex_findall', '^-A POSTROUTING -s (\S+) ') | map('first') | unique | length)",
                   ], "fail_msg": "One source has different raw NAT rules, including destination addresses. Review those rules before applying SDN."}},
                   {**role, "vars": {"proxmox_vm_action": "network_list_snat_rules"}},
                   {"ansible.builtin.assert": {"that": [

@@ -18,13 +18,16 @@ REVIEWED_TREES = {
 }
 
 # The native source-only sweep is safe for its simple, generated NAT rules.
-# Refuse source-scoped LOG/ACCEPT, negation, comments and extra predicates before
-# running it. Source-free rows are untouched by the native sweep and its reader.
+# Refuse source-scoped LOG/ACCEPT, source negation, comments and extra predicates.
+# Docker's negated egress MASQUERADE is counted and deleted literally by the
+# native reader/sweep. Require one complete raw shape per source so its omitted
+# egress-negation / SNAT-address metadata cannot conceal a mixed rule set.
+# Source-free rows are untouched by the native sweep and its reader.
 _OCTET = r"(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
 _IPV4 = rf"{_OCTET}(?:\.{_OCTET}){{3}}"
 SUPPORTED_NATIVE_NAT_LINE = (
     rf"^(?:-P POSTROUTING ACCEPT|-A POSTROUTING (?!-s )(?!.* -s ).+"
-    rf"|-A POSTROUTING -s {_IPV4}/(?:[0-9]|[12][0-9]|3[0-2]) -o [A-Za-z0-9_.:-]+ "
+    rf"|-A POSTROUTING -s {_IPV4}/(?:[0-9]|[12][0-9]|3[0-2]) (?:! )?-o [A-Za-z0-9_.:-]+ "
     rf"-j (?:MASQUERADE|SNAT --to-source {_IPV4}))$"
 )
 
@@ -69,6 +72,10 @@ def snat_guard_play() -> dict:
                     "(r42_native_nat_before.stdout_lines | length) <= 4096",
                     "(r42_native_nat_before.stdout_lines | reject('match', r42_native_nat_line_pattern) | list | length) == 0",
                 ], "fail_msg": "Native NAT operations require simple source-scoped SNAT/MASQUERADE rules. This host has unsupported rules; review its NAT configuration before retrying."}},
+                {"name": "Refuse different raw NAT shapes for one source", "ansible.builtin.assert": {"that": [
+                    r"(r42_native_nat_shapes | length) == (r42_native_nat_shapes | map('regex_findall', '^-A POSTROUTING -s (\S+) ') | map('first') | unique | length)",
+                ], "fail_msg": "One source has different NAT rules. Review egress predicates and translated addresses before applying SDN."},
+                 "vars": {"r42_native_nat_shapes": "{{ r42_native_nat_before.stdout_lines | select('match', '^-A POSTROUTING -s ') | unique | list }}"}},
             ]}
 
 
