@@ -18,7 +18,7 @@ alembic==1.13.3
 aiosqlite==0.20.0
 structlog==24.4.0
 ruamel.yaml==0.18.6
-apscheduler==3.10.4
+apscheduler==3.11.3
 
 # Git access for catalog sources
 GitPython==3.1.43
