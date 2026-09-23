@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import case, update
+from sqlalchemy import case, or_, update
 
 from app.core.db import get_session_factory
 from app.core.locks import heartbeat, release_lock
@@ -59,6 +59,7 @@ async def mark_attempt_running(*, attempt_id: str, pid: int | None,
     async with get_session_factory()() as session:
         result = await session.execute(update(Attempt).where(
             Attempt.id == attempt_id, Attempt.state.not_in(TERMINAL_ATTEMPT_STATES),
+            or_(Attempt.sub_reason.is_(None), Attempt.sub_reason != "cancel_requested"),
         ).values(state="deploying", pid=pid, artifact_dir=str(artifact_dir),
                  started_at=datetime.now(timezone.utc)))
         if not result.rowcount:
@@ -75,6 +76,7 @@ async def mark_attempt_running(*, attempt_id: str, pid: int | None,
 async def finish_attempt(*, attempt_id: str, rc: int | None,
                          event_cursor_tip: int | None = None,
                          error_code: str | None = None,
+                         warning_code: str | None = None,
                          cancelled: bool = False,
                          unknown: bool = False,
                          partial: bool = False) -> str | None:
@@ -94,7 +96,9 @@ async def finish_attempt(*, attempt_id: str, rc: int | None,
         # the HTTP endpoint, before this background callback gets its write lock.
         await session.execute(update(Attempt).where(
             Attempt.id == attempt_id, Attempt.state.not_in(TERMINAL_ATTEMPT_STATES),
-        ).values(state=terminal_state, rc=rc, sub_reason=error_code,
+        ).values(state=case((Attempt.sub_reason == "cancel_requested", "cancelled"), else_=terminal_state),
+                 rc=rc, sub_reason=case((Attempt.sub_reason == "cancel_requested", "cancel_requested"),
+                                      else_=error_code or warning_code),
                  ended_at=datetime.now(timezone.utc)))
         attempt = await session.get(Attempt, attempt_id)
         if attempt is None:

@@ -49,7 +49,8 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
 
 
 async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
-                          session: AsyncSession, *, operation: dict | None = None):
+                          session: AsyncSession, *, operation: dict | None = None,
+                          legacy_vars: dict | None = None):
     """Reserve all jobs through one lock predicate; runtime intent is server-owned."""
     dep = (await session.execute(
         select(Deployment).where(Deployment.id == deployment_id))).scalar_one_or_none()
@@ -61,7 +62,15 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
     scope = "runtime" if operation is not None else payload.scope
     validate_concrete_scope(dep, scope)
     validate_project_revision(dep, scope, payload.project_sha)
-    if payload.scope == "teardown":
+    if scope in {"rollback_all", "rollback_team"} and legacy_vars is None:
+        raise Range42Error(code="USE_SCOPED_ENDPOINT", status=400,
+                           message="Use the rollback endpoint with its snapshot safeguards")
+    if payload.team_id is not None and not 1 <= payload.team_id <= dep.team_count:
+        raise Range42Error(code="TEAM_OUT_OF_RANGE", status=400, message="Invalid team_id")
+    if scope in {"team_reset", "rollback_team", "snapshot_team"} and payload.team_id is None:
+        raise Range42Error(code="TEAM_REQUIRED", status=400, message="team_id is required")
+    from app.core.native_scenarios import DESTRUCTIVE_ACTIONS
+    if payload.scope == "teardown" or (dep.native and payload.scope in DESTRUCTIVE_ACTIONS):
         if payload.confirm_codename != dep.codename:
             raise Range42Error(
                 error="confirm_mismatch", code="TEARDOWN_CONFIRM_MISMATCH", status=400,
@@ -78,7 +87,7 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         id=uuid.uuid4().hex[:16],
         deployment_id=deployment_id,
         scope=scope,
-        operation=operation,
+        operation=operation if legacy_vars is None else {"kind": "legacy", "variables": legacy_vars},
         project_sha=(payload.project_sha or dep.project_sha or "").lower() or None,
         team_id=payload.team_id,
         state="pending",
@@ -89,8 +98,8 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         Attempt.id == Deployment.current_attempt_id,
         Attempt.state.not_in(TERMINAL_ATTEMPT_STATES),
     ).correlate(Deployment).exists()
-    # Cancellation is terminal in the API before the subprocess finishes.
-    # Its live lock still excludes replacement work during that shutdown.
+    # Older cancelled attempts may still have a subprocess shutting down.
+    # Their live lock excludes replacement work until cleanup finishes.
     await cleanup_stale_locks(session, deployment_id=deployment_id)
     held_lock = select(WorkspaceLock.deployment_id).where(
         WorkspaceLock.deployment_id == Deployment.id,
@@ -105,6 +114,13 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
             message="This deployment already has an active attempt or a runner still shutting down. "
                     "Wait for it to finish before retrying.",
         )
+    if not dep.project_sha and scope != "full":
+        from app.core.deploy_trigger import resolve_attempt_playbook
+        try:
+            resolve_attempt_playbook(dep.scenario_label, scope)
+        except Exception:
+            await session.rollback()
+            raise
     await session.commit()
     await session.refresh(row)
 

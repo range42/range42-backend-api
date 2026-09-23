@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import select
+import shlex
 import shutil
 import signal
 import tempfile
@@ -149,10 +150,11 @@ class _SubprocessHandle:
                     os.kill(self._proc.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                await self._proc.wait()
 
 
 async def signal_running_attempt(workspace_path: str | Path, *,
-                                 signal: str = "SIGTERM") -> bool:
+                                 signal: str = "SIGTERM", attempt_id: str | None = None) -> bool:
     """Signal the detached ansible-runner subprocess for a workspace.
 
     Reads the per-attempt pidfile at ``<workspace>/runner/<attempt>/pid``
@@ -162,18 +164,15 @@ async def signal_running_attempt(workspace_path: str | Path, *,
     ``terminal_state=cancelled``.
     """
     ws = Path(workspace_path)
-    pid_candidates = [
-        ws / "runner" / "pid",
-        ws / "runner" / "artifacts" / "pid",
-    ]
-    runner_dir = ws / "runner"
-    if runner_dir.is_dir():
-        pid_candidates.extend(sorted(runner_dir.glob("*/pid"), reverse=True))
-    # Fall back: look inside any artifact dir.
-    artifacts_dir = ws / "runner" / "artifacts"
-    if artifacts_dir.exists():
-        for child in artifacts_dir.iterdir():
-            pid_candidates.append(child / "pid")
+    if attempt_id is not None:
+        if not attempt_id or Path(attempt_id).name != attempt_id or attempt_id in {".", ".."}:
+            return False
+        pid_candidates = [ws / "runner" / attempt_id / "pid"]
+    else:
+        # Compatibility for callers without a persisted attempt identity.
+        pid_candidates = [ws / "runner" / "pid", ws / "runner" / "artifacts" / "pid"]
+        pid_candidates.extend(sorted((ws / "runner").glob("*/pid"), reverse=True))
+        pid_candidates.extend(sorted((ws / "runner/artifacts").glob("*/pid"), reverse=True))
     sig = getattr(__import__("signal"), signal, None)
     if sig is None:
         logger.warning("unknown_signal", signal=signal)
@@ -214,6 +213,20 @@ class DetachedRunner:
             "--artifact-dir", str(private_data_dir.parent),
             "--ident", private_data_dir.name,
         ]
+        # RAW command mode keeps native context wrappers under ansible-runner's
+        # existing event, exit-code, cancellation and restart-recovery lifecycle.
+        native_command = (extravars or {}).get("r42_native_command")
+        if native_command:
+            if not isinstance(native_command, list) or not all(isinstance(arg, str) and "\0" not in arg for arg in native_command):
+                raise RunnerSetupError(message="Invalid native runner command")
+            args_path = private_data_dir / "args"
+            args_path.write_text(shlex.join(native_command))
+            args_path.chmod(0o600)
+            # The CLI requires -p even in RAW mode. RunnerConfig reads args
+            # first, so this marker is never interpreted as a playbook path.
+            argv.extend(["--playbook", "__native_context__"])
+        else:
+            (private_data_dir / "args").unlink(missing_ok=True)
 
         # Pinned projects supply an explicit root. Installed scenarios retain
         # the legacy root inference so relative imports/assets keep working.
@@ -280,6 +293,15 @@ class DetachedRunner:
 
         env_dir = private_data_dir / "env"
         env_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if native_command:
+            # Runner polls its SIGTERM cancellation callback between pexpect
+            # reads. The default five-second read races our five-second kill
+            # deadline for quiet native commands, orphaning their process group.
+            # Poll promptly so runner kills the command group and publishes rc
+            # before the API's forced termination fallback.
+            settings_path = env_dir / "settings"
+            settings_path.write_text(json.dumps({"pexpect_timeout": 1}))
+            settings_path.chmod(0o600)
         # Old attempts incorrectly put runner's -p option in Ansible's
         # cmdline file. Remove it when preparing a reused private directory.
         (env_dir / "cmdline").unlink(missing_ok=True)

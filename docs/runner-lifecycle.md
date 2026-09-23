@@ -5,11 +5,13 @@ sessions, so a background runner does not retain the HTTP request's session.
 
 - After spawn, `mark_attempt_running` records the PID, artifact directory and
   start time. Both the attempt and its current deployment become `deploying`.
-  A false return means the attempt is missing or already terminal; the caller
+  A false return means the attempt is missing, already terminal, or has a cancellation request; the caller
   must stop the spawned process.
 - On exit, `finish_attempt` records the real return code and end time. A zero
   return code becomes `succeeded`; a nonzero return code becomes `failed`.
   Monitoring errors use a stable error code with no invented return code.
+  If execution finishes but event observation fails, the real process result
+  remains authoritative and `EVENT_STREAM_FAILED` records the missing stream.
 - Explicit cancellation and already persisted terminal results survive late
   process callbacks. Only the current attempt updates the deployment, and only
   the matching attempt owner can release its workspace lock.
@@ -47,7 +49,12 @@ heartbeat and event workers to stop, then await
 in-flight database operations and session closure before engine disposal. This
 also applies if shutdown arrives while terminal events are being drained.
 The Cancel API separately
-signals the runner and persists `cancelled`. A shutdown overlapping process
+signals only the current attempt's verified process and records `cancel_requested`.
+The attempt remains active until the process exits, when completion records
+`cancelled` and releases its lock. Cancellation during tracked setup prevents a
+late spawn from becoming active. If no process or setup task can be found, the
+endpoint returns `409 RUNNER_NOT_RUNNING` instead of claiming cancellation.
+A shutdown overlapping process
 launch waits for its PID publication, so recovery can find it even before its
 database running-state update. After a restart, `orphans.py` reads database attempts and
 their `runner/<attempt-id>` artifacts. It adopts only a process whose persisted

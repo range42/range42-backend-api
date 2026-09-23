@@ -1,5 +1,9 @@
 # Catalog, inventory and deployment readiness
 
+For saved `range42-playbooks` scenarios and compatible private repositories, see
+[native scenario projects](native-scenarios.md). That workflow selects an existing
+deployer-cli context and preserves the native scripts, templates and shared files.
+
 Repository onboarding prepares catalog and inventory content. Concrete scenario
 playbooks and assets are now checked out from the pinned project commit. External
 bundles, roles and target-host configuration still need to be available to the
