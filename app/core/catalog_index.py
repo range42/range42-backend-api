@@ -101,6 +101,48 @@ def _bundle(base: Path, root: Path) -> dict | None:
                   tags=[relative.parts[1], document["bundle_kind"]], document=document)
 
 
+def _scenario(base: Path, root: Path) -> dict | None:
+    """Discover native source without executing templates or treating it as a UI project."""
+    if not _safe_file(base / "templates/ansible-inventory.j2", root):
+        return None
+    manifest = _document(base / "manifest/scenario_vms.json", root)
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("vms"), list):
+        return None
+    if any(not isinstance(vm, dict) or type(vm.get("vm_id")) is not int
+           or vm["vm_id"] <= 0 for vm in manifest["vms"]):
+        return None
+    entrypoints = {}
+    for action, names in {"full": ("main.yml", "main.yaml"),
+                          "vms": ("main_vms_only.yml", "main_vms_only.yaml"),
+                          "configure": ("configure.yml",), "teardown": ("teardown.yml",)}.items():
+        for name in names:
+            plays = _document(base / name, root)
+            if isinstance(plays, list) and plays and all(isinstance(play, dict) for play in plays):
+                entrypoints[action] = name
+                break
+    if "full" not in entrypoints:
+        return None
+    raw_features = _mapping(_document(base / "manifest/feature_flags.yml", root)).get("features", [])
+    features = []
+    for item in raw_features[:128] if isinstance(raw_features, list) else []:
+        if (not isinstance(item, dict) or not isinstance(item.get("id"), str)
+                or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", item["id"])
+                or type(item.get("default")) is not bool):
+            continue
+        feature = {"id": item["id"], "default": item["default"]}
+        for key in ("label", "description"):
+            if isinstance(item.get(key), str):
+                feature[key] = item[key][:4096]
+        features.append(feature)
+    templates = manifest.get("templates", [])
+    document = {"format": "range42-native", "version": 1, "execution": "native_context",
+                "entrypoints": entrypoints, "vm_count": len(manifest["vms"]),
+                "template_count": len(templates) if isinstance(templates, list) else 0,
+                "features": features}
+    return _entry(base, root, kind="scenario", name=base.name,
+                  description=manifest.get("description"), document=document)
+
+
 def detail_at_path(repo_dir: Path, path: str) -> dict | None:
     root = repo_dir.resolve()
     base = (root / path).resolve()
@@ -113,6 +155,9 @@ def detail_at_path(repo_dir: Path, path: str) -> dict | None:
     bundle = _bundle(base, root)
     if bundle is not None:
         return bundle
+    scenario = _scenario(base, root)
+    if scenario is not None:
+        return scenario
     metadata = _document(base / "meta.json", root)
     if metadata is not None:
         doc = _mapping(metadata)

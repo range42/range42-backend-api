@@ -16,7 +16,7 @@ jobs:
       # openssh-client: ssh-keygen/ssh-agent/ssh-add back the ssh_agent tests.
       - run: |
           apt-get update && apt-get install -y --no-install-recommends \
-            git openssh-client
+            git openssh-client zsh jq yq
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
       - run: ruff check app/ tests/

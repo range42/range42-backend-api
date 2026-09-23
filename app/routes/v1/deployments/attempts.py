@@ -61,7 +61,8 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
     scope = "runtime" if operation is not None else payload.scope
     validate_concrete_scope(dep, scope)
     validate_project_revision(dep, scope, payload.project_sha)
-    if payload.scope == "teardown":
+    from app.core.native_scenarios import DESTRUCTIVE_ACTIONS
+    if payload.scope == "teardown" or (dep.native and payload.scope in DESTRUCTIVE_ACTIONS):
         if payload.confirm_codename != dep.codename:
             raise Range42Error(
                 error="confirm_mismatch", code="TEARDOWN_CONFIRM_MISMATCH", status=400,

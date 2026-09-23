@@ -6545,6 +6545,96 @@
           }
         }
       }
+    },
+    "/v1/contexts": {
+      "get": {
+        "tags": [
+          "v1 native scenarios"
+        ],
+        "summary": "Contexts",
+        "operationId": "contexts_v1_contexts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/native-scenario": {
+      "get": {
+        "tags": [
+          "v1 native scenarios"
+        ],
+        "summary": "Preview",
+        "operationId": "preview_v1_projects__project_id__native_scenario_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "title": "Path"
+            }
+          },
+          {
+            "name": "sha",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
+              "title": "Sha"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6899,7 +6989,7 @@
         "properties": {
           "scope": {
             "type": "string",
-            "pattern": "^(full|configure|failed_teams|team_reset|teardown|rollback_all|rollback_team)$",
+            "pattern": "^(full|configure|failed_teams|team_reset|teardown|rollback_all|rollback_team|deploy_vms|delete_vms|reset|deploy_networks|delete_networks)$",
             "title": "Scope"
           },
           "team_id": {
@@ -7572,6 +7662,16 @@
               }
             ],
             "title": "Secrets"
+          },
+          "native": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NativeDeployment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7671,6 +7771,18 @@
               }
             ],
             "title": "Effective Doc Hash"
+          },
+          "native": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Native"
           }
         },
         "type": "object",
@@ -9851,6 +9963,42 @@
         "type": "object",
         "title": "MemoryCapacity"
       },
+      "NativeDeployment": {
+        "properties": {
+          "context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Context Id"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path"
+          },
+          "features": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "maxProperties": 128,
+            "title": "Features"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 64,
+            "title": "Parameters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "context_id",
+          "path"
+        ],
+        "title": "NativeDeployment"
+      },
       "NicChanges": {
         "properties": {
           "bridge": {
@@ -10818,7 +10966,7 @@
         "properties": {
           "scope": {
             "type": "string",
-            "pattern": "^(full|configure|teardown)$",
+            "pattern": "^(full|configure|teardown|deploy_vms|delete_vms|reset|deploy_networks|delete_networks)$",
             "title": "Scope",
             "default": "full"
           },

@@ -91,6 +91,7 @@ class Deployment(Base):
     catalog_sha: Mapped[str | None] = mapped_column(String(64))
     project_sha: Mapped[str | None] = mapped_column(String(64))
     effective_doc_hash: Mapped[str | None] = mapped_column(String(80))
+    native: Mapped[dict | None] = mapped_column(JSON)
     team_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     current_attempt_id: Mapped[str | None] = mapped_column(String(64))

@@ -112,6 +112,14 @@ async def create_deployment(payload: DeploymentCreate,
 
     assignments = None
     checked_target = None
+    native = None
+    if payload.native:
+        candidate = Deployment(project_id=payload.project_id, project_sha=payload.project_sha,
+                               target_host_id=payload.target_host_id, scenario_label=payload.scenario_label,
+                               native=payload.native.model_dump())
+        with TemporaryDirectory(prefix="r42-native-create-") as directory:
+            scenario = await prepare_project_scenario(session, candidate, dest=Path(directory) / "checkout")
+            native = scenario.native
     if payload.allocation_reservation_id:
         if not payload.project_sha:
             raise Range42Error(code="ALLOCATION_INVALID", status=422,
@@ -131,7 +139,7 @@ async def create_deployment(payload: DeploymentCreate,
             codename=payload.codename,
             scenario_label=payload.scenario_label,
             workspace_root=settings.workspace_root,
-            inherit_template=not bool(payload.secrets),
+            inherit_template=not bool(payload.secrets or payload.native),
         )
     except WorkspaceError as e:
         if e.code != "WORKSPACE_NON_LOCAL_FS":
@@ -152,6 +160,7 @@ async def create_deployment(payload: DeploymentCreate,
         team_count=payload.team_count,
         state="pending",
         workspace_path=str(ws.path),
+        native=native,
     )
     session.add(row)
     # Flush, do not commit: this reserves (codename, scenario_label) at the DB
