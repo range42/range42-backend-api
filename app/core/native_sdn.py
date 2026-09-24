@@ -15,6 +15,9 @@ NATIVE_CONTRACT = "native-sdn-20260921"
 REVIEWED_TREES = {
     ("56f8801125eeaa75737535ff1b9aae7d2d80741850b7381b7bc818e40cdfa0cb",
      "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
+    # Additive multi-NIC/resource bootstrap with pre-clone template validation.
+    ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
+     "59408bb155c2741d77f5d3eb3fbc321dd24047eccfdd704e8d5c190abc28d4fd"): NATIVE_CONTRACT,
 }
 
 # The native source-only sweep is safe for its simple, generated NAT rules.

@@ -97,9 +97,17 @@ async def check_plan_capacity(client: httpx.AsyncClient, host: ProxmoxHost, vms:
         config = configs[vm["template_vm_id"]]
         if config is None:
             unknown_cpu = unknown_disk = True
+            if vm.get("nics"):
+                checks.append(_check("network", "block", "The template network configuration must be readable before cloning an explicitly authored topology.", "TEMPLATE_NETWORK_UNREADABLE"))
             if vm.get("disk_gb") is not None:
                 checks.append(_check("storage", "block", "The template disk configuration must be readable before requesting growth.", "DISK_GROWTH_UNAVAILABLE"))
             continue
+        if vm.get("nics"):
+            planned_nics = {f"net{nic['index']}" for nic in vm["nics"]}
+            inherited_nics = {key for key in config if re.fullmatch(r"net[0-9]+", key)}
+            unexpected_nics = inherited_nics - planned_nics
+            if unexpected_nics:
+                checks.append(_check("network", "block", f"Template {vm['template_vm_id']} contains interfaces outside the authored topology: {', '.join(sorted(unexpected_nics))}. Choose a template without these interfaces or declare them in the scenario.", "TEMPLATE_NETWORK_MISMATCH"))
         if vm.get("disk_gb") is not None:
             device = vm.get("disk_device", "scsi0")
             specification = config.get(device)
