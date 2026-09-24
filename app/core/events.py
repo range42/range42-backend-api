@@ -120,7 +120,7 @@ async def tail_events(path: Path, *, from_seq: int = 0,
                       poll_ms: int = 250) -> AsyncIterator[dict[str, Any]]:
     """Async generator that yields events with event_seq > from_seq.
 
-    Uses watchfiles on Linux when available, else falls back to polling.
+    Polls file changes without a separate filesystem watcher task.
     Skips the last line if it parses as a partial JSON (see SENTINEL).
     """
     path = Path(path)
@@ -146,55 +146,18 @@ async def tail_events(path: Path, *, from_seq: int = 0,
         scanned_file = signature
         return events
 
-    try:
-        from watchfiles import awatch  # type: ignore
-        use_watch = True
-    except Exception:
-        use_watch = False
-
     # Initial drain.
     for ev in _read_from(last):
         last = ev["event_seq"]
         yield ev
 
-    if use_watch:
-        # awatch(parent_dir) yields change batches; each batch triggers a
-        # re-scan. Wrap __anext__ in a task so asyncio.wait() timeouts don't
-        # cancel the underlying coroutine (cancellation would poison the
-        # async generator). Falls back to polling interval as an idle tick
-        # so the stop event is honoured even when no fs events arrive.
-        watcher = awatch(path.parent, stop_event=stop)
-        pending_task: asyncio.Task | None = None
-        try:
-            while not stop.is_set():
-                if pending_task is None:
-                    pending_task = asyncio.create_task(watcher.__anext__())
-                done, _ = await asyncio.wait(
-                    {pending_task}, timeout=poll_ms / 1000,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if pending_task in done:
-                    try:
-                        pending_task.result()
-                    except StopAsyncIteration:
-                        pass
-                    pending_task = None
-                for ev in _read_from(last):
-                    last = ev["event_seq"]
-                    yield ev
-        finally:
-            if pending_task is not None and not pending_task.done():
-                pending_task.cancel()
-                try:
-                    await pending_task
-                except (asyncio.CancelledError, StopAsyncIteration, Exception):
-                    pass
-    else:
-        while not stop.is_set():
-            await asyncio.sleep(poll_ms / 1000)
-            for ev in _read_from(last):
-                last = ev["event_seq"]
-                yield ev
+    # The tail owns only this cancellable coroutine. A detached awatch task can
+    # outlive an SSE disconnect inside nested AnyIO cancellation scopes.
+    while not stop.is_set():
+        await asyncio.sleep(poll_ms / 1000)
+        for ev in _read_from(last):
+            last = ev["event_seq"]
+            yield ev
 
 
 class EventsIdx:

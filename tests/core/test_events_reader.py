@@ -171,3 +171,74 @@ async def test_append_during_tail_scan_is_not_hidden_by_idle_cache(tmp_path, mon
         assert (await asyncio.wait_for(anext(stream), timeout=2))["event_seq"] == 2
     finally:
         await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_tail_does_not_start_a_detached_filesystem_watcher(tmp_path, monkeypatch):
+    import watchfiles
+
+    entered = asyncio.Event()
+
+    async def unexpected_watch(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+        yield set()
+
+    monkeypatch.setattr(watchfiles, "awatch", unexpected_watch)
+    path = tmp_path / "events.jsonl"
+    path.touch()
+    stream = tail_events(path, poll_ms=10)
+    pending = asyncio.create_task(anext(stream))
+    try:
+        await asyncio.sleep(0.05)
+        assert not entered.is_set(), "Event tail started a detached filesystem watcher"
+        assert not pending.done()
+    finally:
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_sse_disconnect_leaves_no_tail_or_watcher_task(tmp_path, monkeypatch):
+    from sse_starlette.sse import AppStatus, EventSourceResponse
+
+    # sse-starlette keeps its exit event globally; isolate this test's loop.
+    monkeypatch.setattr(AppStatus, "should_exit_event", None)
+
+    path = tmp_path / "events.jsonl"
+    EventsWriter(path).append({"event_type": "log_line"}, attempt_id="a")
+    disconnected = asyncio.Event()
+    started = asyncio.Event()
+    closed = asyncio.Event()
+    previous_tasks = asyncio.all_tasks()
+
+    async def body():
+        try:
+            async for event in tail_events(path, poll_ms=10):
+                yield {"data": str(event["event_seq"])}
+        finally:
+            closed.set()
+
+    async def receive():
+        await disconnected.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        if message["type"] == "http.response.body":
+            started.set()
+
+    response = asyncio.create_task(EventSourceResponse(body())(
+        {"type": "http"}, receive, send,
+    ))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        await asyncio.sleep(0.04)
+        disconnected.set()
+        await asyncio.wait_for(response, timeout=2)
+        await asyncio.wait_for(closed.wait(), timeout=2)
+        assert asyncio.all_tasks() <= previous_tasks
+    finally:
+        response.cancel()
+        await asyncio.gather(response, return_exceptions=True)
