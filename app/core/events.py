@@ -126,10 +126,25 @@ async def tail_events(path: Path, *, from_seq: int = 0,
     path = Path(path)
     last = from_seq - 1
     stop = stop or asyncio.Event()
+    scanned_file = None
 
     def _read_from(threshold: int) -> list[dict[str, Any]]:
-        r = EventsReader(path)
-        return [e for e in r.read_range(from_seq=threshold + 1)]
+        nonlocal scanned_file
+        try:
+            info = path.stat()
+            signature = (info.st_dev, info.st_ino, info.st_size,
+                         info.st_mtime_ns, info.st_ctime_ns)
+            if signature == scanned_file:
+                return []
+            events = list(EventsReader(path).read_range(from_seq=threshold + 1))
+        except FileNotFoundError:
+            scanned_file = None
+            return []
+        # Keep the pre-read signature: an append during the scan must trigger
+        # another read. Identity and timestamps also detect replaced/truncated
+        # files and completion of a previously partial trailing record.
+        scanned_file = signature
+        return events
 
     try:
         from watchfiles import awatch  # type: ignore
