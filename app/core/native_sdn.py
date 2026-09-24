@@ -18,6 +18,9 @@ REVIEWED_TREES = {
     # Additive multi-NIC/resource bootstrap with pre-clone template validation.
     ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
      "59408bb155c2741d77f5d3eb3fbc321dd24047eccfdd704e8d5c190abc28d4fd"): NATIVE_CONTRACT,
+    # Same primitives and defaults, dispatched directly through literal selectors.
+    ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
+     "b16bda9845303d79cffb2937cc90253bae39e56ac1236f55b900d655b71033b6"): NATIVE_CONTRACT,
 }
 
 # The native source-only sweep is safe for its simple, generated NAT rules.

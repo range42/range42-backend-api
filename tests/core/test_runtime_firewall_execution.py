@@ -16,6 +16,7 @@ from tests.fixtures.runtime_tls_api import tls_api
 @pytest.mark.parametrize("action", ["rename", "delete"])
 @pytest.mark.parametrize("drift", [None, "before_guard", "after_guard"])
 async def test_actual_alias_request_honours_scoped_review_tls_and_native_digest(tmp_path, action, drift):
+    from app.core import runtime_networks
     from app.core.runtime_firewall import firewall_change_play
     from app.core.runtime_networks import lifecycle_guard_play
     from app.core.runtime_runner import _ownership_guard
@@ -56,7 +57,8 @@ async def test_actual_alias_request_honours_scoped_review_tls_and_native_digest(
         variables.write_text(json.dumps({"proxmox_api_host": address, "proxmox_api_user": "test@pve", "proxmox_api_token_id": "unit",
                                         "proxmox_api_token_secret": "fake", "proxmox_node": "pve01", "r42_deployment_id": "dep"}))
         result = subprocess.run([str(Path(sys.executable).parent / "ansible-playbook"), "-i", str(inventory), str(playbook), "-e", f"@{variables}"],
-                                env={**os.environ, "ANSIBLE_CONFIG": str(config), "RANGE42_PROXMOX_CA_FILE": str(ca)},
+                                env={**os.environ, "ANSIBLE_CONFIG": str(config), "RANGE42_PROXMOX_CA_FILE": str(ca),
+                                     "ANSIBLE_LIBRARY": str(Path(runtime_networks.__file__).parent / "ansible_modules")},
                                 capture_output=True, text=True, timeout=45)
     assert (result.returncode == 0) is (drift is None), result.stdout + result.stderr
     assert len(mutations) == int(drift is None)

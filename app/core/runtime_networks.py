@@ -216,32 +216,12 @@ def network_plan(request, observation):
 
 def lifecycle_guard_play(plan):
     return {"name": "Recheck reviewed cluster state before network lifecycle changes", "hosts": "proxmox", "gather_facts": False,
-            "vars": {"r42_network_guards": plan["guards"]}, "tasks": [
-                {"name": "Read every reviewed network and guest identity again", "ansible.builtin.uri": {
-                    "url": "https://{{ proxmox_api_host }}/api2/json{{ r42_network_guard.path }}", "method": "GET",
-                    "headers": {"Authorization": "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"},
-                    "validate_certs": True, "ca_path": "{{ lookup('env', 'RANGE42_PROXMOX_CA_FILE') | default(omit, true) }}"},
-                 "loop": "{{ r42_network_guards }}", "loop_control": {"loop_var": "r42_network_guard"},
-                 "register": "r42_network_guard_results", "no_log": True},
-                {"name": "Refuse changes since the administrator's review", "ansible.builtin.assert": {"that": [
-                    "r42_guard_result.json.data is defined",
-                    "(r42_guard_data | to_json(sort_keys=True, separators=[',', ':'], ensure_ascii=True) | hash('sha256')) == r42_guard_result.r42_network_guard.digest",
-                ], "fail_msg": "Network configuration, permissions or guest attachments changed since review. Refresh the plan."},
-                 "vars": {"r42_guard_data": "{{ (r42_guard_result.json.data | sort(attribute=r42_guard_result.r42_network_guard.sort_key, case_sensitive=true)) if r42_guard_result.r42_network_guard.sort_key is defined else r42_guard_result.json.data }}"},
-                 "loop": "{{ r42_network_guard_results.results | selectattr('r42_network_guard.digest', 'defined') | list }}",
-                 "loop_control": {"loop_var": "r42_guard_result"}, "no_log": True},
-                {"name": "Refuse guests created or moved after review", "ansible.builtin.assert": {"that": [
-                    "r42_actual_resources == r42_guard_result.r42_network_guard.resources",
-                ], "fail_msg": "Cluster guest inventory changed since review. Refresh the plan."},
-                 "vars": {"r42_actual_resources": "{%- set rows = [] -%}{%- for row in r42_guard_result.json.data -%}{{ rows.append((row.vmid | string) ~ ':' ~ row.node ~ ':' ~ row.type) }}{%- endfor -%}{{ rows | sort }}"},
-                 "loop": "{{ r42_network_guard_results.results | selectattr('r42_network_guard.resources', 'defined') | list }}",
-                 "loop_control": {"loop_var": "r42_guard_result"}, "no_log": True},
-                {"name": "Refuse cluster membership changes after review", "ansible.builtin.assert": {"that": [
-                    "(r42_guard_result.json.data | map(attribute='node') | sort | list) == r42_guard_result.r42_network_guard.nodes",
-                ], "fail_msg": "Cluster membership changed since review. Refresh the plan."},
-                 "loop": "{{ r42_network_guard_results.results | selectattr('r42_network_guard.nodes', 'defined') | list }}",
-                 "loop_control": {"loop_var": "r42_guard_result"}, "no_log": True},
-            ]}
+            "tasks": [{"name": "Read and verify every reviewed network and guest identity", "range42_network_guard": {
+                "api_host": "{{ proxmox_api_host }}",
+                "authorization": "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}",
+                "ca_path": "{{ lookup('env', 'RANGE42_PROXMOX_CA_FILE') | default(omit, true) }}",
+                "guards": plan["guards"],
+            }, "no_log": True}]}
 
 
 def preserve_nat_plays(plan):
