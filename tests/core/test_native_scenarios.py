@@ -115,3 +115,29 @@ def test_diagnostic_defaults_and_parameter_overrides_are_included_in_vmid_checks
     assert descriptor["vmid_parameters"] == {"sdn_test_vm_id": [102]}
     assert check_vmids(native_scenarios.native_vmids(descriptor, {}), host_overrides=[[102, 102]]).result == "block"
     assert native_scenarios.native_vmids(descriptor, {"sdn_test_vm_id": 60000}) == [60000]
+
+
+def test_platform_descriptor_exposes_presets_and_requires_setup_inputs(tmp_path):
+    from app.core.native_scenarios import inspect_native_scenario, native_variables
+    base = scenario(tmp_path)
+    platform = {'version': 1, 'id': 'alpha', 'profile': 'full', 'domain': 'alpha.example.test',
+        'unavailable': {'misp': 'unavailable', 'emp': 'preview'},
+        'parameters': [{'name': 'stack_source_dir', 'label': 'Application release', 'type': 'path', 'required': True}],
+        'presets': [{'id': 'core', 'features': {'WAZUH': False}}]}
+    (base / 'manifest/platform.json').write_text(json.dumps(platform))
+    result = inspect_native_scenario(tmp_path, 'training/exercise-a')
+    assert result.get('platform') == platform
+    with pytest.raises(Range42Error, match='stack_source_dir'):
+        native_variables(result, {}, {})
+    assert native_variables(result, {}, {'stack_source_dir': '/srv/release/sources'})['stack_source_dir'] == '/srv/release/sources'
+
+
+@pytest.mark.parametrize('field', ['api_token', 'ansible_host', '../escape'])
+def test_platform_fields_cannot_bypass_native_parameter_rules(tmp_path, field):
+    from app.core.native_scenarios import inspect_native_scenario
+    base = scenario(tmp_path)
+    (base / 'manifest/platform.json').write_text(json.dumps({'version': 1,
+        'id': 'alpha', 'profile': 'core', 'domain': 'alpha.example.test', 'unavailable': {}, 'presets': [],
+        'parameters': [{'name': field, 'label': 'Value', 'type': 'path', 'required': True}]}))
+    with pytest.raises(Range42Error):
+        inspect_native_scenario(tmp_path, 'training/exercise-a')
