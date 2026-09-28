@@ -81,3 +81,104 @@ def test_generated_scenario_without_native_inventory_template_is_not_misclassifi
     (base / "hosts.yml").write_text("all: {}\n")
     detail = detail_at_path(tmp_path, "scenarios/demo")
     assert detail is None or detail["kind"] != "scenario"
+
+
+def test_native_detail_includes_declared_topology_without_guessing_networks(tmp_path):
+    base = native_tree(tmp_path)
+    (base / "00_sdn_bootstrap").mkdir()
+    (base / "00_sdn_bootstrap/_main.yml").write_text(
+        '- hosts: proxmox\n  tasks:\n    - set_fact:\n        _sdn_vnets:\n'
+        '          - {vnet: net42, subnet: 10.42.0.0/24, gateway: 10.42.0.1}\n')
+    topology = detail_at_path(tmp_path, "scenarios/demo")["document"].get("topology")
+    assert topology is not None
+    assert topology["vms"][0]["vm_id"] == 2001
+    assert topology["templates"] == [{"vm_id": 9901}]
+    assert topology["networks"] == [{"vnet": "net42", "subnet": "10.42.0.0/24", "gateway": "10.42.0.1"}]
+    assert topology["reservations"]["status"] == "missing"
+    (base / "00_sdn_bootstrap/_main.yml").unlink()
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["networks"] == [{"vnet": "net42"}]
+
+
+def registry(root):
+    rows = []
+    for path in sorted((root / "scenarios").glob("*/manifest/scenario_vms.json")):
+        manifest = json.loads(path.read_text())
+        rows.extend({**row, "scenario": path.parents[1].name} for row in manifest["vms"])
+        rows.extend({**row, "scenario": path.parents[1].name, "role": "template"} for row in manifest["templates"])
+    (root / "scenarios/_reserved.json").write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+
+def test_native_reservations_detect_collisions_but_allow_shared_templates_and_networks(tmp_path):
+    native_tree(tmp_path)
+    other = native_tree(tmp_path, "scenarios/other")
+    manifest = json.loads((other / "manifest/scenario_vms.json").read_text())
+    manifest["vms"][0].update(vm_id=2002, ip="10.42.0.11")
+    (other / "manifest/scenario_vms.json").write_text(json.dumps(manifest))
+    registry(tmp_path)
+    def status():
+        return detail_at_path(tmp_path, "scenarios/demo")["document"].get("topology", {}).get("reservations")
+    assert status() == {"status": "checked", "issues": []}
+    manifest["vms"][0]["vm_id"] = 2001
+    (other / "manifest/scenario_vms.json").write_text(json.dumps(manifest))
+    registry(tmp_path)
+    assert status()["status"] == "conflict"
+    assert any("2001" in issue and "other" in issue for issue in status()["issues"])
+
+
+def test_native_reservations_reject_stale_or_malformed_registry(tmp_path):
+    native_tree(tmp_path)
+    registry(tmp_path)
+    ledger = tmp_path / "scenarios/_reserved.json"
+    ledger.write_text(ledger.read_text().replace('2001', '2002'))
+    result = detail_at_path(tmp_path, "scenarios/demo")["document"].get("topology", {}).get("reservations")
+    assert result and result["status"] == "conflict"
+    ledger.write_text('not json')
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "invalid"
+
+
+def test_duplicate_vm_rows_inside_one_scenario_are_conflicts(tmp_path):
+    base = native_tree(tmp_path)
+    path = base / "manifest/scenario_vms.json"
+    manifest = json.loads(path.read_text())
+    manifest["vms"].append(manifest["vms"][0])
+    path.write_text(json.dumps(manifest))
+    registry(tmp_path)
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "conflict"
+
+
+def test_reservations_check_normalized_secondary_addresses(tmp_path):
+    base = native_tree(tmp_path)
+    other = native_tree(tmp_path, "scenarios/other")
+    path = other / "manifest/scenario_vms.json"
+    manifest = json.loads(path.read_text())
+    manifest["vms"][0].update(vm_id=2002, ip="10.42.0.11", nics=[{"bridge": "net42", "ip": "10.42.0.10/24"}])
+    path.write_text(json.dumps(manifest))
+    registry(tmp_path)
+    result = detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]
+    assert result["status"] == "conflict"
+    assert any("10.42.0.10" in issue and "other" in issue for issue in result["issues"])
+    # Check secondary-to-secondary collisions too, while allowing other networks.
+    mine = base / "manifest/scenario_vms.json"
+    doc = json.loads(mine.read_text())
+    doc["vms"][0].update(ip="10.42.0.12", nics=[{"bridge": "net42", "ip": "10.42.0.10/32"}])
+    mine.write_text(json.dumps(doc))
+    registry(tmp_path)
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "conflict"
+    doc["vms"][0]["nics"][0]["bridge"] = "net43"
+    mine.write_text(json.dumps(doc))
+    registry(tmp_path)
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "checked"
+
+
+def test_shared_templates_require_consistent_secondary_addresses(tmp_path):
+    native_tree(tmp_path)
+    other = native_tree(tmp_path, "scenarios/other")
+    path = other / "manifest/scenario_vms.json"
+    doc = json.loads(path.read_text())
+    doc["vms"][0].update(vm_id=2002, ip="10.42.0.11")
+    doc["templates"][0]["nics"] = [{"bridge": "net43", "ip": "10.43.0.10"}]
+    path.write_text(json.dumps(doc))
+    registry(tmp_path)
+    result = detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]
+    assert result["status"] == "conflict"
+    assert any("9901" in issue for issue in result["issues"])

@@ -6794,8 +6794,64 @@
               "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
               "title": "Sha"
             }
+          },
+          {
+            "name": "component_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Component Id"
+            }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platform/components/preview": {
+      "post": {
+        "tags": [
+          "v1 platform"
+        ],
+        "summary": "Preview Component",
+        "operationId": "preview_component_v1_platform_components_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StackSpec"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -10835,6 +10891,18 @@
             "minLength": 1,
             "title": "Path"
           },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
           "features": {
             "additionalProperties": {
               "type": "boolean"
@@ -14739,6 +14807,87 @@
           "branch"
         ],
         "title": "SourceRepoOut"
+      },
+      "StackSpec": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,23}$",
+            "title": "Id"
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 220,
+            "minLength": 3,
+            "title": "Domain"
+          },
+          "vmid_start": {
+            "type": "integer",
+            "maximum": 999999988.0,
+            "minimum": 1000.0,
+            "title": "Vmid Start"
+          },
+          "template_vmid": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 102.0,
+            "title": "Template Vmid"
+          },
+          "subnet": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Subnet"
+          },
+          "gateway": {
+            "type": "string",
+            "maxLength": 15,
+            "title": "Gateway"
+          },
+          "bridge": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]{1,7}$",
+            "title": "Bridge"
+          },
+          "node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$",
+            "title": "Node"
+          },
+          "ssh_user": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_-]{0,31}$",
+            "title": "Ssh User"
+          },
+          "dns": {
+            "type": "string",
+            "maxLength": 15,
+            "title": "Dns",
+            "default": "1.1.1.1"
+          },
+          "profile": {
+            "type": "string",
+            "enum": [
+              "core",
+              "full"
+            ],
+            "title": "Profile",
+            "default": "core"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "domain",
+          "vmid_start",
+          "template_vmid",
+          "subnet",
+          "gateway",
+          "bridge",
+          "node",
+          "ssh_user"
+        ],
+        "title": "StackSpec"
       },
       "StatsResponse": {
         "properties": {

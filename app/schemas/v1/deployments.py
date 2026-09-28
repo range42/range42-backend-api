@@ -10,6 +10,7 @@ class NativeDeployment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     context_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
     path: str = Field(min_length=1, max_length=1024)
+    component_id: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
     features: dict[str, StrictBool] = Field(default_factory=dict, max_length=128)
     parameters: dict = Field(default_factory=dict, max_length=64)
 
