@@ -1,5 +1,6 @@
 import asyncio
 import shutil
+import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,7 +11,8 @@ from tests.routes.test_deployments_preflight import _boot, _seed
 
 
 @pytest.mark.asyncio
-async def test_native_context_preview_create_preflight_and_attempt_round_trip(tmp_path_factory, monkeypatch):
+@pytest.mark.parametrize('component', [False, True])
+async def test_native_context_preview_create_preflight_and_attempt_round_trip(tmp_path_factory, monkeypatch, component):
     from app.core import scenario as scenario_module
     from app.core import deploy_trigger
     from app.core.models import ProxmoxHost, Attempt
@@ -22,17 +24,26 @@ async def test_native_context_preview_create_preflight_and_attempt_round_trip(tm
     context(tmp_path, monkeypatch)
     repo = tmp_path / "source-repo"
     scenario(repo)
+    project_repo = tmp_path / 'project-repo'
+    project_repo.mkdir()
+    (project_repo / 'canvas_layout.json').write_text(json.dumps({'ui_canvas': {'nodes': [{'id': 'catalog-1', 'type': 'group',
+        'data': {'config': {'nativeCatalog': {'version': 1, 'kind': 'scenario', 'mode': 'use', 'source_id': 's',
+            'repo_owner': 'range42', 'repo_name': 'playbooks', 'base_url': 'https://github.com',
+            'sha': 'b' * 40, 'path': 'training/exercise-a'}}}}]}}))
     app, db = await _boot(tmp_path, monkeypatch)
     monkeypatch.setattr(crud, "settings", config.settings)
     monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "0")
     monkeypatch.setattr(deploy_trigger, "_decrypt_vault", lambda *_: {}, raising=False)
     def checkout(**kwargs):
-        shutil.copytree(repo, kwargs["dest"])
+        shutil.copytree(project_repo if component and kwargs['sha'] == 'a' * 40 else repo, kwargs["dest"])
         return kwargs["dest"]
     monkeypatch.setattr(scenario_module, "checkout_repository", checkout)
     async def reachable(*args):
         return PreflightCheck(check="proxmox_api", result="pass")
     monkeypatch.setattr(preflight_module, "check_proxmox_api_status", reachable)
+    async def allocation_check(*args, **kwargs):
+        return [PreflightCheck(check='native_allocations', result='pass')]
+    monkeypatch.setattr('app.core.native_scenarios.check_native_allocations', allocation_check)
     try:
         await _seed(db, tmp_path, repo_owner="range42", repo_name="playbooks")
         async with db.get_session_factory()() as session:
@@ -43,12 +54,13 @@ async def test_native_context_preview_create_preflight_and_attempt_round_trip(tm
             contexts = await client.get("/v1/contexts")
             assert contexts.status_code == 200, contexts.text
             assert contexts.json()["items"][0]["target_host_id"] == "h"
-            preview = await client.get("/v1/projects/p/native-scenario", params={"path": "training/exercise-a", "sha": "a" * 40})
+            selection = {'component_id': 'catalog-1'} if component else {}
+            preview = await client.get("/v1/projects/p/native-scenario", params={"path": "training/exercise-a", "sha": "a" * 40, **selection})
             assert preview.status_code == 200, preview.text
             assert preview.json()["actions"]["full"] == "exercise.setup.sh"
             created = await client.post("/v1/deployments/", json={"project_id": "p", "codename": "NATIVE",
                 "scenario_label": "exercise-a", "target_host_id": "h", "team_count": 1, "project_sha": "a" * 40,
-                "native": {"path": "training/exercise-a", "context_id": "lab-demo", "features": {"WAZUH": True}}})
+                "native": {"path": "training/exercise-a", "context_id": "lab-demo", "features": {"WAZUH": True}, **selection}})
             assert created.status_code == 201, created.text
             deployment = created.json()
             assert deployment["native"]["descriptor"]["actions"]["teardown"] == "exercise.delete_all.sh"

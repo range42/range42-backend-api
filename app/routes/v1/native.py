@@ -11,7 +11,7 @@ from app.core.db import get_session_factory
 from app.core.models import ProxmoxHost
 from app.core.native_contexts import available_contexts
 from app.core.native_scenarios import inside, inspect_native_scenario
-from app.core.scenario import checkout_project_repository
+from app.core.scenario import checkout_project_repository, checkout_native_component
 
 router = APIRouter(tags=["v1 native scenarios"])
 
@@ -34,10 +34,13 @@ async def contexts(session: AsyncSession = Depends(_session)):
 @router.get("/projects/{project_id}/native-scenario")
 async def preview(project_id: str, path: str = Query(min_length=1, max_length=1024),
                   sha: str = Query(pattern=r"^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"),
+                  component_id: str | None = Query(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"),
                   session: AsyncSession = Depends(_session)):
     with TemporaryDirectory(prefix="r42-native-preview-") as directory:
         root, _, project = await checkout_project_repository(session, project_id,
             dest=Path(directory) / "checkout", sha=sha)
         if project.subdir:
             root = inside(root, project.subdir)
+        if component_id:
+            root, _ = await checkout_native_component(session, root, component_id, path, dest=Path(directory) / "origin")
         return await asyncio.to_thread(inspect_native_scenario, root, path)

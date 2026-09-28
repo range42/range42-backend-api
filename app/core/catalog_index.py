@@ -101,7 +101,7 @@ def _bundle(base: Path, root: Path) -> dict | None:
                   tags=[relative.parts[1], document["bundle_kind"]], document=document)
 
 
-def _scenario(base: Path, root: Path) -> dict | None:
+def _scenario(base: Path, root: Path, *, topology: bool = False) -> dict | None:
     """Discover native source without executing templates or treating it as a UI project."""
     if not _safe_file(base / "templates/ansible-inventory.j2", root):
         return None
@@ -139,11 +139,17 @@ def _scenario(base: Path, root: Path) -> dict | None:
                 "entrypoints": entrypoints, "vm_count": len(manifest["vms"]),
                 "template_count": len(templates) if isinstance(templates, list) else 0,
                 "features": features}
+    if topology:
+        from app.core.native_topology import scenario_topology
+        try:
+            document["topology"] = scenario_topology(root, base, manifest)
+        except (ValueError, TypeError, RecursionError):
+            return None
     return _entry(base, root, kind="scenario", name=base.name,
                   description=manifest.get("description"), document=document)
 
 
-def detail_at_path(repo_dir: Path, path: str) -> dict | None:
+def detail_at_path(repo_dir: Path, path: str, *, topology: bool = True) -> dict | None:
     root = repo_dir.resolve()
     base = (root / path).resolve()
     if not base.is_relative_to(root) or ".git" in base.relative_to(root).parts or not base.is_dir():
@@ -155,7 +161,7 @@ def detail_at_path(repo_dir: Path, path: str) -> dict | None:
     bundle = _bundle(base, root)
     if bundle is not None:
         return bundle
-    scenario = _scenario(base, root)
+    scenario = _scenario(base, root, topology=topology)
     if scenario is not None:
         return scenario
     metadata = _document(base / "meta.json", root)
@@ -207,7 +213,7 @@ def discover(repo_dir: Path) -> list[dict]:
             directories.add(parent.relative_to(root).as_posix())
     result = []
     for path in sorted(directories):
-        entry = detail_at_path(root, path)
+        entry = detail_at_path(root, path, topology=False)
         if entry is not None:
             result.append({key: value for key, value in entry.items() if key != "document"})
     return result
