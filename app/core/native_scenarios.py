@@ -86,12 +86,45 @@ def inspect_native_scenario(root: Path, path: str) -> dict:
         raise invalid("Native bundle_path must name a directory in the saved repository")
     inventory = "templates/ansible-inventory.j2"
     inside(base, inventory, file=True)
-    return {"version": 1, "path": path, "name": base.name,
+    result = {"version": 1, "path": path, "name": base.name,
             "actions": actions, "features": entry["document"]["features"],
             "bundle_path": bundle_path, "inventory_template": inventory,
             "declared_vmids": [vm["vm_id"] for vm in manifest["vms"]],
             "vmid_parameters": _vmid_parameters(base),
             "impact": "native_workflow"}
+    platform_file = base / 'manifest/platform.json'
+    if platform_file.exists() or platform_file.is_symlink():
+        result['platform'] = _platform_descriptor(base, result)
+    return result
+
+
+def _platform_descriptor(base: Path, descriptor: dict) -> dict:
+    path = inside(base, 'manifest/platform.json', file=True)
+    try:
+        if path.stat().st_size > 16384:
+            raise ValueError()
+        data = json.loads(path.read_text())
+        if (data['version'] != 1 or data['profile'] not in {'core', 'full'}
+                or not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', data['id'])
+                or not isinstance(data['domain'], str) or len(data['domain']) > 253
+                or not isinstance(data['unavailable'], dict)
+                or any(not isinstance(k, str) or not isinstance(v, str) for k, v in data['unavailable'].items())
+                or len(data['parameters']) > 32 or len(data['presets']) > 4):
+            raise ValueError()
+        names = set()
+        for field in data['parameters']:
+            if (field['name'] in names or field['type'] not in {'path', 'url', 'cidrs', 'string'}
+                    or type(field['required']) is not bool or not isinstance(field['label'], str)):
+                raise ValueError()
+            native_variables(descriptor, {}, {field['name']: 'fixture'})
+            names.add(field['name'])
+        for preset in data['presets']:
+            if preset['id'] not in {'core', 'full'}:
+                raise ValueError()
+            native_variables(descriptor, preset['features'], {})
+        return data
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise invalid('Invalid manifest/platform.json') from None
 
 
 def _vmid_parameters(base: Path) -> dict[str, list[int]]:
@@ -162,5 +195,12 @@ def native_variables(descriptor: dict, features: dict, parameters: dict) -> dict
                 or (isinstance(value, float) and not math.isfinite(value))
                 or any(marker in str(value) for marker in ("{{", "{%", "{#"))):
             raise invalid(f"Native parameter {key} is invalid or managed by the selected context")
+    for field in descriptor.get('platform', {}).get('parameters', []):
+        value = parameters.get(field['name'], '')
+        if field['required'] and (not isinstance(value, str) or not value.strip()):
+            raise invalid(f"Platform parameter {field['name']} is required")
+        if value and (not isinstance(value, str) or (
+                field['type'] == 'path' and not value.startswith('/'))):
+            raise invalid(f"Platform parameter {field['name']} must use an absolute controller path")
     return {**parameters, **{f"INSTALL_{name}": "YES" if features.get(name, default) else "NO"
                              for name, default in declared.items()}}

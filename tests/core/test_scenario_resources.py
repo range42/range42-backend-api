@@ -1,5 +1,6 @@
 """Generated VM plans must use valid templates and preserve existing resources."""
 import json
+import os
 
 import httpx
 import pytest
@@ -145,6 +146,40 @@ def capabilities(tmp_path, monkeypatch, features):
     bundle.mkdir(parents=True)
     (bundle / "capabilities.json").write_text(json.dumps({"version": 1, "features": features}))
     monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(tmp_path / "bundles"))
+
+
+@pytest.mark.parametrize("installation", ["matching", "changed_controller", "shadow_controller", "missing_profile"])
+def test_native_bootstrap_features_require_the_reviewed_installed_pair(tmp_path, monkeypatch, installation):
+    from app.core import bundle_runtime, native_sdn
+    from app.core.scenario_resources import bootstrap_features
+
+    capabilities(tmp_path, monkeypatch, ["extra_nics", "resources"])
+    bundles = tmp_path / "bundles"
+    marker = bundles / "proxmox/vm.bootstrap/capabilities.json"
+    marker.write_text(json.dumps({"version": 1, "features": ["extra_nics", "resources"],
+                                  "requires_native_contract": True}))
+    roles = tmp_path / "roles"
+    role = roles / "range42-ansible_roles-proxmox_controller"
+    role.mkdir(parents=True)
+    (role / "main.yml").write_text("reviewed controller")
+    monkeypatch.setattr(native_sdn, "REVIEWED_TREES", {
+        (bundle_runtime.tree_digest(bundles), bundle_runtime.tree_digest(role)): native_sdn.NATIVE_CONTRACT,
+    })
+    profile = {"environment": {"RANGE42_BUNDLE_DIR": str(bundles), "ANSIBLE_ROLES_PATH": str(roles)}}
+    if installation == "changed_controller":
+        (role / "main.yml").write_text("controller without the reviewed bootstrap support")
+    elif installation == "shadow_controller":
+        shadow = tmp_path / "shadow/range42-ansible_roles-proxmox_controller"
+        shadow.mkdir(parents=True)
+        (shadow / "main.yml").write_text("older controller found first")
+        profile["environment"]["ANSIBLE_ROLES_PATH"] = str(shadow.parent) + os.pathsep + str(roles)
+    if installation == "missing_profile":
+        def missing():
+            raise bundle_runtime.runtime_error("profile unavailable")
+        monkeypatch.setattr(bundle_runtime, "runtime_snapshot", missing)
+    else:
+        monkeypatch.setattr(bundle_runtime, "runtime_snapshot", lambda: (profile, "f" * 64))
+    assert bootstrap_features() == ({"extra_nics", "resources"} if installation == "matching" else set())
 
 
 @pytest.mark.asyncio

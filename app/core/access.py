@@ -79,6 +79,7 @@ OPERATOR_READS = frozenset({
     "/v1/proxmox/hosts/{host_id}/reservations/{reservation_id}", "/v1/admin/retention",
 })
 OPERATOR_WRITES = frozenset({
+    ("POST", "/v1/platform/components/preview"),
     ("PUT", "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/nics/{nic_id}"),
     ("PUT", "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/disks/{disk_id}/grow"),
     ("POST", "/v1/projects/"), ("PUT", "/v1/projects/{project_id}"), ("PATCH", "/v1/projects/{project_id}"),

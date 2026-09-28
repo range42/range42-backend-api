@@ -13,7 +13,10 @@ def make_repository(path, files):
     for name, content in files.items():
         target = path / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        if isinstance(content, bytes):
+            target.write_bytes(content)
+        else:
+            target.write_text(content)
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run([
         "git", "-c", "user.name=Test", "-c", "user.email=test@example.test",

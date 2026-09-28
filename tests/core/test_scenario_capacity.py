@@ -22,7 +22,7 @@ async def check(tmp_path, monkeypatch, *, planned=None, vms=None, status=None, p
     (tmp_path / "manifest/scenario_vms.json").write_text(json.dumps(document))
     capabilities = tmp_path / "bundles/proxmox/vm.bootstrap"
     capabilities.mkdir(parents=True)
-    (capabilities / "capabilities.json").write_text(json.dumps({"version": 1, "features": ["resources", "disk_resize"]}))
+    (capabilities / "capabilities.json").write_text(json.dumps({"version": 1, "features": ["extra_nics", "resources", "disk_resize"]}))
     monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(tmp_path / "bundles"))
     calls = []
 
@@ -108,6 +108,33 @@ async def test_template_permission_error_warns_without_inventing_cpu_or_disk_nee
     assert any(item.code == "CPU_REQUIREMENTS_UNKNOWN" for item in checks)
     assert any(item.code == "STORAGE_REQUIREMENTS_UNKNOWN" for item in checks)
     assert not any(item.check in ("capacity_cpu", "capacity_storage") and item.result == "pass" for item in checks)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", [1, 31])
+async def test_explicit_topology_refuses_unplanned_inherited_template_nics(tmp_path, monkeypatch, index):
+    checks, _ = await check(tmp_path, monkeypatch,
+        planned={"nics": [{"index": 0, "bridge": "lab", "ip": "10.42.1.10"}]},
+        config={"cores": 2, "scsi0": "local-lvm:base-0,size=10G", "net0": "virtio,bridge=oldlab",
+                f"net{index}": "virtio,bridge=management"})
+    assert any(item.code == "TEMPLATE_NETWORK_MISMATCH" and item.result == "block" for item in checks)
+
+
+@pytest.mark.asyncio
+async def test_explicit_topology_requires_readable_template_nics(tmp_path, monkeypatch):
+    checks, _ = await check(tmp_path, monkeypatch,
+        planned={"nics": [{"index": 0, "bridge": "lab", "ip": "10.42.1.10"}]}, config_code=403)
+    assert any(item.code == "TEMPLATE_NETWORK_UNREADABLE" and item.result == "block" for item in checks)
+
+
+@pytest.mark.asyncio
+async def test_explicit_nics_can_replace_template_networks_and_add_new_interfaces(tmp_path, monkeypatch):
+    checks, calls = await check(tmp_path, monkeypatch,
+        planned={"nics": [{"index": 0, "bridge": "lab", "ip": "10.42.1.10"},
+                           {"index": 1, "bridge": "dmz", "ip": "10.42.2.10"}]},
+        config={"cores": 2, "scsi0": "local-lvm:base-0,size=10G", "net0": "virtio,bridge=oldlab"})
+    assert not any(item.result == "block" for item in checks)
+    assert sum("/9901/config" in path for path in calls) == 1
 
 
 @pytest.mark.asyncio

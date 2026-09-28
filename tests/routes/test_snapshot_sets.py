@@ -523,6 +523,44 @@ async def test_snapshot_readback_matches_real_pve_omission_of_unused_disks(snaps
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("snapshot_has_password", [True, False])
+async def test_snapshot_readback_handles_masked_cloud_init_password(
+    snapshots, snapshot_has_password
+):
+    client, dbmod, pve = snapshots
+    # PVE masks this field in current config, but snapshot config returns its hash.
+    pve.configs[5000]["cipassword"] = "**********"
+    item = await plan(client)
+    assert (await execute(client, item)).status_code == 202
+    saved = pve.snapshots[5000][item["native_name"]]
+    if snapshot_has_password:
+        saved["cipassword"] = "$5$test-salt$test-password-hash"
+    else:
+        saved.pop("cipassword")
+    pve.finish()
+
+    response = await reconcile(client, item)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["state"] == ("complete" if snapshot_has_password else "creating")
+    assert len(pve.writes) == 2
+    from app.core.models import Attempt, WorkspaceLock
+
+    async with dbmod.get_session_factory()() as session:
+        attempt = await session.get(Attempt, result["operation"]["attempt_id"])
+        lock = await session.get(WorkspaceLock, "dep-1")
+        if snapshot_has_password:
+            assert attempt.state == "succeeded"
+            assert lock is None
+        else:
+            assert attempt.state == "deploying"
+            assert lock is not None
+            assert result["operation"]["members"][0]["code"] == (
+                "SNAPSHOT_READBACK_UNCONFIRMED"
+            )
+
+
+@pytest.mark.asyncio
 async def test_crash_after_persisted_intent_never_reissues_and_keeps_lock(
     snapshots, monkeypatch
 ):

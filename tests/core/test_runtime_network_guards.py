@@ -5,10 +5,12 @@ from ipaddress import ip_address
 import json
 import os
 from pathlib import Path
+import signal
 import ssl
 import subprocess
 import sys
 import threading
+import time
 from urllib.parse import urlsplit
 
 from cryptography import x509
@@ -22,7 +24,7 @@ from tests.core.test_runtime_networks import lifecycle_data, read
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("changed", [None, "foreign_alias", "new_attachment", "pending_controller", "interface_order", "interface_address"])
+@pytest.mark.parametrize("changed", [None, "foreign_alias", "new_attachment", "pending_controller", "interface_order", "interface_address", "parallel_inventory", "guest_config", "node_membership", "http_failure", "invalid_json", "untrusted_ca", "redirect", "cancelled", "fail_first_inventory"])
 async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path, changed):
     from app.core import runtime_networks
     data = lifecycle_data()
@@ -30,6 +32,10 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
         {"iface": "vmbr11", "cidr": "192.0.2.1/24", "active": 1},
         {"iface": "vmbr12", "cidr": "198.51.100.1/24", "active": 1},
     ]
+    if changed in ("parallel_inventory", "guest_config", "fail_first_inventory"):
+        count = 48 if changed == "fail_first_inventory" else 24
+        data["/cluster/resources"] = [{"vmid": vmid, "node": "pve01", "type": "qemu"} for vmid in range(9100, 9100 + count)]
+        data.update({f"/nodes/pve01/qemu/{vmid}/config": {"name": f"guest-{vmid}", "net0": "virtio,bridge=vmbr0", "description": "private-guest-description"} for vmid in range(9100, 9100 + count)})
     observation = await read(tmp_path, data)
     plan = runtime_networks.network_plan({"kind": "sdn_network", "action": "delete", "vnet": "r42blue"}, observation)
     guard = runtime_networks.lifecycle_guard_play(plan)
@@ -45,6 +51,10 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
         assert (await read(tmp_path, data))["guards"] == observation["guards"]
     elif changed == "interface_address":
         data["/nodes/pve01/network"][0]["cidr"] = "203.0.113.1/24"
+    elif changed == "guest_config":
+        data["/nodes/pve01/qemu/9100/config"]["description"] = "changed-private-description"
+    elif changed == "node_membership":
+        data["/nodes"].append({"node": "pve02"})
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "network-guard-test")])
     now = datetime.now(timezone.utc)
@@ -56,19 +66,64 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     key_path.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
 
+    activity = {"active": 0, "peak": 0, "paths": []}
+    lock = threading.Lock()
+    request_started = threading.Event()
+    failure_sent = threading.Event()
+
     class Api(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlsplit(self.path).path.removeprefix("/api2/json")
-            body = json.dumps({"data": data.get(path)}).encode()
-            self.send_response(200 if path in data else 403)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            with lock:
+                activity["active"] += 1
+                activity["peak"] = max(activity["peak"], activity["active"])
+                activity["paths"].append(self.path.removeprefix("/api2/json"))
+            try:
+                request_started.set()
+                if changed == "cancelled":
+                    time.sleep(1)
+                if changed == "parallel_inventory":
+                    time.sleep(0.08)
+                if changed == "fail_first_inventory":
+                    # The first queued read is slow; another guard fails before
+                    # it finishes. Waiting in input order must not drain the queue.
+                    if path != "/cluster/resources":
+                        failure_sent.wait(5)
+                        time.sleep(1 if path == "/access/permissions" else 0.1)
+                body = json.dumps({"data": data.get(path)}).encode()
+                status = 200 if path in data else 403
+                if self.headers.get("Authorization") != "PVEAPIToken=test@pve!unit=fake":
+                    status = 403
+                if path == "/nodes" and changed == "http_failure":
+                    status = 503
+                if path == "/cluster/resources" and changed == "fail_first_inventory":
+                    status = 503
+                if path == "/nodes" and changed == "invalid_json":
+                    body = b"not json"
+                if path == "/nodes" and changed == "redirect":
+                    status = 302
+                try:
+                    self.send_response(status)
+                    if status == 302:
+                        self.send_header("Location", "/api2/json/redirect-target")
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ssl.SSLEOFError):
+                    pass
+                if changed == "fail_first_inventory" and path == "/cluster/resources":
+                    failure_sent.set()
+            finally:
+                with lock:
+                    activity["active"] -= 1
         def log_message(self, *args):
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Api)
+    class ApiServer(ThreadingHTTPServer):
+        request_queue_size = 32
+
+    server = ApiServer(("127.0.0.1", 0), Api)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert_path, key_path)
     server.socket = context.wrap_socket(server.socket, server_side=True)
@@ -88,12 +143,34 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
     config = tmp_path / "ansible.cfg"
     config.write_text("[defaults]\nretry_files_enabled=False\n")
     try:
-        result = subprocess.run([str(Path(sys.executable).parent / "ansible-playbook"), "-i", str(inventory), str(playbook), "-e", f"@{variables}"],
-                                capture_output=True, text=True, timeout=50,
-                                env={**os.environ, "ANSIBLE_CONFIG": str(config), "RANGE42_PROXMOX_CA_FILE": str(cert_path)})
-        allowed = changed in (None, "interface_order")
+        started = time.monotonic()
+        command = [str(Path(sys.executable).parent / "ansible-playbook"), "-i", str(inventory), str(playbook), "-e", f"@{variables}"]
+        env = {**os.environ, "ANSIBLE_CONFIG": str(config),
+               "ANSIBLE_LIBRARY": str(Path(runtime_networks.__file__).parent / "ansible_modules"),
+               "RANGE42_PROXMOX_CA_FILE": "" if changed == "untrusted_ca" else str(cert_path)}
+        if changed == "cancelled":
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, start_new_session=True)
+            try:
+                assert request_started.wait(10), "Verifier did not start"
+            finally:
+                os.killpg(process.pid, signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=10)
+            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        else:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=50, env=env)
+        allowed = changed in (None, "interface_order", "parallel_inventory")
         assert (result.returncode == 0) is allowed, result.stdout + result.stderr
         assert marker.exists() is allowed
+        assert "private-guest-description" not in result.stdout + result.stderr
+        assert "test@pve!unit=fake" not in result.stdout + result.stderr
+        assert "/redirect-target" not in activity["paths"]
+        if changed == "fail_first_inventory":
+            assert len(activity["paths"]) <= 16, "A failed guard drained the queued inventory reads"
+        if allowed:
+            assert sorted(activity["paths"]) == sorted(row["path"] for row in plan["guards"])
+        if changed == "parallel_inventory":
+            print(f"Guarded {len(activity['paths'])} identities in {time.monotonic() - started:.3f}s; peak requests {activity['peak']}")
+            assert 1 < activity["peak"] <= 8, "Reviewed identities must use bounded parallel reads"
     finally:
         server.shutdown()
         server.server_close()

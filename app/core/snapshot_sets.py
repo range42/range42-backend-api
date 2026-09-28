@@ -117,7 +117,10 @@ def _config_digest(config):
     # rollback. Neither is a clone identity or guest-content proof.
     return digest(
         {
-            key: value
+            # Current config masks cipassword; snapshot config returns its hash.
+            # Compare the same representation, preserving whether it is present
+            # and compatibility with reviews saved from the masked current API.
+            key: "**********" if key == "cipassword" else value
             for key, value in config.items()
             if key
             not in {

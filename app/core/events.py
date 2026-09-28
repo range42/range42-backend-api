@@ -120,66 +120,44 @@ async def tail_events(path: Path, *, from_seq: int = 0,
                       poll_ms: int = 250) -> AsyncIterator[dict[str, Any]]:
     """Async generator that yields events with event_seq > from_seq.
 
-    Uses watchfiles on Linux when available, else falls back to polling.
+    Polls file changes without a separate filesystem watcher task.
     Skips the last line if it parses as a partial JSON (see SENTINEL).
     """
     path = Path(path)
     last = from_seq - 1
     stop = stop or asyncio.Event()
+    scanned_file = None
 
     def _read_from(threshold: int) -> list[dict[str, Any]]:
-        r = EventsReader(path)
-        return [e for e in r.read_range(from_seq=threshold + 1)]
-
-    try:
-        from watchfiles import awatch  # type: ignore
-        use_watch = True
-    except Exception:
-        use_watch = False
+        nonlocal scanned_file
+        try:
+            info = path.stat()
+            signature = (info.st_dev, info.st_ino, info.st_size,
+                         info.st_mtime_ns, info.st_ctime_ns)
+            if signature == scanned_file:
+                return []
+            events = list(EventsReader(path).read_range(from_seq=threshold + 1))
+        except FileNotFoundError:
+            scanned_file = None
+            return []
+        # Keep the pre-read signature: an append during the scan must trigger
+        # another read. Identity and timestamps also detect replaced/truncated
+        # files and completion of a previously partial trailing record.
+        scanned_file = signature
+        return events
 
     # Initial drain.
     for ev in _read_from(last):
         last = ev["event_seq"]
         yield ev
 
-    if use_watch:
-        # awatch(parent_dir) yields change batches; each batch triggers a
-        # re-scan. Wrap __anext__ in a task so asyncio.wait() timeouts don't
-        # cancel the underlying coroutine (cancellation would poison the
-        # async generator). Falls back to polling interval as an idle tick
-        # so the stop event is honoured even when no fs events arrive.
-        watcher = awatch(path.parent, stop_event=stop)
-        pending_task: asyncio.Task | None = None
-        try:
-            while not stop.is_set():
-                if pending_task is None:
-                    pending_task = asyncio.create_task(watcher.__anext__())
-                done, _ = await asyncio.wait(
-                    {pending_task}, timeout=poll_ms / 1000,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if pending_task in done:
-                    try:
-                        pending_task.result()
-                    except StopAsyncIteration:
-                        pass
-                    pending_task = None
-                for ev in _read_from(last):
-                    last = ev["event_seq"]
-                    yield ev
-        finally:
-            if pending_task is not None and not pending_task.done():
-                pending_task.cancel()
-                try:
-                    await pending_task
-                except (asyncio.CancelledError, StopAsyncIteration, Exception):
-                    pass
-    else:
-        while not stop.is_set():
-            await asyncio.sleep(poll_ms / 1000)
-            for ev in _read_from(last):
-                last = ev["event_seq"]
-                yield ev
+    # The tail owns only this cancellable coroutine. A detached awatch task can
+    # outlive an SSE disconnect inside nested AnyIO cancellation scopes.
+    while not stop.is_set():
+        await asyncio.sleep(poll_ms / 1000)
+        for ev in _read_from(last):
+            last = ev["event_seq"]
+            yield ev
 
 
 class EventsIdx:
