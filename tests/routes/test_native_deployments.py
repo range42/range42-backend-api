@@ -11,8 +11,15 @@ from tests.routes.test_deployments_preflight import _boot, _seed
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('component', [False, True])
-async def test_native_context_preview_create_preflight_and_attempt_round_trip(tmp_path_factory, monkeypatch, component):
+@pytest.mark.parametrize('component,allocation_block,run_preflight,cleanup', [
+    pytest.param(False, False, True, False, id="standalone"),
+    pytest.param(True, False, True, False, id="component"),
+    pytest.param(True, True, False, False, id="conflict-without-preflight"),
+    pytest.param(True, True, True, False, id="conflict-after-preflight"),
+    pytest.param(True, False, True, True, id="cleanup-with-invalid-registry"),
+    pytest.param(True, True, False, True, id="cleanup-still-checks-live-identities"),
+])
+async def test_native_context_preview_create_preflight_and_attempt_round_trip(tmp_path_factory, monkeypatch, component, allocation_block, run_preflight, cleanup):
     from app.core import scenario as scenario_module
     from app.core import deploy_trigger
     from app.core.models import ProxmoxHost, Attempt
@@ -41,7 +48,10 @@ async def test_native_context_preview_create_preflight_and_attempt_round_trip(tm
     async def reachable(*args):
         return PreflightCheck(check="proxmox_api", result="pass")
     monkeypatch.setattr(preflight_module, "check_proxmox_api_status", reachable)
+    blocked = False
     async def allocation_check(*args, **kwargs):
+        if blocked:
+            return [PreflightCheck(check='native_allocations', result='block', detail='VMID 2001 now belongs to another VM')]
         return [PreflightCheck(check='native_allocations', result='pass')]
     monkeypatch.setattr('app.core.native_scenarios.check_native_allocations', allocation_check)
     try:
@@ -65,13 +75,21 @@ async def test_native_context_preview_create_preflight_and_attempt_round_trip(tm
             deployment = created.json()
             assert deployment["native"]["descriptor"]["actions"]["teardown"] == "exercise.delete_all.sh"
             ident = deployment["id"]
-            report = await client.post(f"/v1/deployments/{ident}/preflight", json={"scope": "full"})
-            assert report.status_code == 200, report.text
-            assert report.json()["result"] == "warn"
-            assert any(row["check"] == "native_context" for row in report.json()["checks"])
+            scope = "teardown" if cleanup else "full"
+            if cleanup:
+                (repo / "scenarios").mkdir()
+                (repo / "scenarios/_reserved.json").write_text("not json")
+            if run_preflight:
+                report = await client.post(f"/v1/deployments/{ident}/preflight", json={"scope": scope})
+                assert report.status_code == 200, report.text
+                assert report.json()["result"] == "warn"
+                assert any(row["check"] == "native_context" for row in report.json()["checks"])
+                if cleanup:
+                    assert any(row["check"] == "native_reservations" and row["result"] == "warn" for row in report.json()["checks"])
+            blocked = allocation_block
             refused = await client.post(f"/v1/deployments/{ident}/attempts", json={"scope": "reset"})
             assert refused.status_code == 400, refused.text
-            attempt = await client.post(f"/v1/deployments/{ident}/attempts", json={"scope": "full"})
+            attempt = await client.post(f"/v1/deployments/{ident}/attempts", json={"scope": scope, **({"confirm_codename": "NATIVE"} if cleanup else {})})
             assert attempt.status_code == 201, attempt.text
             captured = {}
             class Handle:
@@ -84,6 +102,14 @@ async def test_native_context_preview_create_preflight_and_attempt_round_trip(tm
                     return Handle()
             async with db.get_session_factory()() as session:
                 row = await session.get(Attempt, attempt.json()["id"])
+                if allocation_block:
+                    from app.core.errors import PreflightBlockedError
+                    with pytest.raises(PreflightBlockedError, match="2001"):
+                        await deploy_trigger.start_attempt(session, attempt=row, runner=Runner())
+                    assert not captured
+                    await session.refresh(row)
+                    assert row.state == "failed"
+                    return
                 await deploy_trigger.start_attempt(session, attempt=row, runner=Runner())
             assert "r42_native_command" in captured["extravars"]
             assert "proxmox_api_token_secret" not in captured["extravars"]

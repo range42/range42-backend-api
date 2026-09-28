@@ -144,3 +144,41 @@ def test_duplicate_vm_rows_inside_one_scenario_are_conflicts(tmp_path):
     path.write_text(json.dumps(manifest))
     registry(tmp_path)
     assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "conflict"
+
+
+def test_reservations_check_normalized_secondary_addresses(tmp_path):
+    base = native_tree(tmp_path)
+    other = native_tree(tmp_path, "scenarios/other")
+    path = other / "manifest/scenario_vms.json"
+    manifest = json.loads(path.read_text())
+    manifest["vms"][0].update(vm_id=2002, ip="10.42.0.11", nics=[{"bridge": "net42", "ip": "10.42.0.10/24"}])
+    path.write_text(json.dumps(manifest))
+    registry(tmp_path)
+    result = detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]
+    assert result["status"] == "conflict"
+    assert any("10.42.0.10" in issue and "other" in issue for issue in result["issues"])
+    # Check secondary-to-secondary collisions too, while allowing other networks.
+    mine = base / "manifest/scenario_vms.json"
+    doc = json.loads(mine.read_text())
+    doc["vms"][0].update(ip="10.42.0.12", nics=[{"bridge": "net42", "ip": "10.42.0.10/32"}])
+    mine.write_text(json.dumps(doc))
+    registry(tmp_path)
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "conflict"
+    doc["vms"][0]["nics"][0]["bridge"] = "net43"
+    mine.write_text(json.dumps(doc))
+    registry(tmp_path)
+    assert detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]["status"] == "checked"
+
+
+def test_shared_templates_require_consistent_secondary_addresses(tmp_path):
+    native_tree(tmp_path)
+    other = native_tree(tmp_path, "scenarios/other")
+    path = other / "manifest/scenario_vms.json"
+    doc = json.loads(path.read_text())
+    doc["vms"][0].update(vm_id=2002, ip="10.42.0.11")
+    doc["templates"][0]["nics"] = [{"bridge": "net43", "ip": "10.43.0.10"}]
+    path.write_text(json.dumps(doc))
+    registry(tmp_path)
+    result = detail_at_path(tmp_path, "scenarios/demo")["document"]["topology"]["reservations"]
+    assert result["status"] == "conflict"
+    assert any("9901" in issue for issue in result["issues"])

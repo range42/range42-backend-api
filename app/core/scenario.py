@@ -90,7 +90,7 @@ async def prepare_project_scenario(
             root, token = await checkout_native_component(session, root, native["component_id"], native["path"], dest=dest / ".range42-native-origin")
         descriptor = await asyncio.to_thread(inspect_native_scenario, root, native["path"])
         reservations = descriptor["topology"]["reservations"]
-        if reservations["status"] in {"conflict", "invalid"}:
+        if reservations["status"] in {"conflict", "invalid"} and scope not in {"teardown", "delete_vms", "delete_networks"}:
             raise invalid(" ".join(reservations["issues"]), "NATIVE_RESERVATION_CONFLICT")
         if scope not in descriptor["actions"]:
             raise invalid("This saved scenario does not declare that action", "NATIVE_ACTION_UNAVAILABLE")

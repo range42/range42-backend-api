@@ -81,6 +81,10 @@ async def run_preflight(deployment_id: str,
             ) else None
             report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
             if scenario.native:
+                reservations = scenario.native["descriptor"]["topology"]["reservations"]
+                if reservations["status"] in {"conflict", "invalid"}:
+                    report.checks.append(PreflightCheck(check="native_reservations", result="warn",
+                        detail="Cleanup is allowed despite reservation registry issues. " + " ".join(reservations["issues"])))
                 if scenario.native.get("component_id"):
                     from app.core.native_scenarios import check_native_allocations
                     report.checks.extend(await check_native_allocations(scenario.native["descriptor"]["topology"], host))

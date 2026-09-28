@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 import ipaddress
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -16,6 +17,24 @@ def read(path: Path, root: Path):
             or path.stat().st_size > LIMIT):
         raise ValueError("Scenario metadata is missing, too large or outside the repository")
     return path.read_text()
+
+
+def addresses(row: dict) -> set[tuple[str, str]]:
+    """Include legacy primary fields even when the manifest also declares NICs."""
+    nics = row.get("nics", [])
+    if not isinstance(nics, list) or len(nics) > 32:
+        raise ValueError("Invalid reserved interfaces")
+    result = set()
+    for nic in [row, *nics]:
+        if not isinstance(nic, dict):
+            raise ValueError("Invalid reserved interface")
+        bridge, address = nic.get("bridge"), nic.get("ip")
+        if bridge is None and address is None:
+            continue
+        if not isinstance(bridge, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,14}", bridge) or not isinstance(address, str):
+            raise ValueError("Invalid reserved address")
+        result.add((bridge, str(ipaddress.ip_interface(address).ip)))
+    return result
 
 
 def reservations(root: Path, base: Path, manifest: dict) -> dict:
@@ -51,17 +70,19 @@ def reservations(root: Path, base: Path, manifest: dict) -> dict:
             doc = json.loads(data)
             rows.extend({**row, "scenario": path.parents[1].name} for row in doc["vms"])
             rows.extend({**row, "scenario": path.parents[1].name, "role": "template"} for row in doc.get("templates", []))
-        for vm in expected:
-            for other in rows:
+        declared_addresses = [addresses(vm) for vm in expected]
+        reserved_addresses = [addresses(row) for row in rows]
+        for vm, vm_addresses in zip(expected, declared_addresses):
+            for other, other_addresses in zip(rows, reserved_addresses):
                 if vm == other:
                     continue
                 shared = vm.get("role") == other.get("role") == "template" and vm["vm_id"] == other["vm_id"]
-                if shared and all(vm.get(key) == other.get(key) for key in ("vm_name", "spec", "ip", "bridge")):
+                if shared and vm_addresses == other_addresses and all(vm.get(key) == other.get(key) for key in ("vm_name", "spec")):
                     continue
                 if vm["vm_id"] == other["vm_id"]:
                     issues.append(f"VMID {vm['vm_id']} conflicts with {other['scenario']} in the reservation registry or manifests.")
-                if vm.get("bridge") and vm.get("ip") and (vm["bridge"], vm["ip"]) == (other.get("bridge"), other.get("ip")):
-                    issues.append(f"Address {vm['ip']} on {vm['bridge']} conflicts with {other['scenario']}.")
+                for bridge, address in sorted(vm_addresses & other_addresses):
+                    issues.append(f"Address {address} on {bridge} conflicts with {other['scenario']}.")
         return {"status": "conflict" if issues else "checked", "issues": list(dict.fromkeys(issues))[:100]}
     except (OSError, ValueError, TypeError, KeyError, RecursionError):
         return {"status": "invalid", "issues": ["Cannot validate scenarios/_reserved.json and the scenario manifests. Correct their contents before deploying."]}

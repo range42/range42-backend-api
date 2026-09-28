@@ -111,3 +111,33 @@ async def test_native_component_uses_origin_saved_in_project_commit(tmp_path, mo
     dep.native["component_id"] = "missing"
     with pytest.raises(Range42Error, match="saved"):
         await module.prepare_project_scenario(Session(), dep, dest=tmp_path / "retry")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["full", "deploy_vms", "deploy_networks", "configure", "reset", "teardown", "delete_vms", "delete_networks"])
+@pytest.mark.parametrize("registry_state", ["conflict", "invalid"])
+async def test_registry_conflicts_allow_only_cleanup(tmp_path, monkeypatch, scope, registry_state):
+    from app.core import scenario as module
+    from app.core.models import Deployment, ProxmoxHost
+    _, _, host = context(tmp_path, monkeypatch)
+    repo = tmp_path / "repo"
+    base = scenario(repo, "scenarios/exercise-a")
+    for suffix in ("setup_vms_only.sh", "setup_networks.sh", "configure.sh", "delete_vms_only.sh", "delete_networks.sh"):
+        (base / f"exercise.{suffix}").write_text("#!/bin/bash\ntrue\n")
+    (repo / "scenarios/_reserved.json").write_text('not json' if registry_state == "invalid" else '{"vm_id":2002,"scenario":"exercise-a"}\n')
+    async def checkout(*args, **kwargs):
+        return repo, None, SimpleNamespace(subdir=None)
+    monkeypatch.setattr(module, "checkout_project_repository", checkout)
+    class Session:
+        async def get(self, model, identity):
+            assert model is ProxmoxHost
+            return host
+    dep = Deployment(project_id="p", target_host_id="h", scenario_label="exercise-a", project_sha="a" * 40,
+        native={"context_id": "lab-demo", "path": "scenarios/exercise-a"})
+    if scope in {"teardown", "delete_vms", "delete_networks"}:
+        prepared = await module.prepare_project_scenario(Session(), dep, dest=tmp_path / "checkout", scope=scope)
+        assert prepared.native["descriptor"]["topology"]["reservations"]["status"] == registry_state
+    else:
+        with pytest.raises(Range42Error) as error:
+            await module.prepare_project_scenario(Session(), dep, dest=tmp_path / "checkout", scope=scope)
+        assert error.value.code == "NATIVE_RESERVATION_CONFLICT"
