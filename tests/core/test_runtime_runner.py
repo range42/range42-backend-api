@@ -14,6 +14,33 @@ from tests.routes.test_project_scenario_execution import _boot, seed_scenario
 
 
 @pytest.mark.asyncio
+async def test_network_wrapper_carries_the_exact_private_guard_module(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app.core import runtime_networks, runtime_runner
+    from tests.core.test_runtime_networks import lifecycle_data, read
+
+    observation = await read(tmp_path, lifecycle_data())
+    plan = runtime_networks.network_plan({"kind": "sdn_network", "action": "delete", "vnet": "r42blue"}, observation)
+    async def verified(*args):
+        return plan
+    monkeypatch.setattr(runtime_runner, "_verified_plan", verified)
+    for step in plan["steps"]:
+        bundle = tmp_path / "bundles" / step["bundle"] / "main.yml"
+        bundle.parent.mkdir(parents=True)
+        bundle.write_text("[]\n")
+    monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(tmp_path / "bundles"))
+    deployment = SimpleNamespace(id="dep", workspace_path=str(tmp_path), scenario_label="lab")
+    attempt = SimpleNamespace(operation={"request": {"kind": "sdn_network"}})
+    run = await runtime_runner.prepare_runtime_run(deployment, attempt, None,
+        SimpleNamespace(playbook=tmp_path / "main.yml"), tmp_path)
+    installed = run.playbook.parent / "library/range42_network_guard.py"
+    assert installed.is_file(), "The guarded runner must carry its trusted read verifier"
+    source = Path(runtime_networks.__file__).parent / "ansible_modules/range42_network_guard.py"
+    assert installed.read_bytes() == source.read_bytes()
+    assert installed.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("ownership_changed", [False, True])
 @pytest.mark.parametrize("native", [False, True])
 async def test_runtime_uses_bound_inventory_and_rechecks_ownership_before_launch(tmp_path, monkeypatch, ownership_changed, native):

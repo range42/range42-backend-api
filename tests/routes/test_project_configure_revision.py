@@ -7,12 +7,13 @@ import subprocess
 import sys
 
 import pytest
+import yaml
 from httpx import ASGITransport, AsyncClient
 
 from app.core.errors import Range42Error
 from app.core.models import Deployment
 from app.core.scenario import prepare_project_scenario
-from tests.routes.test_project_scenario_execution import _boot, seed_scenario
+from tests.routes.test_project_scenario_execution import _boot, healthy_host, seed_scenario
 
 
 def advance(tmp_path, changes):
@@ -22,6 +23,8 @@ def advance(tmp_path, changes):
         path.parent.mkdir(parents=True, exist_ok=True)
         if content is None:
             path.unlink()
+        elif isinstance(content, bytes):
+            path.write_bytes(content)
         else:
             path.write_text(content)
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
@@ -78,6 +81,73 @@ async def test_configure_runs_new_content_and_preserves_deployment_pin(tmp_path,
         assert attempt["project_sha"] == candidate
         assert deployment["project_sha"] == baseline
         assert (ws / "new-content.txt").read_text() == "edited content"
+    finally:
+        await asyncio.gather(*list(_BACKGROUND_TASKS), return_exceptions=True)
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_binary_application_assets_survive_deploy_configure_and_teardown(tmp_path, monkeypatch):
+    """Exercise actual Git checkouts and Ansible copies with non-UTF-8 content."""
+    monkeypatch.setenv("RANGE42_AUTO_START_ATTEMPTS", "1")
+    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}")
+    cfg = tmp_path / "ansible.cfg"
+    cfg.write_text("[defaults]\nretry_files_enabled=False\n")
+    monkeypatch.setenv("ANSIBLE_CONFIG", str(cfg))
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    from app.core.deploy_trigger import _BACKGROUND_TASKS
+    from app.core.models import Attempt
+
+    destination = "{{ r42_workspace_dir }}/custom-app"
+    configure = yaml.safe_dump([{"hosts": "guest", "gather_facts": False, "tasks": [
+        {"ansible.builtin.file": {"path": destination, "state": "directory", "mode": "0700"}},
+        {"ansible.builtin.copy": {"src": "containers/custom-app/", "dest": destination + "/", "mode": "0600"}},
+        {"ansible.builtin.copy": {"content": "{{ r42_deployment_id }}", "dest": destination + "/owner", "mode": "0600"}},
+    ]}])
+    teardown = yaml.safe_dump([{"hosts": "guest", "gather_facts": False, "tasks": [
+        {"ansible.builtin.file": {"path": destination, "state": "absent"}},
+    ]}])
+    picture = b"\x89PNG\r\n\x1a\n\x00\xff\x80original-picture"
+    edited_picture = b"\x89PNG\r\n\x1a\n\x00\xfe\x81edited-picture"
+    compose = "services:\n  web:\n    image: nginx:1.27-alpine\n    volumes:\n      - ./site:/usr/share/nginx/html:ro\n"
+    try:
+        ws, baseline = await seed_scenario(dbmod, tmp_path, vmids=(), extra_files={
+            "configure.yml": configure,
+            "teardown.yml": teardown,
+            "containers/custom-app/compose.yml": compose,
+            "containers/custom-app/site/index.html": '<img src="picture.png">original',
+            "containers/custom-app/site/picture.png": picture,
+        })
+        healthy_host(monkeypatch)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            async def run(scope, **payload):
+                review = await client.post("/v1/deployments/dep-1/preflight", json={"scope": scope, **payload})
+                assert review.status_code == 200 and review.json()["result"] == "pass", review.text
+                confirmation = {"confirm_codename": "X"} if scope == "teardown" else {}
+                result = await client.post("/v1/deployments/dep-1/attempts", json={"scope": scope, **payload, **confirmation})
+                assert result.status_code == 201, result.text
+                await asyncio.wait_for(asyncio.gather(*list(_BACKGROUND_TASKS)), timeout=30)
+                async with dbmod.get_session_factory()() as session:
+                    attempt = await session.get(Attempt, result.json()["id"])
+                    assert attempt.state == "succeeded" and attempt.rc == 0
+                    return attempt.project_sha
+
+            await run("full")
+            assert (ws / "custom-app/site/picture.png").read_bytes() == picture
+            assert (ws / "custom-app/compose.yml").read_text() == compose
+            assert (ws / "custom-app/owner").read_text() == "dep-1"
+            candidate = advance(tmp_path, {
+                "containers/custom-app/site/picture.png": edited_picture,
+                "containers/custom-app/site/index.html": '<img src="picture.png">edited',
+            })
+            assert await run("configure", project_sha=candidate) == candidate
+            assert (ws / "custom-app/site/picture.png").read_bytes() == edited_picture
+            assert (ws / "custom-app/site/index.html").read_text().endswith("edited")
+            assert (ws / "custom-app/owner").read_text() == "dep-1"
+            deployment = (await client.get("/v1/deployments/dep-1")).json()
+            assert deployment["project_sha"] == baseline
+            await run("teardown")
+            assert not (ws / "custom-app").exists()
     finally:
         await asyncio.gather(*list(_BACKGROUND_TASKS), return_exceptions=True)
         await dbmod.dispose_engine()

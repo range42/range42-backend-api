@@ -94,14 +94,18 @@ def test_ansible_cloud_init_preferences_override_vault_and_keep_inheritance_per_
     assert all('password' not in key and 'ssh_key' not in key for key in variables)
     body = {'ciuser': '{{ vm_ci_user | default(omit) }}', 'nameserver': '{{ vm_ci_dns_ips | default(omit) }}',
             'searchdomain': '{{ vm_ci_dns_domain | default(omit) }}'}
+    body_variables = {}
     if actual_controller:
         source = yaml.safe_load(Path(controller_path).read_text())
-        body = next(task['uri']['body'] for task in source[0]['block'] if task.get('uri', {}).get('method') == 'PUT')
+        tasks = [nested for task in source for nested in task.get('block', [task])]
+        injection = next(task for task in tasks if task.get('uri', {}).get('method') == 'PUT')
+        body = injection['uri']['body']
+        body_variables = {'_vm_bootstrap_extra_config': {}, **injection.get('vars', {})}
     conflicting = {key: 'conflicting-vault' for key in ('vm_ci_user', 'default_admin_vm_ci_user', 'vm_ci_dns_ips', 'global_vm_ci_dns_ips', 'vm_ci_dns_domain')}
     (tmp_path / 'vault.yml').write_text(yaml.safe_dump(conflicting))
     (tmp_path / 'bootstrap.yml').write_text(yaml.safe_dump([{
         'hosts': 'localhost', 'gather_facts': False, 'vars_files': ['vault.yml'],
-        'tasks': [{'ansible.builtin.set_fact': {'captured_body': body}},
+        'tasks': [{'ansible.builtin.set_fact': {'captured_body': body}, 'vars': body_variables},
                   {'ansible.builtin.assert': {'that': [
                       "captured_body['ciuser'] == expected.ssh_user",
                       "captured_body.get('nameserver') == (expected.dns_servers | join(' ') if expected.dns_servers is not none else none)",

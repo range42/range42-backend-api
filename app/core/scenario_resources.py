@@ -37,8 +37,16 @@ def bootstrap_features() -> set[str]:
         features = capabilities.get("features")
         if capabilities.get("version") != 1 or not isinstance(features, list) or any(not isinstance(feature, str) for feature in features):
             return set()
+        if capabilities.get("requires_native_contract") is not None:
+            if capabilities["requires_native_contract"] is not True:
+                return set()
+            from app.core.bundle_runtime import runtime_snapshot
+            from app.core.native_sdn import native_contract
+            profile, _ = runtime_snapshot()
+            if not native_contract(profile):
+                return set()
         return set(features).intersection({"extra_nics", "resources", "disk_resize"})
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, Range42Error):
         return set()
 
 

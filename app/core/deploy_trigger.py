@@ -151,6 +151,12 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         if scenario.native:
             from app.core.native_execution import prepare_native_run
             native = scenario.native
+            if native.get("component_id"):
+                from app.core.native_scenarios import check_native_allocations
+                allocation_checks = await check_native_allocations(native["descriptor"]["topology"], target_host)
+                blocked = next((check for check in allocation_checks if check.result == "block"), None)
+                if blocked:
+                    raise PreflightBlockedError(message=blocked.detail)
             native_run = prepare_native_run(scenario.project_root, native["descriptor"], scenario.context,
                 scope=attempt.scope, features=native.get("features", {}), parameters=native.get("parameters", {}),
                 artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout")

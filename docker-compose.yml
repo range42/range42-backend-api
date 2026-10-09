@@ -21,6 +21,7 @@ services:
       RANGE42_API_TOKEN_FILE: /run/secrets/api_token
       RANGE42_CREDENTIAL_KEY_FILE: /run/secrets/credential_key
       RANGE42_CORS_ORIGINS: ${RANGE42_CORS_ORIGINS:-}
+      FORWARDED_ALLOW_IPS: ${RANGE42_TRUSTED_PROXY_IPS:-127.0.0.1}
       RANGE42_GIT_ALLOWED_HOSTS: ${RANGE42_GIT_ALLOWED_HOSTS:-github.com,gitlab.com,codeberg.org}
     read_only: true
     tmpfs:

@@ -133,9 +133,13 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         environment["ANSIBLE_SSH_COMMON_ARGS"] = "-F " + shlex.quote(str(ssh_config))
         _write(view / "bin/ssh", "#!/bin/sh\nexec " + shlex.quote(ssh) + " -F "
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
-    lines = [f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
+    lines = ['r42_runner_callbacks="${ANSIBLE_CALLBACK_PLUGINS:-}"',
+             f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
              f"source {shlex.quote(str(context.context_script))} || exit $?",
              "range42-context use " + shlex.join([context.codename, context.scenario]) + " || exit $?",
+             # The CLI selects its own display plugins. Retain the outer runner's
+             # awx_display plugin so nested Ansible still publishes runner events.
+             'export ANSIBLE_CALLBACK_PLUGINS="${r42_runner_callbacks}${r42_runner_callbacks:+:}${ANSIBLE_CALLBACK_PLUGINS:-}"',
              # Confirm the canonical command selected exactly the registered workspace.
              '[[ "${RANGE42_ACTIVE_CONFIG_DIR:A}" == ' + shlex.quote(str(context.workspace)) + ' ]] || exit 71',
              *[f"export {name}={shlex.quote(value)}" for name, value in environment.items()],
