@@ -21,21 +21,44 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 
 ## Quick Start
 
+### Deploy with range42-context
+
+The `dev_deployer_ui_lab` scenario uses the shared application installer in
+`range42-playbooks`. With the matched installer revision, `range42-context deploy`
+builds the API checkout selected by the workspace, resolves its immutable Docker
+image ID and passes that ID to the managed container installer. No manual
+`BACKEND_IMAGE` is required for this source deployment.
+
+The installer creates private bearer/encryption credentials once. Repeat source
+deployments preserve the database, workspaces, credentials and recorded runtime
+bindings; changed releases use the existing guarded update operation. An explicit
+`BACKEND_IMAGE` remains available for deploying a reviewed image already installed
+on the backend guest. These changes must be released with `range42-playbooks`;
+updating only this application or its README does not update the installer.
+
+The scenario also reads optional application bindings from the selected private
+workspace's `deployment.yml`. Existing managed installations must retain their
+installation root and runtime bindings. Infrastructure execution additionally
+requires a complete reviewed runtime and a private credential template, described
+in [container packaging](docs/container-packaging.md).
+
 ### Option 1 -- Docker
 
 ```bash
-# Build and start (uses the built image — no source bind-mounts)
-VAULT_PASSWORD=my-secret docker compose up
+# Prepare private api-token and credential-key files using the packaging guide.
+docker compose up --build -d
 ```
 
-Builds the image from the local source and starts the API on port `8000`. The application code, Ansible playbooks, and inventory are baked into the image at build time.
+Follow [container packaging](docs/container-packaging.md) to prepare the private
+API token and encryption key before first start. The default listener is
+`127.0.0.1:8000`. Persistent state is mounted at `/var/lib/range42`; migrations run
+before the API starts. The image contains application code, shipped playbooks and
+migrations. Vault credentials and a complete reviewed execution runtime are
+additional requirements for infrastructure deployment.
 
-**Environment variables:** Configured via the host environment or a `.env` file. Required: at least one of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` for vault-encrypted operations.
-
-**Volumes:**
-- `${SSH_KEY_PATH:-~/.ssh}` -- SSH private keys (read-only) — needed for Ansible over SSH
-
-**Health check:** The container pings `/docs/openapi.json` every 30s (5s timeout, 10s start period, 3 retries).
+The container health check uses public `/v1/health`. Readiness and API documentation
+require the bearer token. The managed context installer provisions its own private
+credentials; standalone Docker Compose requires you to prepare them first.
 
 ### Option 2 -- start.sh
 
@@ -68,7 +91,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Docker: Build & Publish
 
-The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian Bookworm** (`python:3.13-bookworm` / `python:3.13-slim-bookworm`):
+The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian Bookworm** (`python:3.12-bookworm` / `python:3.12-slim-bookworm`):
 
 - **Stage 1 `builder`** — installs Python dependencies into `/opt/venv` and Ansible collections into `/usr/share/ansible/collections`.
 - **Stage 2 `runtime`** — copies the virtualenv and collections from the builder; bakes in application code; runs uvicorn.
@@ -80,7 +103,7 @@ The runtime image runs as a non-root user (`range42`, UID/GID 1000 by default). 
 ```bash
 docker compose build   # uses UID/GID 1000
 # or match your host user:
-UID=$(id -u) GID=$(id -g) docker compose build
+RANGE42_CONTAINER_UID=$(id -u) RANGE42_CONTAINER_GID=$(id -g) docker compose build
 ```
 
 SSH host key checking is enabled (`ANSIBLE_HOST_KEY_CHECKING=True`). Pre-populate `~/.ssh/known_hosts` on the host before mounting, or the first Ansible connection to an unknown host will fail.
