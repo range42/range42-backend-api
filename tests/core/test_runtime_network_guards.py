@@ -111,6 +111,7 @@ async def test_real_ansible_refuses_network_mutation_after_review_drift(tmp_path
                     self.end_headers()
                     self.wfile.write(body)
                 except (BrokenPipeError, ssl.SSLEOFError):
+                    # Cancellation closes the client socket before this test server replies.
                     pass
                 if changed == "fail_first_inventory" and path == "/cluster/resources":
                     failure_sent.set()

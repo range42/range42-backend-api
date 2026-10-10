@@ -196,7 +196,7 @@ async def test_tail_does_not_start_a_detached_filesystem_watcher(tmp_path, monke
     finally:
         pending.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await pending
+            await asyncio.wait_for(pending, timeout=2)
         await stream.aclose()
 
 

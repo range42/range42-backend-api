@@ -1,6 +1,8 @@
 import json
 import subprocess
 
+import pytest
+
 SPEC = dict(id='alpha', domain='alpha.example.test', vmid_start=31000,
             subnet='10.81.0.0/24', gateway='10.81.0.1', bridge='r42alpha',
             template_vmid=9221, node='pve', ssh_user='alice', profile='core')
@@ -32,3 +34,16 @@ def test_stack_preview_uses_only_operator_installed_code(client, monkeypatch, tm
     for patch in [{'vmid_start': True}, {'id': '../escape'}, {'source_root': '/tmp/evil'}]:
         assert client.post('/v1/platform/components/preview', json={**SPEC, **patch}).status_code == 422
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('output', [None, [], 'component', 1, True])
+@pytest.mark.parametrize('returncode', [0, 1])
+def test_stack_preview_rejects_nonobject_generator_json(client, monkeypatch, tmp_path, output, returncode):
+    (tmp_path / 'range42_stack').mkdir()
+    (tmp_path / 'range42_stack/project.py').write_text('# installed component')
+    monkeypatch.setenv('RANGE42_PLATFORM_PLAYBOOKS_DIR', str(tmp_path))
+    monkeypatch.setattr(subprocess, 'run', lambda command, **kwargs:
+                        subprocess.CompletedProcess(command, returncode, json.dumps(output), ''))
+    response = client.post('/v1/platform/components/preview', json=SPEC)
+    assert response.status_code == 422
+    assert response.json()['code'] == 'PLATFORM_COMPONENT_INVALID'

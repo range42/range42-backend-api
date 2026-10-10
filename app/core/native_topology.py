@@ -93,9 +93,24 @@ def scenario_topology(root: Path, base: Path, manifest: dict) -> dict:
     def public(rows):
         if not isinstance(rows, list) or len(rows) > 1024 or any(not isinstance(row, dict) for row in rows):
             raise ValueError("Invalid scenario resource declarations")
-        return [{key: row[key] for key in keys if key in row and isinstance(row[key], (str, int))} for row in rows]
+        result = []
+        for row in rows:
+            resource = {key: row[key] for key in keys if key in row and isinstance(row[key], (str, int))}
+            if "nics" in row:
+                nics = row["nics"]
+                if not isinstance(nics, list) or len(nics) > 32 or any(not isinstance(nic, dict) for nic in nics):
+                    raise ValueError("Invalid scenario interfaces")
+                if any(isinstance(nic.get(key), str) and len(nic[key]) > limit
+                       for nic in nics for key, limit in (("bridge", 15), ("ip", 64))):
+                    raise ValueError("Scenario interface values are too long")
+                resource["nics"] = [{key: nic[key] for key in ("bridge", "ip")
+                                     if isinstance(nic.get(key), str)} for nic in nics]
+            result.append(resource)
+        return result
     vms, templates = public(manifest["vms"]), public(manifest.get("templates", []))
-    networks = {row["bridge"]: {"vnet": row["bridge"]} for row in [*vms, *templates] if row.get("bridge")}
+    declared_networks = {nic["bridge"]: {"vnet": nic["bridge"]} for row in [*vms, *templates]
+                         for nic in [row, *row.get("nics", [])] if nic.get("bridge")}
+    networks = declared_networks.copy()
     warnings = ["The diagram shows declared resources. Feature choices and playbook conditions determine which resources are created."]
     # Existing scenarios declare literal SDN settings here. Dynamic expressions
     # remain unknown; never derive CIDRs or gateways from a network's name.
@@ -117,7 +132,7 @@ def scenario_topology(root: Path, base: Path, manifest: dict) -> dict:
                             raise ValueError()
                         networks[row["vnet"]] = network
         except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError):
-            networks = {row["bridge"]: {"vnet": row["bridge"]} for row in [*vms, *templates] if row.get("bridge")}
+            networks = declared_networks.copy()
             warnings.append("Some network declarations are dynamic or invalid. Review the scenario files for their effective settings.")
     return {"vms": vms, "templates": templates, "networks": list(networks.values()),
             "warnings": warnings, "reservations": reservations(root, base, manifest)}

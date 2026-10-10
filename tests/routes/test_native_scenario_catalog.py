@@ -1,6 +1,8 @@
 """Native scenarios are discoverable without generating UI project files."""
 import json
 
+import pytest
+
 from app.core.catalog_index import detail_at_path, discover
 
 
@@ -106,6 +108,38 @@ def registry(root):
         rows.extend({**row, "scenario": path.parents[1].name} for row in manifest["vms"])
         rows.extend({**row, "scenario": path.parents[1].name, "role": "template"} for row in manifest["templates"])
     (root / "scenarios/_reserved.json").write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+
+@pytest.mark.parametrize('bootstrap', [None, 'invalid', 'literal'])
+def test_native_topology_preserves_secondary_interfaces_and_networks(tmp_path, bootstrap):
+    base = native_tree(tmp_path)
+    path = base / 'manifest/scenario_vms.json'
+    manifest = json.loads(path.read_text())
+    manifest['vms'][0]['nics'] = [{'bridge': 'net43', 'ip': '10.43.0.10/24', 'token': 'private'}]
+    manifest['templates'][0]['nics'] = [{'bridge': 'net44', 'ip': '10.44.0.1', 'credentials': {'password': 'private'}}]
+    path.write_text(json.dumps(manifest))
+    if bootstrap:
+        (base / '00_sdn_bootstrap').mkdir()
+        (base / '00_sdn_bootstrap/_main.yml').write_text(
+            '- hosts: proxmox\n  tasks:\n    - set_fact:\n        _sdn_vnets:\n'
+            '          - {vnet: net43, subnet: ' + ('10.43.0.0/24' if bootstrap == 'literal' else '{{ subnet }}') + '}\n')
+    topology = detail_at_path(tmp_path, 'scenarios/demo')['document']['topology']
+    assert topology['vms'][0]['nics'] == [{'bridge': 'net43', 'ip': '10.43.0.10/24'}]
+    assert topology['templates'][0]['nics'] == [{'bridge': 'net44', 'ip': '10.44.0.1'}]
+    assert {network['vnet'] for network in topology['networks']} == {'net42', 'net43', 'net44'}
+    if bootstrap == 'literal':
+        assert next(network for network in topology['networks'] if network['vnet'] == 'net43')['subnet'] == '10.43.0.0/24'
+
+
+@pytest.mark.parametrize('nics', [None, {}, ['interface'], [{}] * 33,
+                                [{'bridge': 'x' * 16}], [{'ip': 'x' * 65}]])
+def test_native_topology_rejects_invalid_or_unbounded_interfaces(tmp_path, nics):
+    base = native_tree(tmp_path)
+    path = base / 'manifest/scenario_vms.json'
+    manifest = json.loads(path.read_text())
+    manifest['vms'][0]['nics'] = nics
+    path.write_text(json.dumps(manifest))
+    assert detail_at_path(tmp_path, 'scenarios/demo') is None
 
 
 def test_native_reservations_detect_collisions_but_allow_shared_templates_and_networks(tmp_path):

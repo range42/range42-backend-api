@@ -42,6 +42,8 @@ def preview_component(spec: StackSpec):
         if len(result.stdout) > 4 * 1024 * 1024:
             raise ValueError('Platform component exceeds the project file limit')
         value = json.loads(result.stdout)
+        if not isinstance(value, dict):
+            raise ValueError('Installed platform generator returned an invalid component')
         if result.returncode:
             raise ValueError(value.get('error', 'Platform component could not be generated'))
         if value.get('version') != 1 or not isinstance(value.get('files'), dict):
