@@ -79,3 +79,23 @@ Existing VMID protections still apply. The default `blank_scenario_4_subnets` ma
 Native playbooks are executable deployment code. Preflight identifies the selected context and known VM targets, then reports that arbitrary native stages can affect additional resources. Generated-project capacity, allocation ownership and runtime snapshot controls do not describe native workflows. External controller/catalog readiness, service-specific configuration and the effects of arbitrary custom scripts require scenario acceptance in the selected environment.
 
 Live acceptance remains outstanding: choose an operator-designated disposable context, save a scenario-specific customization, run preflight/full deployment, verify its services and SDN, run only its declared cleanup action, then verify cleanup and protected resources. Repeat per scenario and record the context, full source/runtime revisions and attempt IDs. No existing management context has been designated disposable or used for this work.
+
+## Platform component networks
+
+`POST /v1/platform/components/preview` builds a component using the release at
+the operator-configured `RANGE42_PLATFORM_PLAYBOOKS_DIR`. The default SDN request
+contract is unchanged. With a matching playbooks release, set
+`network_mode: existing_bridge` and a dedicated `vmbr` name other than `vmbr0`
+to use an operator-prepared private bridge instead of creating SDN.
+
+An optional `network_peers` array contains at most 32 exact external VM bindings:
+`vm_id`, `vm_name`, and nonempty `description`. Extra fields, unsafe bridge names,
+and peer bindings in SDN mode are rejected before invoking the generator. The
+installed generator validates allocations and exports the native live ownership
+checks. An unavailable or older generator cannot provide the new mode.
+
+Existing-bridge deployment leaves bridge provisioning, routing, DNS and host
+isolation with the operator. Stack lifecycle operations do not claim or remove
+the bridge or external peer VMs. This does not change the backend's single-node
+SDN mutation guard or qualify multi-node deployment. See the playbooks project's
+`range42_stack/README.md` for the complete network contract.

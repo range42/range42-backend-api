@@ -11555,6 +11555,35 @@
           "proxmox_node": "px-testing"
         }
       },
+      "OperatorNetworkPeer": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "vm_name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$",
+            "title": "Vm Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vm_id",
+          "vm_name",
+          "description"
+        ],
+        "title": "OperatorNetworkPeer"
+      },
       "Page_AttemptOut_": {
         "properties": {
           "items": {
@@ -14845,7 +14874,7 @@
           },
           "bridge": {
             "type": "string",
-            "pattern": "^[a-z][a-z0-9]{1,7}$",
+            "pattern": "^(?:[a-z][a-z0-9]{1,7}|vmbr[1-9][0-9]{0,8})$",
             "title": "Bridge"
           },
           "node": {
@@ -14872,6 +14901,23 @@
             ],
             "title": "Profile",
             "default": "core"
+          },
+          "network_mode": {
+            "type": "string",
+            "enum": [
+              "sdn",
+              "existing_bridge"
+            ],
+            "title": "Network Mode",
+            "default": "sdn"
+          },
+          "network_peers": {
+            "items": {
+              "$ref": "#/components/schemas/OperatorNetworkPeer"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Network Peers"
           }
         },
         "additionalProperties": false,

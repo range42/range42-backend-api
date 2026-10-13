@@ -36,6 +36,49 @@ def test_stack_preview_uses_only_operator_installed_code(client, monkeypatch, tm
     assert len(calls) == 1
 
 
+def test_existing_bridge_preview_preserves_exact_operator_peer_bindings(client, monkeypatch, tmp_path):
+    (tmp_path / 'range42_stack').mkdir()
+    (tmp_path / 'range42_stack/project.py').write_text('# installed component')
+    monkeypatch.setenv('RANGE42_PLATFORM_PLAYBOOKS_DIR', str(tmp_path))
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(json.loads(kwargs['input']))
+        return subprocess.CompletedProcess(command, 0, json.dumps(dict(version=1, files={})), '')
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    peer = dict(vm_id=40000, vm_name='trusted-gateway', description='operator-owned gateway')
+    source = {**SPEC, 'network_mode': 'existing_bridge', 'bridge': 'vmbr123456789', 'network_peers': [peer]}
+    response = client.post('/v1/platform/components/preview', json=source)
+    assert response.status_code == 200, response.text
+    assert calls == [{**source, 'dns': '1.1.1.1'}]
+
+
+@pytest.mark.parametrize('patch', [
+    {'network_mode': 'automatic'},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr0'},
+    {'network_mode': 'existing_bridge', 'bridge': 'r42alpha'},
+    {'network_mode': 'sdn', 'bridge': 'vmbr321'},
+    {'network_mode': 'sdn', 'network_peers': []},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr321', 'network_peers': [
+        {'vm_id': True, 'vm_name': 'gateway', 'description': 'operator-owned'}]},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr321', 'network_peers': [
+        {'vm_id': 40000, 'vm_name': 'gateway', 'description': '   '}]},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr321', 'network_peers': [
+        {'vm_id': 40000, 'vm_name': 'gateway', 'description': 'operator\nowned'}]},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr321', 'network_peers': [
+        {'vm_id': 40000, 'vm_name': 'gateway', 'description': 'owned', 'node': 'other'}]},
+    {'network_mode': 'existing_bridge', 'bridge': 'vmbr321', 'network_peers': [
+        {'vm_id': 40000, 'vm_name': 'gateway', 'description': 'owned'}] * 33},
+])
+def test_invalid_bridge_bindings_never_invoke_the_generator(client, monkeypatch, patch):
+    def unexpected(*args, **kwargs):
+        pytest.fail('Invalid platform input invoked a subprocess')
+
+    monkeypatch.setattr(subprocess, 'run', unexpected)
+    assert client.post('/v1/platform/components/preview', json={**SPEC, **patch}).status_code == 422
+
+
 @pytest.mark.parametrize('output', [None, [], 'component', 1, True])
 @pytest.mark.parametrize('returncode', [0, 1])
 def test_stack_preview_rejects_nonobject_generator_json(client, monkeypatch, tmp_path, output, returncode):
