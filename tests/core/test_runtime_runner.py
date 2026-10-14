@@ -97,6 +97,9 @@ def assert_verified_pin(arguments, config, known_hosts):
             if channel is not None and command.wait(5):
                 channel.send_exit_status(0)
                 channel.close()
+                # Let the client receive the queued status and disconnect.
+                # Closing the transport immediately can reset a valid session.
+                transport.join(timeout=5)
         except (EOFError, paramiko.SSHException):
             pass  # A rejected pin closes the synthetic transport.
         finally:
