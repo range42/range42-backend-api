@@ -135,7 +135,11 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
     lines = ['r42_runner_callbacks="${ANSIBLE_CALLBACK_PLUGINS:-}"',
              f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
+             "export RANGE42_QUIET=1",
              f"source {shlex.quote(str(context.context_script))} || exit $?",
+             # Scenario credentials already belong to this attempt's copied
+             # repository; context selection must not edit installed sources.
+             "export RANGE42_CONTEXT_REPO_LINKS_MANAGED=YES",
              "range42-context use " + shlex.join([context.codename, context.scenario]) + " || exit $?",
              # The CLI selects its own display plugins. Retain the outer runner's
              # awx_display plugin so nested Ansible still publishes runner events.

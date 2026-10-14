@@ -1,6 +1,6 @@
 # Range42 Backend API
 
-FastAPI application that orchestrates Proxmox infrastructure deployments by executing Ansible playbooks via `ansible-runner`. Part of the [Range42](https://github.com/range42) cyber range platform. Designed to sit behind a Kong API gateway that handles authentication and ACLs.
+FastAPI application that orchestrates Proxmox infrastructure deployments by executing Ansible playbooks via `ansible-runner`. Part of the [Range42](https://github.com/range42) cyber range platform. Bearer authentication is required by default. An existing gateway or reverse proxy can provide TLS and additional access policy.
 
 ---
 
@@ -23,21 +23,23 @@ FastAPI application that orchestrates Proxmox infrastructure deployments by exec
 
 ### Option 1 -- Docker
 
-```bash
-# Build and start (uses the built image — no source bind-mounts)
-VAULT_PASSWORD=my-secret docker compose up
-```
+Follow [container packaging](docs/container-packaging.md) to provision private
+API-token/encryption-key files, choose persistent state and build/start the image.
+The default listener is `127.0.0.1:8000`; migrations run before serving.
+`GET /v1/health` is public. OpenAPI, readiness and operational endpoints require
+`Authorization: Bearer <token>`. Readiness must also report `ready: true`.
 
-Builds the image from the local source and starts the API on port `8000`. The application code, Ansible playbooks, and inventory are baked into the image at build time.
-
-**Environment variables:** Configured via the host environment or a `.env` file. Required: at least one of `VAULT_PASSWORD_FILE` or `VAULT_PASSWORD` for vault-encrypted operations.
-
-**Volumes:**
-- `${SSH_KEY_PATH:-~/.ssh}` -- SSH private keys (read-only) — needed for Ansible over SSH
-
-**Health check:** The container pings `/docs/openapi.json` every 30s (5s timeout, 10s start period, 3 retries).
+For native installation, use the existing
+`range42-playbooks/bundles/admin/software.install.deployer_api_backend` bundle
+with matching backend/core/playbooks revisions and a preprovisioned native
+workspace. See [native scenarios](docs/native-scenarios.md). The container does
+not mount an operator's whole SSH home or invent deployment credentials.
 
 ### Option 2 -- start.sh
+
+Configure the bearer token and encryption-key files as described in
+[backend security](docs/backend-security.md) before starting. This script runs
+the development server; production container installation follows Option 1.
 
 ```bash
 ./start.sh
@@ -59,6 +61,8 @@ ansible-galaxy collection install -r requirements.yml -p ~/.ansible/collections
 # Set required environment variables (or create a .env file)
 export PROJECT_ROOT_DIR="$(pwd)"
 export VAULT_PASSWORD_FILE="/path/to/vault-pass.txt"
+export RANGE42_API_TOKEN_FILE="/absolute/private/api-token"
+export RANGE42_CREDENTIAL_KEY_FILE="/absolute/private/credential-key"
 
 # Start the dev server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -68,7 +72,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Docker: Build & Publish
 
-The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian Bookworm** (`python:3.13-bookworm` / `python:3.13-slim-bookworm`):
+The Dockerfile is a two-stage build (`builder` → `runtime`) based on **Debian Bookworm** (`python:3.12-slim-bookworm` for both stages):
 
 - **Stage 1 `builder`** — installs Python dependencies into `/opt/venv` and Ansible collections into `/usr/share/ansible/collections`.
 - **Stage 2 `runtime`** — copies the virtualenv and collections from the builder; bakes in application code; runs uvicorn.
@@ -80,10 +84,12 @@ The runtime image runs as a non-root user (`range42`, UID/GID 1000 by default). 
 ```bash
 docker compose build   # uses UID/GID 1000
 # or match your host user:
-UID=$(id -u) GID=$(id -g) docker compose build
+RANGE42_CONTAINER_UID=$(id -u) RANGE42_CONTAINER_GID=$(id -g) docker compose build
 ```
 
-SSH host key checking is enabled (`ANSIBLE_HOST_KEY_CHECKING=True`). Pre-populate `~/.ssh/known_hosts` on the host before mounting, or the first Ansible connection to an unknown host will fail.
+Set host-key checking and verified known_hosts through the reviewed private
+workspace/runtime configuration. The image does not mount the operator's whole
+`~/.ssh`; native execution uses the dedicated deployment credentials.
 
 ### Build locally
 
@@ -96,7 +102,8 @@ docker build -t ghcr.io/range42/range42-backend-api:latest .
 ### Run locally (validate the image)
 
 ```bash
-VAULT_PASSWORD=my-secret docker compose up
+# After provisioning the private files described in container-packaging.md:
+docker compose up -d
 # API reachable at http://localhost:8000/docs/swagger
 ```
 
@@ -117,25 +124,19 @@ docker push ${IMAGE}:${VERSION}
 docker push ${IMAGE}:latest
 ```
 
-Or with Compose (sets `IMAGE_NAME` for the service):
+Or with Compose (sets `RANGE42_CONTAINER_IMAGE` for the service):
 
 ```bash
-IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose build
-IMAGE_NAME=ghcr.io/range42/range42-backend-api:v0.1 docker compose push
+RANGE42_CONTAINER_IMAGE=ghcr.io/range42/range42-backend-api:v0.1 docker compose build
+RANGE42_CONTAINER_IMAGE=ghcr.io/range42/range42-backend-api:v0.1 docker compose push
 ```
 
-### Vault password in production
+### Private deployment credentials
 
-`VAULT_PASSWORD` passed as an environment variable is visible via `docker inspect` and in `/proc/<pid>/environ` inside the container. For production use `VAULT_PASSWORD_FILE` pointed at a mounted secret file:
-
-```bash
-# Create a secret file (outside the repo)
-echo "my-vault-password" > /run/secrets/vault_pass
-chmod 600 /run/secrets/vault_pass
-
-# Pass the file path, not the password itself
-VAULT_PASSWORD_FILE=/run/secrets/vault_pass docker compose up
-```
+The API bearer token and credential encryption key are private file-backed
+Compose secrets. The workspace vault/password/SSH template is a separate input.
+See [container packaging](docs/container-packaging.md) for file ownership,
+permissions, runtime mounts and migration of an existing installation.
 
 ### OpenAPI spec
 
