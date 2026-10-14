@@ -17,7 +17,7 @@ REVIEWED_TREES = {
      "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
     # Native API installer packaging compatibility; VM/SDN/firewall bundles
     # and controller primitives are byte-identical to the reviewed release.
-    ("f61ea3565376ee09da4b37588a1aae9798ab7acb0aae3d8eab4a6505a555c677",
+    ("09e6109e9cbef5dc671e62e0fa0ec3909cf4324c12127af35615881c99a71990",
      "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
     # Additive multi-NIC/resource bootstrap with pre-clone template validation.
     ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
