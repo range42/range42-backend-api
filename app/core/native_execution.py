@@ -120,6 +120,9 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
             ssh_config.chmod(0o600)
     _write(view / "prepare.yml", yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "tasks": tasks}]))
     environment = {
+        # Context files can select CLI defaults; restore the API's verified
+        # connection policy after sourcing them and before running Ansible.
+        "ANSIBLE_HOST_KEY_CHECKING": "True",
         "RANGE42_ACTIVE_CONFIG_DIR": str(view), "RANGE42_CONFIG__ROOT_DIR": str(view),
         "RANGE42_SOURCE_CONTEXT_DIR": str(context.workspace), "RANGE42_ACTIVE_WORKSPACE": context.workspace.name,
         "RANGE42_ANSIBLE_ROLES__INVENTORY_DIR": str(view / "inventory"),
