@@ -153,7 +153,7 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
                      "ansible_python_interpreter": "{{ ansible_playbook_python }}"}}},
         "proxmox_cli": {"hosts": {"r42-proxmox-cli": {"ansible_host": "{{ r42_proxmox_address }}",
                          "ansible_user": "{{ r42_proxmox_ssh_user }}", "ansible_ssh_common_args":
-                         "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ deployer_cli_user_ssh_known_hosts | quote }}"}}},
+                         "-o StrictHostKeyChecking=yes -o {{ ('UserKnownHostsFile=' ~ (deployer_cli_user_ssh_known_hosts | to_json)) | quote }}"}}},
     }}})
     plays = [_ownership_guard(targets, deployment.id)] if targets else []
     if attempt.operation["request"]["kind"] in ("sdn_snat", "runtime_observe", "sdn_network"):

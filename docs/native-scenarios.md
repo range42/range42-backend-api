@@ -79,3 +79,23 @@ Existing VMID protections still apply. The default `blank_scenario_4_subnets` ma
 Native playbooks are executable deployment code. Preflight identifies the selected context and known VM targets, then reports that arbitrary native stages can affect additional resources. Generated-project capacity, allocation ownership and runtime snapshot controls do not describe native workflows. External controller/catalog readiness, service-specific configuration and the effects of arbitrary custom scripts require scenario acceptance in the selected environment.
 
 Live acceptance remains outstanding: choose an operator-designated disposable context, save a scenario-specific customization, run preflight/full deployment, verify its services and SDN, run only its declared cleanup action, then verify cleanup and protected resources. Repeat per scenario and record the context, full source/runtime revisions and attempt IDs. No existing management context has been designated disposable or used for this work.
+
+## Packaged native context compatibility
+
+The native adapter prepares a private copy of the saved scenario and its
+credential links for each attempt. It sets
+`RANGE42_CONTEXT_REPO_LINKS_MANAGED=YES` when calling the matching core
+`range42-context` revision. Context selection leaves installed repository links
+unchanged, so the reviewed runtime can remain read-only. Ordinary CLI and devkit
+workflows retain their existing shared-link behavior.
+
+Use a writable dedicated container home and native workspace. Inside the native
+installer's container those paths are `/home/range42` and
+`/home/range42/range42.config`; core's sourced environment and scenario SSH
+configuration must be prepared for those paths and `/runtime` code. Keep the
+explicit reviewed `ANSIBLE_CONFIG`. A standalone writable source checkout remains
+the normal place to use source-based devkit commands.
+
+The API installer compatibility bundle does not change the VM bootstrap, SDN or
+firewall primitives. Its matching complete bundle tree is recognized through the
+existing content fingerprint mechanism. All original cluster guards remain.

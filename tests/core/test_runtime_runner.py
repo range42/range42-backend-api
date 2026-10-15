@@ -2,6 +2,10 @@
 import asyncio
 import json
 from pathlib import Path
+import shlex
+import socket
+import subprocess
+import threading
 
 import pytest
 import yaml
@@ -11,6 +15,109 @@ from app.core.errors import Range42Error
 from tests.core.test_runtime_operations import state
 from app.core.runner_detached import DetachedRunner
 from tests.routes.test_project_scenario_execution import _boot, seed_scenario
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pin_name", ["known_hosts", "private known hosts", "private 'known hosts"])
+async def test_runtime_proxmox_ssh_requires_verified_pins_and_retains_config(tmp_path, monkeypatch, pin_name):
+    from types import SimpleNamespace
+    from jinja2 import Environment
+    from app.core import runtime_runner
+
+    async def verified(*args):
+        return {"vmids": [], "variables": {}, "steps": []}
+
+    # Isolate PVE reads; exercise the actual generated inventory and OpenSSH.
+    monkeypatch.setattr(runtime_runner, "_verified_plan", verified)
+    monkeypatch.setattr(runtime_runner, "runtime_targets", lambda path: ([], None))
+    monkeypatch.setenv("RANGE42_BUNDLE_DIR", str(tmp_path / "bundles"))
+    artifact = tmp_path / "attempt"
+    scenario = artifact / "scenario"
+    scenario.mkdir(parents=True)
+    run = await runtime_runner.prepare_runtime_run(
+        SimpleNamespace(id="dep", workspace_path=str(tmp_path), scenario_label="test"),
+        SimpleNamespace(operation={"request": {"kind": "vm_firewall"}}), None,
+        SimpleNamespace(playbook=scenario / "main.yml"), artifact)
+    inventory = yaml.safe_load(run.inventory.read_text())
+    common = inventory["all"]["children"]["proxmox_cli"]["hosts"]["r42-proxmox-cli"]["ansible_ssh_common_args"]
+    known_hosts = tmp_path / pin_name
+    config = tmp_path / "ssh-config"
+    config.write_text("Host pve-fixture.invalid\n  HostName 127.0.0.1\n  ProxyJump private-jump.invalid\n"
+                      "  HostKeyAlias verified-pve\n  StrictHostKeyChecking no\n")
+    environment = Environment()
+    environment.filters["quote"] = shlex.quote
+    environment.filters["to_json"] = json.dumps
+    arguments = environment.from_string(common).render(deployer_cli_user_ssh_known_hosts=str(known_hosts))
+    completed = subprocess.run(["ssh", "-G", "-F", str(config), *shlex.split(arguments), "pve-fixture.invalid"],
+        capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    options = dict(line.split(" ", 1) for line in completed.stdout.splitlines())
+    assert options["stricthostkeychecking"] == "true"
+    assert options["userknownhostsfile"] == str(known_hosts)
+    assert options["hostname"] == "127.0.0.1"
+    assert options["proxyjump"] == "private-jump.invalid"
+    assert options["hostkeyalias"] == "verified-pve"
+    # ssh -G prints several pin files exactly like one filename with spaces.
+    # A real loopback handshake proves that SSH reads this one verified file.
+    assert_verified_pin(arguments, config, known_hosts)
+
+
+def assert_verified_pin(arguments, config, known_hosts):
+    import paramiko
+
+    key = paramiko.RSAKey.generate(2048)
+    known_hosts.write_text("verified-pve " + key.get_name() + " " + key.get_base64() + "\n")
+    original = known_hosts.read_bytes()
+    command = threading.Event()
+
+    class Server(paramiko.ServerInterface):
+        def check_auth_none(self, username):
+            return paramiko.AUTH_SUCCESSFUL
+
+        def check_channel_request(self, kind, channel_id):
+            return paramiko.OPEN_SUCCEEDED if kind == "session" else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
+
+        def check_channel_exec_request(self, channel, value):
+            command.set()
+            return value == b"true"
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    listener.settimeout(5)
+    port = listener.getsockname()[1]
+
+    def serve():
+        client, _ = listener.accept()
+        transport = paramiko.Transport(client)
+        try:
+            transport.add_server_key(key)
+            transport.start_server(server=Server())
+            channel = transport.accept(5)
+            if channel is not None and command.wait(5):
+                channel.send_exit_status(0)
+                channel.close()
+                # Let the client receive the queued status and disconnect.
+                # Closing the transport immediately can reset a valid session.
+                transport.join(timeout=5)
+        except (EOFError, paramiko.SSHException):
+            pass  # A rejected pin closes the synthetic transport.
+        finally:
+            transport.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        completed = subprocess.run(["ssh", "-F", str(config), "-o", "ProxyJump=none",
+            "-o", "GlobalKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "ConnectTimeout=2",
+            "-p", str(port), *shlex.split(arguments), "pve-fixture.invalid", "true"],
+            capture_output=True, text=True, timeout=8)
+        assert completed.returncode == 0, completed.stderr
+        assert command.is_set()
+        assert known_hosts.read_bytes() == original
+    finally:
+        listener.close()
+        thread.join(timeout=6)
 
 
 @pytest.mark.asyncio

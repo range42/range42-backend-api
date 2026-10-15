@@ -10,6 +10,37 @@ from tests.core.test_native_contexts import context
 from tests.core.test_native_scenarios import scenario
 
 
+def test_native_adapter_selects_runner_owned_secret_links(tmp_path, monkeypatch):
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    ws, script, host = context(tmp_path, monkeypatch)
+    monkeypatch.delenv("RANGE42_QUIET", raising=False)
+    script.write_text('''[[ "$RANGE42_QUIET" == 1 ]] || return 72
+    range42-context() {
+      if [[ "$1" == use ]]; then
+        [[ "$RANGE42_CONTEXT_REPO_LINKS_MANAGED" == YES ]] || return 73
+        export RANGE42_ACTIVE_CONFIG_DIR="$RANGE42_CONFIG_BASE_DIR/$2-$3"
+      else
+        local target=$(readlink -f "$RANGE42_ACTIVE_CONFIG_DIR/scenario")
+        (cd "$target" && bash "$target/${target##*/}.setup.sh")
+      fi
+    }
+    ''')
+    repo = tmp_path / "repo"
+    base = scenario(repo)
+    result = tmp_path / "ran"
+    (base / "exercise.setup.sh").write_text('printf native > "$TEST_NATIVE_RESULT"\n')
+    run = prepare_native_run(repo, inspect_native_scenario(repo, "training/exercise-a"),
+        resolve_context("lab-demo", host), scope="full", features={}, parameters={}, artifact_dir=tmp_path / "run")
+    completed = subprocess.run(run.command, env={**os.environ, "TEST_NATIVE_RESULT": str(result)},
+                               capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr + completed.stdout
+    assert result.read_text() == "native"
+    assert not (base / "secrets").exists()
+    assert (run.context_dir / "scenario/secrets").resolve() == ws / "secrets"
+
+
 def test_native_execution_binds_context_and_pinned_dependencies_without_editing_sources(tmp_path, monkeypatch):
     from app.core.native_contexts import resolve_context
     from app.core.native_execution import prepare_native_run
