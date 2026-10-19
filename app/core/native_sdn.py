@@ -15,6 +15,18 @@ NATIVE_CONTRACT = "native-sdn-20260921"
 REVIEWED_TREES = {
     ("56f8801125eeaa75737535ff1b9aae7d2d80741850b7381b7bc818e40cdfa0cb",
      "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
+    # Native API installer packaging compatibility; VM/SDN/firewall bundles
+    # and controller primitives are byte-identical to the reviewed release.
+    ("09e6109e9cbef5dc671e62e0fa0ec3909cf4324c12127af35615881c99a71990",
+     "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
+    # range42-playbooks 4bce4a0cafdad62f9e20622605e2649c9af35373:
+    # API clone unlock polling; SDN/firewall and mutation primitives unchanged.
+    ("2b48efe1acf2e3a84b23e2cefd21537f73dc40454b9ffeb0df0cb25be51884cc",
+     "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
+    # range42-playbooks ff8ace724654e9cd31e11807306c065ad6c49472:
+    # installer sync retains SSH policy; VM/SDN/firewall primitives unchanged.
+    ("6f9e09885d94011a18b247e5d006da727405cf87ae126bf1b10694b5afef7cc9",
+     "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
     # Additive multi-NIC/resource bootstrap with pre-clone template validation.
     ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
      "59408bb155c2741d77f5d3eb3fbc321dd24047eccfdd704e8d5c190abc28d4fd"): NATIVE_CONTRACT,
