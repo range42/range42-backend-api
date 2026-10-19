@@ -23,6 +23,10 @@ REVIEWED_TREES = {
     # API clone unlock polling; SDN/firewall and mutation primitives unchanged.
     ("2b48efe1acf2e3a84b23e2cefd21537f73dc40454b9ffeb0df0cb25be51884cc",
      "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
+    # range42-playbooks ff8ace724654e9cd31e11807306c065ad6c49472:
+    # installer sync retains SSH policy; VM/SDN/firewall primitives unchanged.
+    ("6f9e09885d94011a18b247e5d006da727405cf87ae126bf1b10694b5afef7cc9",
+     "39d07c0541b24666a1396b9f8c6f9f5f50861d33060bd7e19bc0bf4d01530095"): NATIVE_CONTRACT,
     # Additive multi-NIC/resource bootstrap with pre-clone template validation.
     ("67ba39fc1c6abfdedd2e03382e70c886edab89288af7347fd196c4a0a101027e",
      "59408bb155c2741d77f5d3eb3fbc321dd24047eccfdd704e8d5c190abc28d4fd"): NATIVE_CONTRACT,

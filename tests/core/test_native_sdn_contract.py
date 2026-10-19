@@ -1,19 +1,22 @@
 """Exercise the application's adapter against the unchanged native release."""
 import os
 from pathlib import Path
+import shutil
 
 import pytest
 
 from app.core.errors import Range42Error
 
 
-@pytest.fixture(params=["synthetic", "pinned"])
+@pytest.fixture(params=["synthetic", "pinned", "installer"])
 def native_profile(monkeypatch, tmp_path, request):
     from app.core import native_sdn
-    if request.param == "pinned":
-        root = os.getenv("RANGE42_NATIVE_CONTRACT_FIXTURE")
+    if request.param != "synthetic":
+        variable = ("RANGE42_INSTALLER_CONTRACT_FIXTURE" if request.param == "installer"
+                    else "RANGE42_NATIVE_CONTRACT_FIXTURE")
+        root = os.getenv(variable)
         if not root:
-            pytest.skip("set RANGE42_NATIVE_CONTRACT_FIXTURE to the pinned native source export")
+            pytest.skip(f"set {variable} to the pinned native source export")
         root = Path(root)
     else:
         root = tmp_path / "reviewed"
@@ -47,6 +50,16 @@ def test_shadow_controller_cannot_borrow_later_native_capabilities(native_profil
     from app.core.runtime_operations import operation_profile
     (tmp_path / "range42-ansible_roles-proxmox_controller").mkdir()
     native_profile["environment"]["ANSIBLE_ROLES_PATH"] = str(tmp_path) + os.pathsep + native_profile["environment"]["ANSIBLE_ROLES_PATH"]
+    with pytest.raises(Range42Error, match="matching runtime"):
+        operation_profile("sdn_snat")
+
+
+def test_changed_native_bundles_cannot_borrow_reviewed_capabilities(native_profile, tmp_path):
+    from app.core.runtime_operations import operation_profile
+    bundles = tmp_path / "changed-bundles"
+    shutil.copytree(native_profile["environment"]["RANGE42_BUNDLE_DIR"], bundles)
+    (bundles / "unreviewed.yml").write_text("---\n")
+    native_profile["environment"]["RANGE42_BUNDLE_DIR"] = str(bundles)
     with pytest.raises(Range42Error, match="matching runtime"):
         operation_profile("sdn_snat")
 
