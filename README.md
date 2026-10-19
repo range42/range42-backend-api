@@ -508,3 +508,13 @@ HTTP 409 and code `WORKSPACE_NON_LOCAL_FS`.
 [GPL-3.0](LICENSE)
 
 Named API token roles and durable mutation audit are documented in [named access and audit](docs/named-access-and-audit.md). Existing single-token deployments remain compatible.
+
+Workshop administration is available at `/v1/admin/workshop` when a restricted
+native workshop controller is configured through `RANGE42_WORKSHOP_SSH_CONFIG`
+(or `RANGE42_WORKSHOP_SOCKET`). Only backend administrators can read the roster,
+download private participant PDFs, or submit account, enrollment and per-seat
+lifecycle actions. The optional worker retains identity-provider credentials
+outside this container. Configure its dedicated SSH key with a forced command,
+`restrict`, strict pinned host-key verification, and read-only client mounts.
+Browser requests cannot supply commands, file paths, network policies or source
+revisions. With no worker configured the endpoints return `WORKSHOP_UNAVAILABLE`.

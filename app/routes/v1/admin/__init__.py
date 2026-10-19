@@ -8,3 +8,6 @@ router = APIRouter(prefix="/admin", tags=["v1 admin"])
 router.include_router(stats_router)
 router.include_router(retention_router)
 router.include_router(maintenance_router)
+
+from app.routes.v1.admin.workshop import router as workshop_router
+router.include_router(workshop_router)
