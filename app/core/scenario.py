@@ -86,7 +86,12 @@ async def prepare_project_scenario(
         if project.subdir:
             root = inside(root, project.subdir)
         native = deployment.native
-        descriptor = inspect_native_scenario(root, native["path"])
+        if native.get("component_id"):
+            root, token = await checkout_native_component(session, root, native["component_id"], native["path"], dest=dest / ".range42-native-origin")
+        descriptor = await asyncio.to_thread(inspect_native_scenario, root, native["path"])
+        reservations = descriptor["topology"]["reservations"]
+        if reservations["status"] in {"conflict", "invalid"} and scope not in {"teardown", "delete_vms", "delete_networks"}:
+            raise invalid(" ".join(reservations["issues"]), "NATIVE_RESERVATION_CONFLICT")
         if scope not in descriptor["actions"]:
             raise invalid("This saved scenario does not declare that action", "NATIVE_ACTION_UNAVAILABLE")
         native_variables(descriptor, native.get("features", {}), native.get("parameters", {}))
@@ -123,14 +128,44 @@ async def checkout_project_repository(session: AsyncSession, project_id: str, *,
     source = await session.get(Source, project.source_id)
     if source is None:
         raise ProjectCheckoutError(message="Project source is unavailable")
-    for value, nested in ((project.repo_owner, True), (project.repo_name, False)):
+    root, token = await checkout_source_repository(source, project.repo_owner, project.repo_name, dest=dest, sha=sha)
+    return root, token, project
+
+
+async def checkout_source_repository(source: Source, owner: str, name: str, *, dest: Path, sha: str):
+    for value, nested in ((owner, True), (name, False)):
         pattern = r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*" if nested else r"[A-Za-z0-9_.-]+"
         if not re.fullmatch(pattern, value) or any(part in (".", "..") for part in value.split("/")):
             raise ProjectCheckoutError(message="Project repository owner or name is invalid")
-    repo_url = f"{source.base_url.rstrip('/')}/{project.repo_owner}/{project.repo_name}.git"
+    repo_url = f"{source.base_url.rstrip('/')}/{owner}/{name}.git"
     require_repository_url(repo_url)
     token = resolve_git_credential(source.token_ref) if source.auth_kind == "pat" else None
     root = await asyncio.to_thread(
         checkout_repository, repo_url=repo_url, sha=sha, dest=dest, token=token,
     )
-    return root, token, project
+    return root, token
+
+
+async def checkout_native_component(session: AsyncSession, root: Path, component_id: str, path: str, *, dest: Path):
+    """Resolve executable provenance from the saved project, never request URLs."""
+    from app.core.native_scenarios import invalid
+    from app.core.native_topology import read
+    try:
+        layout = json.loads(read(root / "canvas_layout.json", root))
+        nodes = layout["ui_canvas"]["nodes"]
+        matches = [node for node in nodes if node.get("id") == component_id and node.get("type") == "group"]
+        if len(matches) != 1:
+            raise ValueError()
+        origin = matches[0]["data"]["config"]["nativeCatalog"]
+        if (origin.get("version") != 1 or origin.get("kind") != "scenario" or origin.get("mode") != "use"
+                or origin.get("path") != path or not re.fullmatch(r"[a-fA-F0-9]{40}|[a-fA-F0-9]{64}", origin.get("sha", ""))
+                or not all(isinstance(origin.get(key), str) and origin[key] for key in ("source_id", "repo_owner", "repo_name", "base_url"))):
+            raise ValueError()
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        raise invalid("The selected scenario component has no valid origin in the saved project") from None
+    source = await session.get(Source, origin["source_id"])
+    if source is None:
+        raise invalid("The saved scenario source is unavailable on this backend")
+    if origin.get("base_url", "").rstrip("/") != source.base_url.rstrip("/"):
+        raise invalid("The saved scenario source no longer matches its registered repository host")
+    return await checkout_source_repository(source, origin["repo_owner"], origin["repo_name"], dest=dest, sha=origin["sha"])

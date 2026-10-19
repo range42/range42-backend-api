@@ -33,7 +33,14 @@ The image build context is an allowlist of application code, playbooks, requirem
 
 ## Migrating the earlier container installer
 
-The current Hyde `bundles/admin/software.install.deployer_api_backend` installer renders the older `PORT`, `UID`, `GID`, `IMAGE_NAME` and `SSH_KEY_PATH` variables, `/home/range42` bind mounts, an after-start migration command, and an unauthenticated OpenAPI probe. It does not provision the new bearer/encryption-key secrets or complete runtime profile. That installer needs a separate coordinated update before it can deploy this packaging contract.
+The dev-based native installer compatibility branch updates
+`bundles/admin/software.install.deployer_api_backend` to accept the current
+private credential/runtime inputs, existing `BACKEND_LISTEN_ADDRESS` and
+`BACKEND_CORS_ORIGINS` call-site variables, packaged startup migrations and
+bearer-authenticated verification. Install the matched core context and backend
+adapter revisions with it. Its inputs and stopped-update procedure are documented
+in the bundle README; the original dev bundle still uses the older contract until
+that coordinated change is consumed.
 
 For manual migration, translate the old listener/build/image settings to `RANGE42_CONTAINER_PORT`, `RANGE42_CONTAINER_UID`, `RANGE42_CONTAINER_GID` and `RANGE42_CONTAINER_IMAGE`. Set actual allowed UI origins with `RANGE42_CORS_ORIGINS`. The old `.env` is no longer loaded wholesale into the service, and `SSH_KEY_PATH` has no replacement whole-home mount: use the private workspace credential template instead. Review any existing `docker-compose.override.yml` explicitly; Compose loads that file automatically unless you specify compose files with `-f`.
 

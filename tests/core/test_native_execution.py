@@ -10,6 +10,37 @@ from tests.core.test_native_contexts import context
 from tests.core.test_native_scenarios import scenario
 
 
+def test_native_adapter_selects_runner_owned_secret_links(tmp_path, monkeypatch):
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    ws, script, host = context(tmp_path, monkeypatch)
+    monkeypatch.delenv("RANGE42_QUIET", raising=False)
+    script.write_text('''[[ "$RANGE42_QUIET" == 1 ]] || return 72
+    range42-context() {
+      if [[ "$1" == use ]]; then
+        [[ "$RANGE42_CONTEXT_REPO_LINKS_MANAGED" == YES ]] || return 73
+        export RANGE42_ACTIVE_CONFIG_DIR="$RANGE42_CONFIG_BASE_DIR/$2-$3"
+      else
+        local target=$(readlink -f "$RANGE42_ACTIVE_CONFIG_DIR/scenario")
+        (cd "$target" && bash "$target/${target##*/}.setup.sh")
+      fi
+    }
+    ''')
+    repo = tmp_path / "repo"
+    base = scenario(repo)
+    result = tmp_path / "ran"
+    (base / "exercise.setup.sh").write_text('printf native > "$TEST_NATIVE_RESULT"\n')
+    run = prepare_native_run(repo, inspect_native_scenario(repo, "training/exercise-a"),
+        resolve_context("lab-demo", host), scope="full", features={}, parameters={}, artifact_dir=tmp_path / "run")
+    completed = subprocess.run(run.command, env={**os.environ, "TEST_NATIVE_RESULT": str(result)},
+                               capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr + completed.stdout
+    assert result.read_text() == "native"
+    assert not (base / "secrets").exists()
+    assert (run.context_dir / "scenario/secrets").resolve() == ws / "secrets"
+
+
 def test_native_execution_binds_context_and_pinned_dependencies_without_editing_sources(tmp_path, monkeypatch):
     from app.core.native_contexts import resolve_context
     from app.core.native_execution import prepare_native_run
@@ -68,6 +99,47 @@ async def test_detached_native_command_uses_existing_runner_event_and_exit_lifec
     assert result.read_text() == "native"
     assert (art / "rc").read_text().strip() == "0"
     assert list((art / "job_events").glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_native_context_keeps_runner_callbacks_when_cli_sets_its_own(tmp_path, monkeypatch):
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    from app.core.runner_detached import DetachedRunner
+    ws, script, host = context(tmp_path, monkeypatch)
+    callbacks = tmp_path / "cli-callbacks"
+    callbacks.mkdir()
+    script.write_text('''range42-context() {
+      if [[ "$1" == use ]]; then
+        export RANGE42_ACTIVE_CONFIG_DIR="$RANGE42_CONFIG_BASE_DIR/$2-$3"
+        source "$RANGE42_ACTIVE_CONFIG_DIR/sourced_range42.sh"
+        export ANSIBLE_CALLBACK_PLUGINS="''' + str(callbacks) + '''"
+      else
+        local target=$(readlink -f "$RANGE42_ACTIVE_CONFIG_DIR/scenario")
+        (cd "$target" && bash "$target/${target##*/}.setup.sh")
+      fi
+    }
+    ''')
+    repo = tmp_path / "repo"
+    base = scenario(repo)
+    (base / "main.yml").write_text('''- hosts: localhost
+  gather_facts: false
+  tasks:
+    - ansible.builtin.debug:
+        msg: native-callback-proof
+''')
+    (base / "exercise.setup.sh").write_text("ansible-playbook -i localhost, -c local ./main.yml\n")
+    artifact = tmp_path / "attempt"
+    run = prepare_native_run(repo, inspect_native_scenario(repo, "training/exercise-a"),
+        resolve_context("lab-demo", host), scope="full", features={}, parameters={}, artifact_dir=artifact)
+    handle = await DetachedRunner().start(private_data_dir=artifact,
+        extravars={"r42_native_command": run.command}, envvars={})
+    result = await handle.wait()
+    events = [json.loads(path.read_text()) for path in (artifact / "job_events").glob("*.json")]
+    output = "\n".join(event.get("stdout", "") for event in events)
+    assert result == 0, output
+    assert "native-callback-proof" in output
 
 
 @pytest.mark.parametrize("subdir", ["", "projects/team"])

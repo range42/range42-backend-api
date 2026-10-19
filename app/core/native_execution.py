@@ -120,6 +120,9 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
             ssh_config.chmod(0o600)
     _write(view / "prepare.yml", yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "tasks": tasks}]))
     environment = {
+        # Context files can select CLI defaults; restore the API's verified
+        # connection policy after sourcing them and before running Ansible.
+        "ANSIBLE_HOST_KEY_CHECKING": "True",
         "RANGE42_ACTIVE_CONFIG_DIR": str(view), "RANGE42_CONFIG__ROOT_DIR": str(view),
         "RANGE42_SOURCE_CONTEXT_DIR": str(context.workspace), "RANGE42_ACTIVE_WORKSPACE": context.workspace.name,
         "RANGE42_ANSIBLE_ROLES__INVENTORY_DIR": str(view / "inventory"),
@@ -133,9 +136,17 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         environment["ANSIBLE_SSH_COMMON_ARGS"] = "-F " + shlex.quote(str(ssh_config))
         _write(view / "bin/ssh", "#!/bin/sh\nexec " + shlex.quote(ssh) + " -F "
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
-    lines = [f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
+    lines = ['r42_runner_callbacks="${ANSIBLE_CALLBACK_PLUGINS:-}"',
+             f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
+             "export RANGE42_QUIET=1",
              f"source {shlex.quote(str(context.context_script))} || exit $?",
+             # Scenario credentials already belong to this attempt's copied
+             # repository; context selection must not edit installed sources.
+             "export RANGE42_CONTEXT_REPO_LINKS_MANAGED=YES",
              "range42-context use " + shlex.join([context.codename, context.scenario]) + " || exit $?",
+             # The CLI selects its own display plugins. Retain the outer runner's
+             # awx_display plugin so nested Ansible still publishes runner events.
+             'export ANSIBLE_CALLBACK_PLUGINS="${r42_runner_callbacks}${r42_runner_callbacks:+:}${ANSIBLE_CALLBACK_PLUGINS:-}"',
              # Confirm the canonical command selected exactly the registered workspace.
              '[[ "${RANGE42_ACTIVE_CONFIG_DIR:A}" == ' + shlex.quote(str(context.workspace)) + ' ]] || exit 71',
              *[f"export {name}={shlex.quote(value)}" for name, value in environment.items()],

@@ -32,6 +32,16 @@ jobs:
           repository: range42/range42-ansible_roles-proxmox_controller
           ref: 617b57cddecbe4ddedd1f72becc7023bbcdf2114
           path: runtime-contract/controller
+      - name: Checkout reviewed native installer bundles
+        uses: actions/checkout@v6
+        with:
+          repository: range42/range42-playbooks
+          ref: ff8ace724654e9cd31e11807306c065ad6c49472
+          path: runtime-installer-contract/playbooks
+      - name: Reuse the reviewed native controller
+        run: |
+          mkdir -p runtime-installer-contract
+          ln -s ../runtime-contract/controller runtime-installer-contract/controller
       # tests/overlay runs the TS/Python parity vectors, which live in the
       # sibling range42-deployer-ui checkout — schema-and-operators.yml owns
       # that job and guarantees the checkout. Collecting them here would fail,
@@ -40,6 +50,7 @@ jobs:
       - run: pytest --tb=short -q --ignore=tests/overlay
         env:
           RANGE42_NATIVE_CONTRACT_FIXTURE: ${{ github.workspace }}/runtime-contract
+          RANGE42_INSTALLER_CONTRACT_FIXTURE: ${{ github.workspace }}/runtime-installer-contract
 
       # The committed spec bootstraps the Kong gateway config, but nothing
       # regenerated or verified it — it had rotted back to the pre-v1 API

@@ -7,9 +7,51 @@ from pathlib import Path
 import re
 
 import yaml
+import asyncio
+import httpx
 
 from app.core.catalog_index import _scenario
 from app.core.errors import Range42Error
+
+
+async def check_native_allocations(topology: dict, host, *, client=None):
+    """Check declared identities without treating native reruns as fresh clones."""
+    from app.core.allocation_occupancy import vmid_is_free
+    from app.core.preflight import PreflightCheck
+    from app.core.proxmox_read import list_proxmox_data, ProxmoxReadError
+    from app.core.proxmox_tls import proxmox_verify
+    def check(result, detail):
+        return [PreflightCheck(check="native_allocations", result=result, detail=detail)]
+    if host is None:
+        return check("block", "Select an available Proxmox host.")
+    if client is None:
+        async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8) as owned:
+            return await check_native_allocations(topology, host, client=owned)
+    try:
+        async with asyncio.timeout(30):
+            rows = await list_proxmox_data(client, host, "/cluster/resources", params={"type": "vm"})
+            if len(rows) > 4096:
+                return check("block", "The live inventory exceeds the bounded native allocation check.")
+            by_id = {int(row["vmid"]): row for row in rows}
+            existing = []
+            targets = [(row, False) for row in topology["vms"]] + [(row, True) for row in topology["templates"]]
+            for declared, template in targets:
+                vmid = declared["vm_id"]
+                current = by_id.get(vmid)
+                if current:
+                    if (current.get("type") != "qemu" or current.get("node") != host.node_name
+                            or bool(current.get("template")) != template
+                            or (declared.get("vm_name") and current.get("name") != declared["vm_name"])):
+                        return check("block", f"VMID {vmid} is occupied by a different guest or template on Proxmox. Review the scenario allocations.")
+                    existing.append(vmid)
+                elif not await vmid_is_free(client, host, vmid):
+                    return check("block", f"VMID {vmid} is occupied outside the visible inventory. Check API access and allocations.")
+            if existing:
+                return check("warn", "Existing declared resources: " + ", ".join(map(str, existing))
+                    + ". Matching names do not prove ownership. Review the native workflow before modifying them. Guest-static and external IP addresses are not checked.")
+            return check("pass", "Declared VMIDs are currently available. Guest-static and external IP addresses are not checked; this read does not reserve resources.")
+    except (ProxmoxReadError, Range42Error, ValueError, KeyError, TypeError, TimeoutError):
+        return check("block", "Cannot confirm declared native VMIDs against Proxmox. Check connectivity, permissions and the live inventory.")
 
 # Names are API actions. Values are native wrapper suffixes and YAML fallbacks.
 NATIVE_ACTIONS = {
@@ -43,7 +85,7 @@ def inside(root: Path, relative: str, *, file: bool = False) -> Path:
 def inspect_native_scenario(root: Path, path: str) -> dict:
     root = root.resolve()
     base = inside(root, path)
-    entry = _scenario(base, root)
+    entry = _scenario(base, root, topology=True)
     if entry is None:
         raise invalid("Choose a native scenario containing main.yml and manifest/scenario_vms.json")
     manifest = json.loads((base / "manifest/scenario_vms.json").read_text())
@@ -86,12 +128,45 @@ def inspect_native_scenario(root: Path, path: str) -> dict:
         raise invalid("Native bundle_path must name a directory in the saved repository")
     inventory = "templates/ansible-inventory.j2"
     inside(base, inventory, file=True)
-    return {"version": 1, "path": path, "name": base.name,
+    result = {"version": 1, "path": path, "name": base.name,
             "actions": actions, "features": entry["document"]["features"],
             "bundle_path": bundle_path, "inventory_template": inventory,
             "declared_vmids": [vm["vm_id"] for vm in manifest["vms"]],
             "vmid_parameters": _vmid_parameters(base),
-            "impact": "native_workflow"}
+            "impact": "native_workflow", "topology": entry["document"]["topology"]}
+    platform_file = base / 'manifest/platform.json'
+    if platform_file.exists() or platform_file.is_symlink():
+        result['platform'] = _platform_descriptor(base, result)
+    return result
+
+
+def _platform_descriptor(base: Path, descriptor: dict) -> dict:
+    path = inside(base, 'manifest/platform.json', file=True)
+    try:
+        if path.stat().st_size > 16384:
+            raise ValueError()
+        data = json.loads(path.read_text())
+        if (data['version'] != 1 or data['profile'] not in {'core', 'full'}
+                or not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', data['id'])
+                or not isinstance(data['domain'], str) or len(data['domain']) > 253
+                or not isinstance(data['unavailable'], dict)
+                or any(not isinstance(k, str) or not isinstance(v, str) for k, v in data['unavailable'].items())
+                or len(data['parameters']) > 32 or len(data['presets']) > 4):
+            raise ValueError()
+        names = set()
+        for field in data['parameters']:
+            if (field['name'] in names or field['type'] not in {'path', 'url', 'cidrs', 'string'}
+                    or type(field['required']) is not bool or not isinstance(field['label'], str)):
+                raise ValueError()
+            native_variables(descriptor, {}, {field['name']: 'fixture'})
+            names.add(field['name'])
+        for preset in data['presets']:
+            if preset['id'] not in {'core', 'full'}:
+                raise ValueError()
+            native_variables(descriptor, preset['features'], {})
+        return data
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise invalid('Invalid manifest/platform.json') from None
 
 
 def _vmid_parameters(base: Path) -> dict[str, list[int]]:
@@ -162,5 +237,12 @@ def native_variables(descriptor: dict, features: dict, parameters: dict) -> dict
                 or (isinstance(value, float) and not math.isfinite(value))
                 or any(marker in str(value) for marker in ("{{", "{%", "{#"))):
             raise invalid(f"Native parameter {key} is invalid or managed by the selected context")
+    for field in descriptor.get('platform', {}).get('parameters', []):
+        value = parameters.get(field['name'], '')
+        if field['required'] and (not isinstance(value, str) or not value.strip()):
+            raise invalid(f"Platform parameter {field['name']} is required")
+        if value and (not isinstance(value, str) or (
+                field['type'] == 'path' and not value.startswith('/'))):
+            raise invalid(f"Platform parameter {field['name']} must use an absolute controller path")
     return {**parameters, **{f"INSTALL_{name}": "YES" if features.get(name, default) else "NO"
                              for name, default in declared.items()}}

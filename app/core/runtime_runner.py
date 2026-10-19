@@ -153,7 +153,7 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
                      "ansible_python_interpreter": "{{ ansible_playbook_python }}"}}},
         "proxmox_cli": {"hosts": {"r42-proxmox-cli": {"ansible_host": "{{ r42_proxmox_address }}",
                          "ansible_user": "{{ r42_proxmox_ssh_user }}", "ansible_ssh_common_args":
-                         "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ deployer_cli_user_ssh_known_hosts | quote }}"}}},
+                         "-o StrictHostKeyChecking=yes -o {{ ('UserKnownHostsFile=' ~ (deployer_cli_user_ssh_known_hosts | to_json)) | quote }}"}}},
     }}})
     plays = [_ownership_guard(targets, deployment.id)] if targets else []
     if attempt.operation["request"]["kind"] in ("sdn_snat", "runtime_observe", "sdn_network"):
@@ -175,6 +175,12 @@ async def prepare_runtime_run(deployment, attempt, host, scenario, artifact_dir:
         from app.core.native_sdn import snat_observation_play
         plays.append(snat_observation_play())
     playbook = directory / "main.yml"
+    if "api_change" in plan or attempt.operation["request"]["kind"] == "sdn_network":
+        library = directory / "library"
+        library.mkdir(mode=0o700)
+        module = Path(__file__).parent / "ansible_modules/range42_network_guard.py"
+        with os.fdopen(os.open(library / module.name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as stream:
+            stream.write(module.read_bytes())
     _private_document(playbook, plays)
     _private_document(directory / "context.yml", {"scenario_dir": str(scenario_dir.relative_to(artifact_dir)), "plan": plan})
     return RuntimeRun(playbook, inventory, config_dir, scenario_dir, plan)

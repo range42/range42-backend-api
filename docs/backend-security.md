@@ -50,6 +50,18 @@ and verify its replacement first. Legacy inventories retain their own host
 configuration. See [OpenSSH host-key policy and option precedence](https://man.openbsd.org/ssh_config#StrictHostKeyChecking)
 and [Ansible SSH connection settings](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/ssh_connection.html).
 
+Native API deployments restore `ANSIBLE_HOST_KEY_CHECKING=True` after loading
+the CLI context. With the matching catalog revision, SSH readiness requires a
+trusted guest key and rejects unknown or changed keys. Managed context selection
+and deployment retain existing pins. Prepare verified keys through the existing
+operator workflow or qualified optional PVE-agent enrollment before readiness.
+Ordinary CLI readiness retains its existing first-use policy.
+
+The cross-repository regression suite in `tests/core/test_native_cli_ssh.py`
+uses the actual context script and catalog tasks against a loopback SSH guest.
+It discovers sibling `range42` and `range42-catalog` checkouts, or accepts
+`RANGE42_CORE_SOURCE` and `RANGE42_CATALOG_SOURCE` for reviewed source exports.
+
 Canonical `host_unreachable` events include a stable diagnostic code and safe
 operator guidance for SSH host-key rejection, public-key authentication failure,
 or general connectivity failure. Raw SSH diagnostic text is not copied into the

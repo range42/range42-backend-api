@@ -19,6 +19,7 @@ services:
       API_BACKEND_PUBLIC_PLAYBOOKS_DIR: /runtime/range42-playbooks
       API_BACKEND_WWWAPP_PLAYBOOKS_DIR: /runtime/range42-playbooks
       RANGE42_BUNDLE_DIR: /runtime/range42-playbooks/bundles
+      RANGE42_PLATFORM_PLAYBOOKS_DIR: /runtime/range42-playbooks
       RANGE42_BUNDLE_RUNTIME_MANIFEST: /runtime/bundle-runtime.json
       RANGE42_WORKSPACE_TEMPLATE_DIR: /run/range42-template
       RANGE42_PROXMOX_CA_FILE: /runtime/proxmox-ca.pem
