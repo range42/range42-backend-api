@@ -39,7 +39,6 @@ async def _session() -> AsyncSession:
         yield session
 
 
-@router.get("", response_model=Page[DeploymentOut], include_in_schema=False)
 @router.get("/", response_model=Page[DeploymentOut])
 async def list_deployments(session: AsyncSession = Depends(_session),
                            offset: int = 0, limit: int = 100):
@@ -52,7 +51,6 @@ async def list_deployments(session: AsyncSession = Depends(_session),
     )
 
 
-@router.post("", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=DeploymentOut, status_code=status.HTTP_201_CREATED)
 async def create_deployment(payload: DeploymentCreate,
                             x_range42_reservation_token: str | None = Header(default=None, max_length=128),
