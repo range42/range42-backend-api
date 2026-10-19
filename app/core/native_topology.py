@@ -89,14 +89,45 @@ def reservations(root: Path, base: Path, manifest: dict) -> dict:
 
 
 def scenario_topology(root: Path, base: Path, manifest: dict) -> dict:
-    keys = ("vm_id", "vm_name", "ip", "bridge", "role", "group", "spec")
+    keys = ("vm_id", "vm_name", "ip", "bridge", "role", "group", "spec", "cores", "memory_mib", "disk_gib")
     def public(rows):
         if not isinstance(rows, list) or len(rows) > 1024 or any(not isinstance(row, dict) for row in rows):
             raise ValueError("Invalid scenario resource declarations")
-        return [{key: row[key] for key in keys if key in row and isinstance(row[key], (str, int))} for row in rows]
+        result = []
+        for row in rows:
+            item = {key: row[key] for key in keys if key in row and isinstance(row[key], (str, int))}
+            if "requires_features" in row:
+                flags = row["requires_features"]
+                if (not isinstance(flags, list) or len(flags) > 128
+                        or any(not isinstance(flag, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", flag) for flag in flags)):
+                    raise ValueError("Invalid resource feature declarations")
+                item["requires_features"] = flags
+            result.append(item)
+        return result
     vms, templates = public(manifest["vms"]), public(manifest.get("templates", []))
     networks = {row["bridge"]: {"vnet": row["bridge"]} for row in [*vms, *templates] if row.get("bridge")}
     warnings = ["The diagram shows declared resources. Feature choices and playbook conditions determine which resources are created."]
+    declaration = base / "manifest/scenario_networks.json"
+    if declaration.exists() or declaration.is_symlink():
+        document = json.loads(read(declaration, root))
+        if not isinstance(document, dict):
+            raise ValueError("Invalid network declarations")
+        declared = document.get("networks", [])
+        if not isinstance(declared, list) or len(declared) > 256:
+            raise ValueError("Invalid network declarations")
+        for row in declared:
+            if not isinstance(row, dict) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,14}", str(row.get("vnet", ""))):
+                raise ValueError("Invalid network identity")
+            network = {"vnet": row["vnet"]}
+            if row.get("subnet"):
+                subnet = ipaddress.ip_network(row["subnet"], strict=True)
+                network["subnet"] = str(subnet)
+                if row.get("gateway"):
+                    gateway = ipaddress.ip_address(row["gateway"])
+                    if gateway not in subnet:
+                        raise ValueError("Gateway outside declared subnet")
+                    network["gateway"] = str(gateway)
+            networks[row["vnet"]] = network
     # Existing scenarios declare literal SDN settings here. Dynamic expressions
     # remain unknown; never derive CIDRs or gateways from a network's name.
     bootstrap = base / "00_sdn_bootstrap/_main.yml"

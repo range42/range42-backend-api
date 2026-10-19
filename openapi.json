@@ -18731,6 +18731,17 @@
             "type": "string",
             "title": "Configuration Revision",
             "default": ""
+          },
+          "cohort_deployment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cohort Deployment Id"
           }
         },
         "type": "object",

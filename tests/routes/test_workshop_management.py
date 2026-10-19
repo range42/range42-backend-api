@@ -169,3 +169,19 @@ async def test_replacing_a_lost_vpn_key_requires_confirmation_and_does_not_accep
                 "seats": None,
             }
         ]
+
+
+@pytest.mark.asyncio
+async def test_status_preserves_the_verified_cohort_deployment_link(monkeypatch):
+    from app.routes.v1.admin import workshop
+    from app.main import create_app
+
+    async def agent(value):
+        return {'id': 'native-friday', 'expires_at': '2026-10-23T18:00:00Z',
+                'seats': [], 'operations': [], 'cohort_deployment_id': 'cohort-one'}
+
+    monkeypatch.setattr(workshop, 'agent_request', agent)
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url='http://test') as client:
+        response = await client.get('/v1/admin/workshop')
+        assert response.status_code == 200
+        assert response.json()['cohort_deployment_id'] == 'cohort-one'

@@ -128,6 +128,7 @@ class WorkshopStatus(BaseModel):
     seats: list[Seat]
     operations: list[Operation] = Field(default_factory=list)
     configuration_revision: str = ''
+    cohort_deployment_id: str | None = None
 
 
 class WorkshopAction(BaseModel):
