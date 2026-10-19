@@ -133,7 +133,7 @@ class WorkshopStatus(BaseModel):
 class WorkshopAction(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     action: Literal['prepare', 'accounts', 'keys', 'handouts', 'bind', 'revoke', 'close',
-                    'deploy', 'configure', 'reset', 'teardown']
+                    'deploy', 'configure', 'reset', 'teardown', 'replace_key']
     username: str | None = Field(default=None, pattern=USERNAME)
     node_id: int | None = Field(default=None, gt=0)
     seats: int | None = Field(default=None, ge=1, le=10)
@@ -141,14 +141,14 @@ class WorkshopAction(BaseModel):
 
     @model_validator(mode='after')
     def validate_scope(self):
-        seat_actions = {'bind', 'revoke', 'close', 'deploy', 'configure', 'reset', 'teardown'}
+        seat_actions = {'bind', 'revoke', 'close', 'deploy', 'configure', 'reset', 'teardown', 'replace_key'}
         if (self.action in seat_actions) != (self.username is not None):
             raise ValueError('Select one participant for a seat action')
         if (self.action == 'bind') != (self.node_id is not None):
             raise ValueError('Select an observed device only when binding')
         if (self.action == 'prepare') != (self.seats is not None):
             raise ValueError('Select the seat count only when preparing a workshop')
-        if self.action in {'reset', 'teardown', 'close'}:
+        if self.action in {'reset', 'teardown', 'close', 'replace_key'}:
             if self.confirmation != self.username:
                 raise ValueError('Confirm the selected participant before resetting, deleting or closing it')
         elif self.confirmation is not None:

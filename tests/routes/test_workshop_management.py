@@ -63,3 +63,19 @@ async def test_credential_handout_is_private_and_has_no_url_token(monkeypatch):
         assert response.headers['cache-control']=='no-store'
         assert 'user01.pdf' in response.headers['content-disposition']
         assert (await client.get('/v1/admin/workshop/seats/../../secret/handout')).status_code!=200
+
+@pytest.mark.asyncio
+async def test_replacing_a_lost_vpn_key_requires_confirmation_and_does_not_accept_secret_inputs(monkeypatch):
+    from app.routes.v1.admin import workshop
+    calls=[]
+    async def agent(value):calls.append(value);return {'operation_id':'replacement','state':'queued'}
+    monkeypatch.setattr(workshop,'agent_request',agent)
+    from app.main import create_app
+    async with AsyncClient(transport=ASGITransport(app=create_app()),base_url='http://test') as client:
+        for body in [{'action':'replace_key','username':'user10'},
+                     {'action':'replace_key','username':'user10','confirmation':'user09'},
+                     {'action':'replace_key','username':'user10','confirmation':'user10','auth_key':'user-supplied'}]:
+            assert (await client.post('/v1/admin/workshop/actions',json=body)).status_code==422
+        response=await client.post('/v1/admin/workshop/actions',json={'action':'replace_key','username':'user10','confirmation':'user10'})
+        assert response.status_code==202
+        assert calls==[{'action':'replace_key','username':'user10','node_id':None,'seats':None}]
