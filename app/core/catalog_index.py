@@ -139,13 +139,20 @@ def _scenario(base: Path, root: Path, *, topology: bool = False) -> dict | None:
                 "entrypoints": entrypoints, "vm_count": len(manifest["vms"]),
                 "template_count": len(templates) if isinstance(templates, list) else 0,
                 "features": features}
+    workshop_file = base / 'manifest/workshop.json'
+    if workshop_file.exists() or workshop_file.is_symlink():
+        from app.core.workshop_runs import WorkshopDescriptor
+        try:
+            document['workshop'] = WorkshopDescriptor.model_validate(_document(workshop_file, root)).model_dump()
+        except ValueError:
+            document['workshop_error'] = 'Invalid manifest/workshop.json; correct the workshop capability before deployment.'
     if topology:
         from app.core.native_topology import scenario_topology
         try:
             document["topology"] = scenario_topology(root, base, manifest)
         except (ValueError, TypeError, RecursionError):
             return None
-    return _entry(base, root, kind="scenario", name=base.name,
+    return _entry(base, root, kind="scenario", name=document.get('workshop', {}).get('title', base.name),
                   description=manifest.get("description"), document=document)
 
 

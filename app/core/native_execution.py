@@ -13,6 +13,7 @@ import re
 import shlex
 import shutil
 import sys
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -38,10 +39,24 @@ def _write(path: Path, content: str, *, executable=False) -> None:
 
 def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
                        scope: str, features: dict, parameters: dict, artifact_dir: Path,
-                       repository_root: Path | None = None) -> NativeRun:
+                       repository_root: Path | None = None, workshop_plan: dict | None = None,
+                       workshop_credentials: dict | None = None, workshop_seat: int = 0,
+                       workshop_state_dir: Path | None = None) -> NativeRun:
     if scope not in descriptor["actions"]:
         raise invalid("This saved scenario does not declare that lifecycle action", "NATIVE_ACTION_UNAVAILABLE")
     values = native_variables(descriptor, features, parameters)
+    if context.target_api_url:
+        values.update(proxmox_api_host=urlsplit(context.target_api_url).netloc,
+                      proxmox_node=context.target_node, proxmox_api_validate_certs=True)
+    if workshop_plan:
+        if type(workshop_seat) is not int or not 0 <= workshop_seat <= workshop_plan['seats']:
+            raise invalid('Select a participant allocated to this workshop')
+        values.update(range42_workshop_plan=workshop_plan,
+                      range42_workshop_participants=workshop_credentials or {},
+                      range42_workshop_selected_seat=workshop_seat,
+                      range42_workshop_receipt_root=str(workshop_state_dir or artifact_dir / 'workshop-state'),
+                      proxmox_dest_vm_storage_name=workshop_plan['storage'],
+                      proxmox_api_validate_certs=True, proxmox_node=context.node_name)
     shell, ansible, ssh = shutil.which("zsh"), shutil.which("ansible-playbook"), shutil.which("ssh")
     if not shell or not ansible or not ssh:
         raise invalid("Native execution requires zsh, Ansible and SSH on the deployer-cli", "NATIVE_RUNTIME_UNAVAILABLE")
@@ -113,12 +128,17 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
     prepare_vars = {
         "INFRASTRUCTURE_CODENAME": context.codename, "INFRASTRUCTURE_SCENARIO": context.scenario,
         "INFRASTRUCTURE_PROXMOX_ADDRESS": context.address,
+        "INFRASTRUCTURE_PROXMOX_API_AUTHORITY": urlsplit(context.target_api_url).netloc if context.target_api_url else context.address + ':8006',
         "DEPLOYER_CLI__DST_CONFIG_DIR": str(context.workspace),
         "DEPLOYER_CLI__DST_SSH_KEYS_BACKEND_DEST_DIR": str(keys / "backend_keys"),
         "DEPLOYER_CLI__DST_SSH_KEYS_JUMP_DEST_DIR": str(keys / "jump_keys"),
         "DEPLOYER_CLI__DST_SSH_KEYS_STUDENT_DEST_DIR": str(keys / "student_keys"),
         **context.inventory_variables, "ansible_python_interpreter": sys.executable,
     }
+    if workshop_plan:
+        prepare_vars['range42_workshop_plan'] = workshop_plan
+        prepare_vars['range42_workshop_known_hosts'] = str(context.workspace / 'ssh_keys/known_hosts')
+        prepare_vars['range42_workshop_source_ssh_config'] = str(home / '.ssh' / f'config_range42-{context.workspace.name}')
     _write(view / "prepare-vars.json", json.dumps(prepare_vars, allow_nan=False))
     tasks = [{"name": "Render saved scenario inventory for the selected context", "ansible.builtin.template": {
         "src": str(source / descriptor["inventory_template"]), "dest": str(view / "inventory/inventory_default.yml"), "mode": "0600"}}]

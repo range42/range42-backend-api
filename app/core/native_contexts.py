@@ -25,6 +25,9 @@ class NativeContext:
     address: str
     inventory_variables: dict = field(default_factory=dict)
     node_name: str = ""
+    target_host_id: str = ""
+    target_node: str = ""
+    target_api_url: str = ""
 
     def issues(self) -> list[str]:
         required = {
@@ -53,6 +56,26 @@ class NativeContext:
 def _literal_export(text: str, name: str) -> str:
     match = re.search(r"^export " + re.escape(name) + r"=['\"]([^'\"$`\n]+)['\"]\s*$", text, re.M)
     return match[1] if match else ""
+
+
+def _api_binding(value: str):
+    parsed = urlsplit(value)
+    if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in {'', '/'} or parsed.query or parsed.fragment
+            or any(char.isspace() for char in value)):
+        raise ValueError('Native target binding requires one verified HTTPS API endpoint')
+    return parsed.hostname, parsed.port or 443
+
+
+def _matches(context: NativeContext, host) -> bool:
+    try:
+        if urlsplit(host.api_url).hostname != context.address:
+            return False
+        return not context.target_host_id or (
+            host.id == context.target_host_id and host.node_name == context.target_node
+            and _api_binding(host.api_url) == _api_binding(context.target_api_url))
+    except (ValueError, AttributeError):
+        return False
 
 
 def _address(inventory: Path) -> str:
@@ -108,10 +131,18 @@ def _contexts() -> list[NativeContext]:
             variables = row.get("inventory_variables", {})
             if not isinstance(variables, dict):
                 raise ValueError()
+            binding = [row.get(name, '') for name in ('target_host_id', 'target_node', 'target_api_url')]
+            if any(binding) and (not all(isinstance(value, str) and value for value in binding)
+                    or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', binding[0])
+                    or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', binding[1])):
+                raise ValueError()
+            if binding[2]:
+                _api_binding(binding[2])
             result.append(NativeContext(identity, row.get("label") or identity, workspace, script,
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_CODENAME"),
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_LAB"),
-                _address(workspace / "inventory/inventory_default.yml"), variables))
+                _address(workspace / "inventory/inventory_default.yml"), variables,
+                target_host_id=binding[0], target_node=binding[1], target_api_url=binding[2]))
         except (ValueError, TypeError, KeyError, OSError):
             raise invalid("The operator's native context registry contains an invalid entry", "NATIVE_CONTEXT_UNAVAILABLE") from None
     return result
@@ -120,10 +151,10 @@ def _contexts() -> list[NativeContext]:
 def available_contexts(hosts: list) -> list[dict]:
     rows = []
     for context in _contexts():
-        matches = [host for host in hosts if urlsplit(host.api_url).hostname == context.address]
+        matches = [host for host in hosts if _matches(context, host)]
         issues = context.issues()
         if len(matches) != 1:
-            issues.append("Register exactly one matching Proxmox target, or resolve duplicate target registrations in Settings.")
+            issues.append("Register exactly one matching Proxmox target, or bind this context explicitly to its approved host, node and HTTPS API endpoint.")
         rows.append({"id": context.id, "label": context.label, "codename": context.codename,
                      "scenario": context.scenario, "target_host_id": matches[0].id if len(matches) == 1 else None,
                      "ready": not issues, "issues": issues})
@@ -134,8 +165,8 @@ def resolve_context(identity: str, host) -> NativeContext:
     context = next((value for value in _contexts() if value.id == identity), None)
     if context is None:
         raise invalid("Choose an existing Range42 context from the environment list", "NATIVE_CONTEXT_UNAVAILABLE")
-    if host is None or urlsplit(host.api_url).hostname != context.address:
-        raise invalid("The selected context and registered target must address the same Proxmox host", "NATIVE_CONTEXT_TARGET_MISMATCH")
+    if host is None or not _matches(context, host):
+        raise invalid("The selected context and registered target must match the approved Proxmox host, node and API binding", "NATIVE_CONTEXT_TARGET_MISMATCH")
     if issues := context.issues():
         raise invalid(" ".join(issues), "NATIVE_CONTEXT_UNAVAILABLE")
     return replace(context, node_name=getattr(host, "node_name", ""))

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from app.core.workshop_runs import WorkshopSpec
 
 
 class NativeDeployment(BaseModel):
@@ -13,6 +14,7 @@ class NativeDeployment(BaseModel):
     component_id: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
     features: dict[str, StrictBool] = Field(default_factory=dict, max_length=128)
     parameters: dict = Field(default_factory=dict, max_length=64)
+    workshop: WorkshopSpec | None = None
 
     @field_validator("path")
     @classmethod
@@ -40,7 +42,7 @@ class DeploymentCreate(BaseModel):
         if self.native and self.team_count != 1:
             raise ValueError("Native deployment uses the saved scenario topology; team_count must be 1")
         if self.native and (not self.project_sha or not re.fullmatch(r"[a-fA-F0-9]{40}|[a-fA-F0-9]{64}", self.project_sha)
-                            or self.allocation_reservation_id or self.secrets):
+                            or (self.allocation_reservation_id and not self.native.workshop) or self.secrets):
             raise ValueError("Native deployment requires a saved commit and uses the selected context's credentials and allocations")
         return self
 
@@ -100,6 +102,7 @@ class AttemptCreate(BaseModel):
     team_id: int | None = None
     confirm_codename: str | None = None
     project_sha: str | None = Field(default=None, pattern=r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
+    workshop_seat: int | None = Field(default=None, strict=True, ge=1, le=10)
 
 
 class PreflightResponse(BaseModel):

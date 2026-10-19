@@ -71,6 +71,42 @@ def test_explicit_context_registration_can_name_an_existing_workspace(tmp_path, 
     assert resolved.inventory_variables["custom_setting"] == "local"
 
 
+def test_explicit_context_binding_selects_one_of_two_profiles_on_the_same_api(tmp_path, monkeypatch):
+    from app.core.native_contexts import available_contexts, resolve_context
+    workspace, script, existing = context(tmp_path, monkeypatch)
+    pool = SimpleNamespace(id='pool-profile', api_url=existing.api_url, node_name=existing.node_name)
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [{
+        'id': 'workshop-pool', 'label': 'Reusable provisioning', 'workspace': str(workspace),
+        'context_script': str(script), 'target_host_id': pool.id, 'target_node': pool.node_name,
+        'target_api_url': pool.api_url,
+    }]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
+    rows = available_contexts([existing, pool])
+    assert rows[0]['ready'] is True
+    assert rows[0]['target_host_id'] == pool.id
+    assert resolve_context('workshop-pool', pool).node_name == pool.node_name
+    with pytest.raises(Range42Error, match='target'):
+        resolve_context('workshop-pool', existing)
+
+
+@pytest.mark.parametrize('field,value', [('node_name', 'another-node'), ('api_url', 'https://192.0.2.10:9443'),
+                                      ('api_url', 'http://192.0.2.10:8006')])
+def test_bound_native_context_rejects_registration_drift(tmp_path, monkeypatch, field, value):
+    from app.core.native_contexts import available_contexts, resolve_context
+    workspace, script, host = context(tmp_path, monkeypatch)
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [{
+        'id': 'bound', 'workspace': str(workspace), 'context_script': str(script),
+        'target_host_id': host.id, 'target_node': host.node_name, 'target_api_url': host.api_url,
+    }]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
+    setattr(host, field, value)
+    assert available_contexts([host])[0]['ready'] is False
+    with pytest.raises(Range42Error, match='target'):
+        resolve_context('bound', host)
+
+
 @pytest.mark.parametrize("identity", ["../lab-demo", "/lab-demo", "missing"])
 def test_context_identifiers_never_become_arbitrary_paths(tmp_path, monkeypatch, identity):
     from app.core.native_contexts import resolve_context

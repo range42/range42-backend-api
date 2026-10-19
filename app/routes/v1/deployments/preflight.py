@@ -81,6 +81,13 @@ async def run_preflight(deployment_id: str,
             ) else None
             report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
             if scenario.native:
+                if plan := scenario.native.get('workshop_plan'):
+                    from app.core.workshop_preflight import workshop_checks
+                    from app.core.deployment_allocations import ensure_for_attempt
+                    await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
+                        create=False, checked_host=host, declared_assignments=plan['assignments'])
+                    report.checks.extend(await workshop_checks(plan, host, scope=scope,
+                        receipt_root=Path(dep.workspace_path) / 'workshop-receipts'))
                 reservations = scenario.native["descriptor"]["topology"]["reservations"]
                 if reservations["status"] in {"conflict", "invalid"}:
                     report.checks.append(PreflightCheck(check="native_reservations", result="warn",

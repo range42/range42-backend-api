@@ -95,6 +95,14 @@ async def prepare_project_scenario(
         if scope not in descriptor["actions"]:
             raise invalid("This saved scenario does not declare that action", "NATIVE_ACTION_UNAVAILABLE")
         native_variables(descriptor, native.get("features", {}), native.get("parameters", {}))
+        from app.core.workshop_runs import resolve_native_workshop
+        plan = resolve_native_workshop(native, descriptor, run_id=deployment.id or '')
+        if plan:
+            descriptor['declared_vmids'] = [vm['vm_id'] for vm in plan['assignments']]
+            descriptor['topology'] = {**descriptor['topology'], 'vms': plan['guests'],
+                'networks': plan['networks'], 'reservations': {'status': 'checked',
+                    'issues': ['Workshop assignments are checked against the backend allocation ledger; live availability is checked before execution.']}}
+            native = {**native, 'workshop_plan': plan}
         context = resolve_context(native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
         main = next(root / native["path"] / name for name in ("main.yml", "main.yaml") if (root / native["path"] / name).is_file())
         return ProjectScenario(root, main, context.workspace / "inventory/inventory_default.yml",

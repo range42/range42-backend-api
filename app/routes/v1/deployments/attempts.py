@@ -69,6 +69,16 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         raise Range42Error(code="TEAM_OUT_OF_RANGE", status=400, message="Invalid team_id")
     if scope in {"team_reset", "rollback_team", "snapshot_team"} and payload.team_id is None:
         raise Range42Error(code="TEAM_REQUIRED", status=400, message="team_id is required")
+    workshop_plan = dep.native.get('workshop_plan') if dep.native else None
+    if workshop_plan:
+        if scope == 'reset' and payload.workshop_seat is None:
+            raise Range42Error(status=409, code='WORKSHOP_SEAT_REQUIRED', message='Select one participant before resetting a workshop instance.')
+        if payload.workshop_seat is not None:
+            if payload.workshop_seat > workshop_plan['seats'] or operation is not None or legacy_vars is not None:
+                raise Range42Error(status=409, code='WORKSHOP_SEAT_INVALID', message='Select one participant allocated to this workshop.')
+            operation = {'kind': 'workshop', 'seat': payload.workshop_seat, 'username': f'user{payload.workshop_seat:02}'}
+    elif payload.workshop_seat is not None:
+        raise Range42Error(status=409, code='WORKSHOP_NOT_FOUND', message='Participant selection requires an independent workshop run.')
     from app.core.native_scenarios import DESTRUCTIVE_ACTIONS
     if payload.scope == "teardown" or (dep.native and payload.scope in DESTRUCTIVE_ACTIONS):
         if payload.confirm_codename != dep.codename:

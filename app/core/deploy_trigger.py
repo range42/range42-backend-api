@@ -136,6 +136,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     scenario = None
     runtime_run = None
     native_run = None
+    workshop_credentials = {}
     if dep.project_sha:
         scenario = await prepare_project_scenario(
             session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
@@ -151,6 +152,20 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         if scenario.native:
             from app.core.native_execution import prepare_native_run
             native = scenario.native
+            if plan := native.get('workshop_plan'):
+                from app.core.workshop_models import WorkshopRun
+                from app.core.workshop_preflight import workshop_checks
+                await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
+                    create=False, checked_host=target_host, declared_assignments=plan['assignments'])
+                seat = (attempt.operation or {}).get('seat', 0)
+                checks = await workshop_checks(plan, target_host, scope=attempt.scope,
+                    receipt_root=ws / 'workshop-receipts', seat=seat)
+                if blocked := next((check for check in checks if check.result == 'block'), None):
+                    raise PreflightBlockedError(message=blocked.detail)
+                workshop = await session.get(WorkshopRun, dep.id)
+                if workshop is None:
+                    raise PreflightBlockedError(message='The original private participant material is unavailable. Preserve the run and restore its protected state before recovery.')
+                workshop_credentials = json.loads(workshop.credentials)
             if native.get("component_id"):
                 from app.core.native_scenarios import check_native_allocations
                 allocation_checks = await check_native_allocations(native["descriptor"]["topology"], target_host)
@@ -159,7 +174,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                     raise PreflightBlockedError(message=blocked.detail)
             native_run = prepare_native_run(scenario.project_root, native["descriptor"], scenario.context,
                 scope=attempt.scope, features=native.get("features", {}), parameters=native.get("parameters", {}),
-                artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout")
+                artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout",
+                workshop_plan=native.get('workshop_plan'), workshop_credentials=workshop_credentials,
+                workshop_seat=(attempt.operation or {}).get('seat', 0), workshop_state_dir=ws / 'workshop-receipts')
             playbook_path = scenario.playbook
         elif attempt.scope == "runtime":
             from app.core.runtime_runner import prepare_runtime_run
@@ -250,6 +267,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             elif isinstance(value, str) and len(value) >= 4:
                 yield value
         tainted.update(strings(vault_values))
+        tainted.update(strings(workshop_credentials))
     elif scenario is not None:
         runtime_vars = target_runtime_variables(target_host, ws)
         extravars.update(runtime_vars)

@@ -137,6 +137,16 @@ def inspect_native_scenario(root: Path, path: str) -> dict:
     platform_file = base / 'manifest/platform.json'
     if platform_file.exists() or platform_file.is_symlink():
         result['platform'] = _platform_descriptor(base, result)
+    workshop_file = base / 'manifest/workshop.json'
+    if workshop_file.exists() or workshop_file.is_symlink():
+        from app.core.workshop_runs import WorkshopDescriptor
+        try:
+            workshop_file = inside(base, 'manifest/workshop.json', file=True)
+            if workshop_file.stat().st_size > 8192:
+                raise ValueError()
+            result['workshop'] = WorkshopDescriptor.model_validate_json(workshop_file.read_text()).model_dump()
+        except (ValueError, TypeError, OSError):
+            raise invalid('Invalid manifest/workshop.json') from None
     return result
 
 

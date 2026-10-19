@@ -7,3 +7,4 @@ httpx-sse==0.4.0
 pytest-httpx==0.30.0
 freezegun==1.5.1
 ruff==0.15.19
+pypdf==6.21.1
