@@ -463,3 +463,127 @@ test "$(cat "$RANGE42_ANSIBLE_ROLES__DEVKITS_DIR/secrets/default_vault.yml")" = 
         assert completed.returncode == 0, completed.stdout + completed.stderr
     assert (source / "secrets").readlink() == before
     assert (foreign / "default_vault.yml").read_text() == "DO-NOT-USE"
+
+
+def test_native_devkit_inventory_query_keeps_json_and_registered_node_binding(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+    import shutil
+    import shlex
+    import yaml
+    from ansible.parsing.vault import VaultLib, VaultSecret
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+
+    contract = os.environ.get("RANGE42_NATIVE_CONTRACT_FIXTURE")
+    production = (
+        Path(contract) / "devkit"
+        if contract
+        else Path(
+            os.getenv(
+                "RANGE42_DEVKIT_SOURCE",
+                str(
+                    Path(__file__).resolve().parents[3]
+                    / "range42-ansible_roles-debug-devkit"
+                ),
+            )
+        )
+    )
+    if not (production / "proxmox_vm.list.to.jsons.sh").is_file():
+        pytest.skip("Reviewed native devkit checkout is unavailable")
+    ws, script, host = context(tmp_path, monkeypatch)
+    host.node_name = "selected-native-node"
+    source = tmp_path / "devkit"
+    shutil.copytree(
+        production,
+        source,
+        symlinks=True,
+        ignore=shutil.ignore_patterns(".git", "secrets", "__pycache__"),
+    )
+    (source / "secrets").symlink_to(
+        tmp_path / "foreign-secrets", target_is_directory=True
+    )
+    vault = {
+        "proxmox_node": host.node_name,
+        "proxmox_api_host": "192.0.2.10:8006",
+        "proxmox_api_user": "fixture@pve",
+        "proxmox_api_token_id": "fixture",
+        "proxmox_api_token_secret": "FIXTURE-NOT-REAL",
+        "proxmox_api_validate_certs": True,
+    }
+    (ws / "secrets/default_vault.yml").write_bytes(
+        VaultLib().encrypt(yaml.safe_dump(vault).encode(), VaultSecret(b"not-public"))
+    )
+    roles = tmp_path / "roles"
+    role = roles / "range42-ansible_roles-proxmox_controller/tasks"
+    role.mkdir(parents=True)
+    (role / "main.yml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "ansible.builtin.debug": {"var": "vm_list"},
+                    "vars": {
+                        "vm_list": [
+                            {
+                                "vm_id": 1250,
+                                "vm_name": "fixture-guest",
+                                "proxmox_node": host.node_name,
+                            }
+                        ]
+                    },
+                }
+            ]
+        )
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    curl = fake_bin / "curl"
+    contacted = tmp_path / "unexpected-fast-path"
+    curl.write_text("#!/bin/sh\ntouch " + shlex.quote(str(contacted)) + "\nexit 1\n")
+    curl.chmod(0o755)
+    script.write_text(
+        """range42-context() {
+      if [[ "$1" == use ]]; then
+        export RANGE42_ACTIVE_CONFIG_DIR="$RANGE42_CONFIG_BASE_DIR/$2-$3"
+        export RANGE42_ANSIBLE_ROLES__DEVKITS_DIR="""
+        + shlex.quote(str(source))
+        + """
+        export ANSIBLE_ROLES_PATH="""
+        + shlex.quote(str(roles))
+        + """
+        export PATH="$RANGE42_ANSIBLE_ROLES__DEVKITS_DIR:$PATH"
+      else
+        local target=$(readlink -f "$RANGE42_ACTIVE_CONFIG_DIR/scenario")
+        (cd "$target" && bash "$target/${target##*/}.setup.sh")
+      fi
+    }
+    """
+    )
+    result = tmp_path / "inventory.json"
+    repo = tmp_path / "repo"
+    base = scenario(repo)
+    (base / "exercise.setup.sh").write_text(
+        "set -eu\nprintf 'selected-native-node\\n' | proxmox_vm.list.to.jsons.sh > "
+        + shlex.quote(str(result))
+        + '\ntest "$ANSIBLE_STDOUT_CALLBACK" = default\n'
+    )
+    monkeypatch.setenv("ANSIBLE_STDOUT_CALLBACK", "default")
+    monkeypatch.setenv("PATH", str(fake_bin) + ":" + os.environ["PATH"])
+    run = prepare_native_run(
+        repo,
+        inspect_native_scenario(repo, "training/exercise-a"),
+        resolve_context("lab-demo", host),
+        scope="full",
+        features={},
+        parameters={},
+        artifact_dir=tmp_path / "attempt",
+    )
+    completed = subprocess.run(run.command, capture_output=True, text=True, timeout=40)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert result.read_text().strip(), completed.stdout + completed.stderr
+    assert json.loads(result.read_text())["vm_id"] == 1250
+    assert not contacted.exists(), (
+        "Native API operations must use the configured, TLS-verified Ansible controller"
+    )

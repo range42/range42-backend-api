@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
       - run: ruff check app/ tests/
+      - name: Install the runtime JSON callback collection
+        run: ansible-galaxy collection install ansible.posix
       - name: Checkout reviewed native playbooks contract
         uses: actions/checkout@v6
         with:

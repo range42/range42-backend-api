@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 import shlex
 import shutil
 import sys
@@ -72,9 +73,22 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
     (view / "scenario").symlink_to(scenario, target_is_directory=True)
     variables_file = view / "variables.json"
     _write(variables_file, json.dumps(values, allow_nan=False))
+    devkit = view / "native-devkit"
+    devkit_inventory = view / "devkit-inventory.yml"
+    if context.node_name:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", context.node_name):
+            raise invalid("The registered Proxmox node name is invalid")
+        _write(devkit_inventory, yaml.safe_dump({"all": {"hosts": {context.node_name: {
+            "ansible_connection": "local", "ansible_python_interpreter": sys.executable,
+        }}}}))
     # Append flags to every native Ansible invocation, including older wrappers
     # that do not forward "$@", and reset wrappers that launch other scripts.
-    _write(view / "bin/ansible-playbook", "#!/bin/sh\nexec " + shlex.quote(ansible)
+    devkit_args = " -i " + shlex.quote(str(devkit_inventory)) if context.node_name else ""
+    _write(view / "bin/ansible-playbook", "#!/bin/sh\n"
+           + 'if [ "${ANSIBLE_CONFIG:-}" = ' + shlex.quote(str(devkit / "ansible_no_skipped_json.cfg")) + ' ]; then\n'
+           + "  export ANSIBLE_STDOUT_CALLBACK=ansible.posix.json\n  unset ANSIBLE_CALLBACK_PLUGINS\n"
+           + "  exec " + shlex.quote(ansible) + ' "$@"' + devkit_args
+           + " --extra-vars " + shlex.quote("@" + str(variables_file)) + "\nfi\nexec " + shlex.quote(ansible)
            + ' "$@" --extra-vars ' + shlex.quote("@" + str(variables_file)) + "\n", executable=True)
     for action, entrypoint in descriptor["actions"].items():
         suffix = NATIVE_ACTIONS[action][0]
@@ -123,6 +137,9 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         # Context files can select CLI defaults; restore the API's verified
         # connection policy after sourcing them and before running Ansible.
         "ANSIBLE_HOST_KEY_CHECKING": "True",
+        # The reviewed Ansible controller honors the context's certificate
+        # policy. Its JSON helpers must not fall back to legacy curl -k calls.
+        "RANGE42_PROXMOX_API_FORCE": "off",
         "RANGE42_ACTIVE_CONFIG_DIR": str(view), "RANGE42_CONFIG__ROOT_DIR": str(view),
         "RANGE42_SOURCE_CONTEXT_DIR": str(context.workspace), "RANGE42_ACTIVE_WORKSPACE": context.workspace.name,
         "RANGE42_ANSIBLE_ROLES__INVENTORY_DIR": str(view / "inventory"),
@@ -144,7 +161,6 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         environment["ANSIBLE_SSH_COMMON_ARGS"] = "-F " + shlex.quote(str(ssh_config))
         _write(view / "bin/ssh", "#!/bin/sh\nexec " + shlex.quote(ssh) + " -F "
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
-    devkit = view / "native-devkit"
     prepare_devkit = view / "prepare-devkit.py"
     _write(prepare_devkit, '''import os,sys,shutil
 from pathlib import Path
