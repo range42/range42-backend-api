@@ -217,3 +217,38 @@ async def test_native_cancellation_stops_the_command_and_its_child(tmp_path, rec
         for identity in identities:
             if identity:
                 signal_process_identity(identity, signal.SIGKILL)
+
+@pytest.mark.parametrize('pin,success', [('matching', True), ('empty', False), ('changed', False)])
+def test_native_direct_ssh_uses_workspace_pins_even_without_inventory_ssh_options(tmp_path, monkeypatch, pin, success):
+    from tests.core.test_native_cli_ssh import ssh_guest
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    import paramiko
+    ws, script, host = context(tmp_path, monkeypatch)
+    script.write_text('''range42-context() {
+      if [[ "$1" == use ]]; then
+        export RANGE42_ACTIVE_CONFIG_DIR="$RANGE42_CONFIG_BASE_DIR/$2-$3"
+      else
+        local target=$(readlink -f "$RANGE42_ACTIVE_CONFIG_DIR/scenario")
+        (cd "$target" && bash "$target/${target##*/}.setup.sh")
+      fi
+    }
+    ''')
+    base = scenario(tmp_path / 'repo')
+    (base / 'exercise.setup.sh').write_text('exec ssh fixture.invalid true\n')
+    monkeypatch.setenv('HOME', str(tmp_path))
+    with ssh_guest() as (port, key, executed):
+        (base / 'templates/ssh-config.j2').write_text(
+            'Host fixture.invalid\n HostName 127.0.0.1\n HostKeyAlias fixture.invalid\n'
+            f' Port {port}\n User fixture\n GlobalKnownHostsFile /dev/null\n'
+            ' StrictHostKeyChecking no\n UserKnownHostsFile /dev/null\n')
+        wrong = paramiko.RSAKey.generate(2048)
+        trusted = key if pin == 'matching' else wrong
+        (ws / 'ssh_keys/known_hosts').write_text(
+            '' if pin == 'empty' else 'fixture.invalid ' + trusted.get_name() + ' ' + trusted.get_base64() + '\n')
+        run = prepare_native_run(tmp_path / 'repo', inspect_native_scenario(tmp_path / 'repo', 'training/exercise-a'),
+            resolve_context('lab-demo', host), scope='full', features={}, parameters={}, artifact_dir=tmp_path / 'run')
+        result = subprocess.run(run.command, capture_output=True, text=True, timeout=25)
+        assert (result.returncode == 0) == success, result.stdout + result.stderr
+        assert executed.is_set() == success
