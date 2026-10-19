@@ -7,13 +7,14 @@ import asyncio
 import base64
 import json
 import os
-from pathlib import Path
 import socket
 import stat
 import struct
+from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Path as PathParameter
+from fastapi import APIRouter
+from fastapi import Path as PathParameter
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,7 +57,7 @@ async def agent_request(value):
         finally:
             writer.close()
             await writer.wait_closed()
-    except (OSError, ValueError, KeyError, asyncio.TimeoutError, RuntimeError):
+    except (TimeoutError, OSError, ValueError, KeyError, RuntimeError):
         raise unavailable() from None
 
 
@@ -74,7 +75,7 @@ async def ssh_agent_request(config, value):
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         try:
             raw, _ = await asyncio.wait_for(process.communicate(json.dumps(value).encode() + b'\n'), 30)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             await process.wait()
             raise
@@ -84,7 +85,7 @@ async def ssh_agent_request(config, value):
         if not result.get('ok'):
             raise ValueError()
         return result['result']
-    except (OSError, ValueError, KeyError, asyncio.TimeoutError):
+    except (TimeoutError, OSError, ValueError, KeyError):
         raise unavailable() from None
 
 
