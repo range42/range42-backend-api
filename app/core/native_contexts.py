@@ -1,7 +1,7 @@
 """Read existing deployer-cli contexts. Discovery never sources shell files."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 import os
 from pathlib import Path
@@ -24,6 +24,7 @@ class NativeContext:
     scenario: str
     address: str
     inventory_variables: dict = field(default_factory=dict)
+    node_name: str = ""
 
     def issues(self) -> list[str]:
         required = {
@@ -137,4 +138,4 @@ def resolve_context(identity: str, host) -> NativeContext:
         raise invalid("The selected context and registered target must address the same Proxmox host", "NATIVE_CONTEXT_TARGET_MISMATCH")
     if issues := context.issues():
         raise invalid(" ".join(issues), "NATIVE_CONTEXT_UNAVAILABLE")
-    return context
+    return replace(context, node_name=getattr(host, "node_name", ""))

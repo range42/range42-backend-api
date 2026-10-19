@@ -91,6 +91,10 @@ def test_native_cli_and_api_guest_trust(tmp_path, monkeypatch, caller, pin, succ
     from app.core.native_execution import prepare_native_run
     from app.core.native_scenarios import inspect_native_scenario
 
+    # Keep the operator's active native workspace outside this disposable fixture.
+    for name in list(os.environ):
+        if name.startswith("RANGE42_"):
+            monkeypatch.delenv(name, raising=False)
     ws, script, host = context(tmp_path, monkeypatch)
     script.write_text(core_script.read_text())
     base = scenario(tmp_path / "saved", "training/exercise")
