@@ -30,7 +30,16 @@ async def workshop_env(tmp_path, monkeypatch):
     (installed / 'scenarios').mkdir(parents=True)
     (installed / 'scenarios/_reserved.json').write_text('')
     monkeypatch.setenv('API_BACKEND_WWWAPP_PLAYBOOKS_DIR', str(installed))
-    context(tmp_path, monkeypatch)
+    workspace, script, _ = context(tmp_path, monkeypatch)
+    profile = {'version': 1, 'id': 'installation-workshops', 'vmid_ranges': [[45000, 46999]],
+        'proxmox_template': 9230, 'deployer_template': 9222, 'storage': 'ceph-range',
+        'networks': [{'bridge': f'vmbr{bridge + seat}', 'subnet': f'10.{octet}.0.{16 * seat}/28',
+            'gateway': f'10.{octet}.0.{16 * seat + 1}'} for bridge, octet in [(500, 78), (600, 79)] for seat in range(10)]}
+    registry = tmp_path / 'registered-contexts.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [{'id': 'lab-demo', 'workspace': str(workspace),
+        'context_script': str(script), 'target_host_id': 'h', 'target_node': 'n',
+        'target_api_url': 'https://192.0.2.10:8006', 'workshop_profile': profile}]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
     repo = tmp_path / 'source'
     base = scenario(repo, 'scenarios/installer-course')
     (base / 'manifest/scenario_vms.json').write_text('{"version":2,"vms":[]}')
@@ -146,6 +155,33 @@ async def test_occupied_live_vmid_cannot_be_reserved_or_stranded_in_a_workshop_c
     assert result.json()['code'] == 'ALLOCATION_OCCUPIED'
     async with db.get_session_factory()() as session:
         assert await session.scalar(text('SELECT count(*) FROM deployment_allocations')) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fault', ['missing', 'foreign_bridge', 'foreign_subnet', 'foreign_template', 'foreign_vmids'])
+async def test_workshop_creation_requires_a_server_approved_provisioning_profile(workshop_env, monkeypatch, fault):
+    import os
+    from pathlib import Path
+    client, db, _ = workshop_env
+    payload = creation()
+    if fault == 'missing':
+        registry = Path(os.environ['RANGE42_NATIVE_CONTEXTS_FILE'])
+        saved = json.loads(registry.read_text())
+        del saved['contexts'][0]['workshop_profile']
+        registry.write_text(json.dumps(saved))
+    elif fault == 'foreign_bridge':
+        payload['native']['workshop']['bridge_start'] = 420
+    elif fault == 'foreign_subnet':
+        payload['native']['workshop']['network_pool'] = '10.77.0.0/24'
+    elif fault == 'foreign_template':
+        payload['native']['workshop']['proxmox_template'] = 9999
+    else:
+        payload['native']['workshop']['vmid_start'] = 48000
+    result = await create_reserved(client, payload)
+    assert result.status_code == 409, result.text
+    assert result.json()['code'].startswith('WORKSHOP_PROVISIONING_')
+    async with db.get_session_factory()() as session:
+        assert await session.scalar(text('SELECT count(*) FROM workshop_runs')) == 0
 
 
 @pytest.mark.asyncio

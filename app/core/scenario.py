@@ -104,6 +104,9 @@ async def prepare_project_scenario(
                     'issues': ['Workshop assignments are checked against the backend allocation ledger; live availability is checked before execution.']}}
             native = {**native, 'workshop_plan': plan}
         context = resolve_context(native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
+        if plan:
+            from app.core.workshop_profiles import require_workshop_profile
+            require_workshop_profile(context, plan)
         main = next(root / native["path"] / name for name in ("main.yml", "main.yaml") if (root / native["path"] / name).is_file())
         return ProjectScenario(root, main, context.workspace / "inventory/inventory_default.yml",
             native_vmids(descriptor, native.get("parameters", {})), checkout_credential=token,

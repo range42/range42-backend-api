@@ -16,6 +16,59 @@ from app.core.proxmox_read import ProxmoxReadError, list_proxmox_data, read_prox
 from app.core.proxmox_tls import proxmox_verify
 from app.core.workshop_runs import validate_activation
 from app.core.host_capacity import normalize_node_capacity
+from app.core.workshop_profiles import WorkshopProfile
+
+
+async def _network_attachments(client, host, rows, selected, proofs, profile):
+    """Inspect current and pending NICs; an empty physical bridge can still be shared."""
+    bridges = {guest['bridge'] for guest in selected}
+    owned = {guest['vm_id']: guest for guest in selected}
+    infrastructure = {guest.vmid: guest for guest in profile.infrastructure_guests} if profile else {}
+    semaphore = asyncio.Semaphore(8)
+
+    async def inspect(row):
+        vmid, node, kind = row.get('vmid'), row.get('node'), row.get('type')
+        if (type(vmid) is not int or not isinstance(node, str)
+                or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', node) or kind not in {'qemu', 'lxc'}):
+            raise ValueError('Incomplete guest inventory')
+        if node != host.node_name:
+            return  # Ordinary bridges are local to the explicitly selected node.
+        for current in (0, 1):
+            async with semaphore:
+                config = await read_proxmox_data(client, host, f'/nodes/{node}/{kind}/{vmid}/config', params={'current': current})
+            if not isinstance(config, dict):
+                raise ValueError('Incomplete guest network observations')
+            if config.get('template') == 1 and row.get('status') == 'stopped' and kind == 'qemu':
+                continue  # Source templates have no live NIC; clones are rebound before start.
+            nics = {key: value for key, value in config.items() if re.fullmatch(r'net[0-9]+', key)}
+            if any(not isinstance(value, str) for value in nics.values()):
+                raise ValueError('Invalid guest NIC observations')
+            if vmid in owned:
+                proof, guest = proofs.get(vmid, {}), owned[vmid]
+                if (kind != 'qemu' or config.get('description') != guest['owner']
+                        or config.get('vmgenid') != proof.get('vmgenid') or set(nics) != {'net0'}):
+                    raise ValueError('Owned guest network generation differs')
+                final = bool(re.search(r'(?:^|,)bridge=' + re.escape(guest['bridge']) + r'(?:,|$)', nics['net0']))
+                baseline = proof.get('bootstrap_network', {})
+                initial = (row.get('status') == 'stopped' and not proof.get('bootstrap_complete', False)
+                    and baseline.get('net0') == nics['net0'] and baseline.get('ipconfig0') == config.get('ipconfig0'))
+                if not final and not initial:
+                    raise ValueError('Owned guest is attached outside its participant network')
+                continue
+            for key, value in nics.items():
+                properties = dict(part.split('=', 1) for part in value.split(',') if '=' in part)
+                bridge = properties.get('bridge')
+                if bridge not in bridges:
+                    continue
+                approved = infrastructure.get(vmid)
+                expected = next((nic for nic in approved.nics if nic.interface == key and nic.bridge == bridge), None) if approved else None
+                mac = value.split(',', 1)[0].partition('=')[2].lower()
+                if (kind != 'qemu' or approved is None or expected is None or approved.node != node
+                        or config.get('description') != approved.owner or config.get('vmgenid') != approved.vmgenid
+                        or config.get('template') or mac != expected.mac):
+                    raise ValueError('A participant bridge is attached to an unapproved guest or NIC')
+
+    await asyncio.gather(*(inspect(row) for row in rows))
 
 
 def receipt(path: Path) -> dict:
@@ -31,10 +84,10 @@ def receipt(path: Path) -> dict:
 
 
 async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | None = None,
-                          seat: int = 0, client=None) -> list[PreflightCheck]:
+                          seat: int = 0, client=None, profile: WorkshopProfile | None = None) -> list[PreflightCheck]:
     if client is None:
         async with httpx.AsyncClient(verify=proxmox_verify(), timeout=8, follow_redirects=False) as owned:
-            return await workshop_checks(plan, host, scope=scope, receipt_root=receipt_root, seat=seat, client=owned)
+            return await workshop_checks(plan, host, scope=scope, receipt_root=receipt_root, seat=seat, client=owned, profile=profile)
     checks = []
     def result(name, ok, detail):
         checks.append(PreflightCheck(check='workshop_' + name, result='pass' if ok else 'block', detail=detail))
@@ -56,6 +109,7 @@ async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | 
             if len(rows) > 4096:
                 raise ValueError('Inventory exceeds bounds')
             indexed = {int(vm['vmid']): vm for vm in rows}
+            proofs = {}
             for vm in selected:
                 current = indexed.get(vm['vm_id'])
                 if scope in {'full', 'deploy_vms'}:
@@ -81,6 +135,7 @@ async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | 
                         continue
                     if proof.get('owner') != vm['owner'] or proof.get('vmid') != vm['vm_id']:
                         raise ValueError('Ownership receipt differs')
+                    proofs[vm['vm_id']] = proof
                     if current:
                         config = await read_proxmox_data(client, host, f"{node}/qemu/{vm['vm_id']}/config")
                         if (current.get('node') != host.node_name or current.get('type') != 'qemu'
@@ -114,6 +169,8 @@ async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | 
                 or not by_name[name].get('active') or by_name[name].get('bridge_ports')]
             result('networks', not missing, 'Required isolated bridges are active without physical bridge ports. Gateway, DNS and participant routing require separate access validation.'
                    if not missing else 'Prepare these isolated participant bridges before deploying: ' + ', '.join(missing))
+            await _network_attachments(client, host, rows, selected, proofs, profile)
+            result('network_ownership', True, 'Current and pending guest NICs use separate participant bridges; infrastructure exceptions match the approved node, owner, generation, interface and MAC.')
             node_state = await read_proxmox_data(client, host, node + '/status')
             storage = await read_proxmox_data(client, host, f"{node}/storage/{plan['storage']}/status")
             needed = len(selected) // 2

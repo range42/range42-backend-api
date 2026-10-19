@@ -9,7 +9,7 @@ from tests.core.test_workshop_runs import specification
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('fault', [None, 'bridge', 'template', 'wrong_disks', 'passthrough', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
+@pytest.mark.parametrize('fault', [None, 'bridge', 'shared_bridge', 'template', 'wrong_disks', 'passthrough', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
 async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(fault):
     from app.core.workshop_runs import WorkshopSpec, compile_plan
     from app.core.workshop_preflight import workshop_checks
@@ -28,6 +28,8 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
             if fault == 'committed_memory':
                 result = [{'vmid': 46000, 'node': 'node-a', 'type': 'qemu', 'name': 'idle-existing',
                            'status': 'running', 'maxmem': 60 * 1024**3, 'mem': 1024**3}]
+            if fault == 'shared_bridge':
+                result = [{'vmid': 46000, 'node': 'node-a', 'type': 'qemu', 'status': 'stopped', 'name': 'unrelated'}]
         elif path == '/cluster/nextid':
             result = request.url.params['vmid']
         elif path == '/nodes/node-a/network':
@@ -38,6 +40,9 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
             total = 64 * 1024**3 if fault == 'committed_memory' else 2**41
             free = 63 * 1024**3 if fault == 'committed_memory' else 1024 if fault == 'capacity' else 2**40
             result = {'memory': {'total': total, 'used': total - free, 'free': free}, 'cpuinfo': {'cpus': 64}, 'cpu': 0.0}
+        elif path == '/nodes/node-a/qemu/46000/config':
+            bridge = 'vmbr500' if fault == 'shared_bridge' else 'vmbr900'
+            result = {'name': 'unrelated', 'net0': f'virtio=AA:BB:CC:DD:EE:FF,bridge={bridge}', 'template': 0}
         elif path.endswith('/config'):
             template = 9230 if '/9230/' in path else 9222
             result = {'template': 0 if fault == 'template' else 1, 'cpu': 'host', 'agent': 'enabled=1',
@@ -91,3 +96,43 @@ async def test_cleanup_of_a_partial_run_allows_never_created_guests_only_after_g
         checks = await workshop_checks(plan, host, scope=scope, receipt_root=tmp_path, client=client)
     assert any(check.check == 'workshop_ownership' and check.result == 'pass' for check in checks) == (scope != 'configure')
     assert ('/cluster/nextid' in seen) == (scope != 'configure')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fault', [None, 'owner', 'generation', 'mac', 'pending_nic', 'container'])
+async def test_only_exact_approved_infrastructure_may_share_a_participant_bridge(fault):
+    from app.core.workshop_preflight import _network_attachments
+    from app.core.workshop_profiles import WorkshopProfile
+    from app.core.workshop_runs import WorkshopSpec, compile_plan
+    plan = compile_plan(WorkshopSpec.model_validate(specification(seats=1)), run_id='a' * 16)
+    infrastructure = {'vmid': 42100, 'node': 'node-a', 'owner': 'platform:gateway',
+        'vmgenid': '12345678-1234-1234-1234-123456789abc',
+        'nics': [{'interface': 'net14', 'bridge': 'vmbr500', 'mac': 'bc:24:11:60:00:01'}]}
+    profile = WorkshopProfile.model_validate({'version': 1, 'id': 'approved-workshops',
+        'vmid_ranges': [[45000, 45039]], 'proxmox_template': 9230, 'deployer_template': 9222,
+        'storage': 'ceph-range', 'networks': [{'bridge': 'vmbr500', 'subnet': '10.78.0.0/28', 'gateway': '10.78.0.1'}],
+        'infrastructure_guests': [infrastructure]})
+    views = []
+    def endpoint(request):
+        view = int(request.url.params['current'])
+        views.append(view)
+        config = {'description': infrastructure['owner'], 'vmgenid': infrastructure['vmgenid'],
+            'net14': 'virtio=BC:24:11:60:00:01,bridge=vmbr500'}
+        if fault == 'owner':
+            config['description'] = 'foreign'
+        elif fault == 'generation':
+            config['vmgenid'] = 'abcdefab-1234-1234-1234-123456789abc'
+        elif fault == 'mac':
+            config['net14'] = 'virtio=BC:24:11:60:00:02,bridge=vmbr500'
+        elif fault == 'pending_nic' and view == 0:
+            config['net15'] = 'virtio=BC:24:11:60:00:01,bridge=vmbr500'
+        return httpx.Response(200, json={'data': config})
+    host = SimpleNamespace(api_url='https://pve.example.test:8006', node_name='node-a', token_ref='synthetic')
+    rows = [{'vmid': 42100, 'node': 'node-a', 'type': 'lxc' if fault == 'container' else 'qemu', 'status': 'running'}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
+        if fault:
+            with pytest.raises(ValueError, match='unapproved'):
+                await _network_attachments(client, host, rows, plan['guests'], {}, profile)
+        else:
+            await _network_attachments(client, host, rows, plan['guests'], {}, profile)
+            assert views == [0, 1]

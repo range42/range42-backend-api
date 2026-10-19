@@ -50,6 +50,27 @@ Custom SSH key locations can be supplied through `inventory_variables` using the
 
 Native execution calls the installed `range42-context use` followed by its lifecycle command. This performs the normal user-level context switch, including SSH configuration and devkit secret links. Use one API instance and its provisioning lock per deployment user; do not run an independent CLI context switch during an attempt. The API creates a dedicated SSH agent, persists its ownership for restart recovery, and cleans it up on exit.
 
+Reusable installation workshops additionally require an operator-approved
+`workshop_profile` on an explicitly bound context. A normal context alone does
+not approve its bridges for participant use. The profile contains version1,
+an opaque `id`, bounded/disjoint `vmid_ranges`, the two source template VMIDs,
+destination `storage`, and exact `networks` entries (`bridge`, private `/28`
+`subnet`, first-host `gateway`). Templates and infrastructure VMIDs cannot
+overlap the guest ranges. Browser inputs must fit those server-owned bounds.
+Keep this registry outside writable project/workspace trees and mount it read-only
+in a managed service. API discovery exposes approved resource choices; it does
+not establish that preparation or live qualification has completed.
+
+An existing gateway requires an explicit `infrastructure_guests` entry containing
+its exact `vmid`, `node`, `vmgenid`, owner description and approved NICs
+(`interface`, `bridge`, lowercase `mac`). Record these from qualified retained
+infrastructure, never from a guessed name. Current and pending guest NICs are
+checked before launch. Unapproved attachments, changed generations and additional
+NICs on participant bridges block execution; empty physical bridge ports alone
+do not prove separation. Source templates remain stopped and clones are rebound
+to their final participant interface before start. Retain the source profile and
+generation receipts for recovery; do not adopt a replaced gateway to clear a gate.
+
 After selection, an attempt-local copy preserves the saved repository's entire relative layout. Its selected scenario receives context-owned secret/key links. The saved inventory and SSH templates render into the attempt directory; saved repository bundles override the ambient bundle location. The original scenario link, inventory and Git checkout are not rewritten by this execution view. Native parameters reach every `ansible-playbook` invocation, including older wrappers that do not forward arguments.
 
 A container deployment needs the same native paths, deployment-user home and writable context-switch files visible at their original locations. The standard generated-project container profile alone is insufficient. The deployer-cli service is the straightforward option.

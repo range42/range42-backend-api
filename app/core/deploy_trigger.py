@@ -159,7 +159,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                     create=False, checked_host=target_host, declared_assignments=plan['assignments'])
                 seat = (attempt.operation or {}).get('seat', 0)
                 checks = await workshop_checks(plan, target_host, scope=attempt.scope,
-                    receipt_root=ws / 'workshop-receipts', seat=seat)
+                    receipt_root=ws / 'workshop-receipts', seat=seat, profile=scenario.context.workshop_profile)
                 if blocked := next((check for check in checks if check.result == 'block'), None):
                     raise PreflightBlockedError(message=blocked.detail)
                 workshop = await session.get(WorkshopRun, dep.id)

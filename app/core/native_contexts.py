@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from app.core.native_scenarios import invalid
+from app.core.workshop_profiles import WorkshopProfile
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class NativeContext:
     target_host_id: str = ""
     target_node: str = ""
     target_api_url: str = ""
+    workshop_profile: WorkshopProfile | None = None
 
     def issues(self) -> list[str]:
         required = {
@@ -138,11 +140,14 @@ def _contexts() -> list[NativeContext]:
                 raise ValueError()
             if binding[2]:
                 _api_binding(binding[2])
+            profile = WorkshopProfile.model_validate(row['workshop_profile']) if row.get('workshop_profile') is not None else None
+            if profile and not all(binding):
+                raise ValueError('Workshop provisioning requires an explicit target binding')
             result.append(NativeContext(identity, row.get("label") or identity, workspace, script,
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_CODENAME"),
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_LAB"),
                 _address(workspace / "inventory/inventory_default.yml"), variables,
-                target_host_id=binding[0], target_node=binding[1], target_api_url=binding[2]))
+                target_host_id=binding[0], target_node=binding[1], target_api_url=binding[2], workshop_profile=profile))
         except (ValueError, TypeError, KeyError, OSError):
             raise invalid("The operator's native context registry contains an invalid entry", "NATIVE_CONTEXT_UNAVAILABLE") from None
     return result
@@ -157,7 +162,8 @@ def available_contexts(hosts: list) -> list[dict]:
             issues.append("Register exactly one matching Proxmox target, or bind this context explicitly to its approved host, node and HTTPS API endpoint.")
         rows.append({"id": context.id, "label": context.label, "codename": context.codename,
                      "scenario": context.scenario, "target_host_id": matches[0].id if len(matches) == 1 else None,
-                     "ready": not issues, "issues": issues})
+                     "ready": not issues, "issues": issues,
+                     "workshop_profile": context.workshop_profile.public() if context.workshop_profile else None})
     return rows
 
 
