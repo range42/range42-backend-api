@@ -62,3 +62,27 @@ async def test_entry_detail_unknown_source_returns_canonical_envelope(
             assert body["code"] == "NOT_FOUND"
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_native_preview_is_bound_to_a_registered_source_and_exact_reviewed_commit(tmp_path, monkeypatch):
+    app,dbmod=await _boot(tmp_path,monkeypatch)
+    from app.routes.v1.catalog import entries
+    calls=[]
+    def preview(source,repo,path,sha):
+        calls.append((source.id,repo.owner,repo.repo,repo.branch,path,sha))
+        return {'revision':sha,'path':path,'files':{'scenarios/lab/main.yml':'---'},'truncated':False}
+    monkeypatch.setattr(entries,'_native_preview_for_repo',preview)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app),base_url='http://t') as client:
+            source=(await client.post('/v1/catalog/sources',json={'provider':'github','base_url':'https://github.com',
+                'auth_kind':'none','repos':[{'owner':'range42','repo':'range42-playbooks','branch':'dev'}]})).json()
+            endpoint='/v1/catalog/sources/'+source['id']+'/native-preview'
+            assert (await client.get(endpoint,params={'path':'scenarios/lab','sha':'main'})).status_code==422
+            assert not calls
+            result=await client.get(endpoint,params={'path':'scenarios/lab','sha':'a'*40})
+            assert result.status_code==200
+            assert result.json()['repository']=={'owner':'range42','repo':'range42-playbooks','branch':'dev'}
+            assert calls==[(source['id'],'range42','range42-playbooks','dev','scenarios/lab','a'*40)]
+            assert (await client.get('/v1/catalog/sources/unknown/native-preview',params={'path':'scenarios/lab'})).status_code==404
+    finally:await dbmod.dispose_engine()

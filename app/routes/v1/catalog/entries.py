@@ -160,3 +160,29 @@ async def get_entry(
         status=404,
         message=f"Entry {path} not found in source {source_id}",
     )
+
+
+def _native_preview_for_repo(src, repo, path, revision):
+    from app.core.native_preview import preview_native_files
+    with tempfile.TemporaryDirectory() as directory:
+        root = _clone_repo(src, repo, Path(directory))
+        with git.Repo(root) as checkout:
+            revision = revision or checkout.head.commit.hexsha
+        return preview_native_files(root, path, revision)
+
+
+@router.get('/sources/{source_id}/native-preview')
+async def native_preview(source_id: str, path: str = Query(min_length=1, max_length=1024),
+                         sha: str | None = Query(default=None, pattern=r'^[a-f0-9]{40}$'),
+                         session: AsyncSession = Depends(_session)):
+    """Read only a registered source's reviewed native scenario through server Git."""
+    src = (await session.execute(select(Source).where(Source.id == source_id))).scalar_one_or_none()
+    if src is None:
+        raise Range42Error(error='not_found', code='NOT_FOUND', status=404, message='Source not found')
+    repos = (await session.execute(select(SourceRepo).where(SourceRepo.source_id == source_id))).scalars().all()
+    if len(repos) != 1:
+        raise Range42Error(error='validation', code='NATIVE_SOURCE_AMBIGUOUS', status=409,
+                           message='Choose one registered native repository')
+    result = await asyncio.to_thread(_native_preview_for_repo, resolved_git_source(src), repos[0], path, sha)
+    result['repository'] = {'owner': repos[0].owner, 'repo': repos[0].repo, 'branch': repos[0].branch}
+    return result
