@@ -32,6 +32,12 @@ jobs:
           repository: range42/range42-ansible_roles-proxmox_controller
           ref: 617b57cddecbe4ddedd1f72becc7023bbcdf2114
           path: runtime-contract/controller
+      - name: Checkout reviewed native shell devkits
+        uses: actions/checkout@v6
+        with:
+          repository: range42/range42-ansible_roles-debug-devkit
+          ref: bd0e8eafdd14dec9a8b3cca63248b5ddc14c9da3
+          path: runtime-contract/devkit
       - name: Checkout reviewed native installer bundles
         uses: actions/checkout@v6
         with:
