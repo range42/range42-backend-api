@@ -109,7 +109,7 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
     tasks = [{"name": "Render saved scenario inventory for the selected context", "ansible.builtin.template": {
         "src": str(source / descriptor["inventory_template"]), "dest": str(view / "inventory/inventory_default.yml"), "mode": "0600"}}]
     ssh_template = source / "templates/ssh-config.j2"
-    ssh_config = view / "ssh-config"
+    ssh_config = view / "scenario-ssh-config"
     if ssh_template.is_file():
         tasks.append({"name": "Render saved scenario SSH configuration", "ansible.builtin.template": {
             "src": str(ssh_template), "dest": str(ssh_config), "mode": "0600"}})
@@ -133,6 +133,14 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         environment["RANGE42_BUNDLE_DIR"] = str(execution_project / descriptor["bundle_path"])
     use_ssh = ssh_template.is_file() or ssh_config.is_file()
     if use_ssh:
+        # Put verified context trust before saved Host directives. The included
+        # configuration also reaches ProxyJump subprocesses, which do not inherit
+        # the outer client's command-line known_hosts options.
+        policy = view / "ssh-config"
+        known_hosts = context.workspace / "ssh_keys/known_hosts"
+        _write(policy, "Host *\n  StrictHostKeyChecking yes\n  UserKnownHostsFile "
+               + json.dumps(str(known_hosts)) + "\nInclude " + json.dumps(str(ssh_config)) + "\n")
+        ssh_config = policy
         environment["ANSIBLE_SSH_COMMON_ARGS"] = "-F " + shlex.quote(str(ssh_config))
         _write(view / "bin/ssh", "#!/bin/sh\nexec " + shlex.quote(ssh) + " -F "
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
