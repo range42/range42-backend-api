@@ -144,6 +144,21 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         environment["ANSIBLE_SSH_COMMON_ARGS"] = "-F " + shlex.quote(str(ssh_config))
         _write(view / "bin/ssh", "#!/bin/sh\nexec " + shlex.quote(ssh) + " -F "
                + shlex.quote(str(ssh_config)) + ' "$@"\n', executable=True)
+    devkit = view / "native-devkit"
+    prepare_devkit = view / "prepare-devkit.py"
+    _write(prepare_devkit, '''import os,sys,shutil
+from pathlib import Path
+source=os.environ.get('RANGE42_ANSIBLE_ROLES__DEVKITS_DIR')
+if source:
+    source=Path(source).resolve()
+    if not source.is_dir():
+        raise SystemExit('The selected native devkit directory is unavailable')
+    destination=Path(sys.argv[1])
+    shutil.copytree(source,destination,symlinks=True,
+                    ignore=shutil.ignore_patterns('.git','secrets','__pycache__'))
+    destination.chmod(0o700)
+    (destination/'secrets').symlink_to(Path(sys.argv[2])/'secrets',target_is_directory=True)
+''')
     lines = ['r42_runner_callbacks="${ANSIBLE_CALLBACK_PLUGINS:-}"',
              f"export RANGE42_CONFIG_BASE_DIR={shlex.quote(str(context.workspace.parent))}",
              "export RANGE42_QUIET=1",
@@ -159,6 +174,14 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
              '[[ "${RANGE42_ACTIVE_CONFIG_DIR:A}" == ' + shlex.quote(str(context.workspace)) + ' ]] || exit 71',
              *[f"export {name}={shlex.quote(value)}" for name, value in environment.items()],
              f"export PATH={shlex.quote(str(view / 'bin'))}:\"$PATH\"",
+             # Native shell tools require their own secrets link to identify the
+             # active context. Keep that link in this attempt, never in the
+             # shared read-only runtime or another registered workspace.
+             shlex.join([sys.executable, str(prepare_devkit), str(devkit), str(context.workspace)]) + " || exit $?",
+             "if [[ -d " + shlex.quote(str(devkit)) + " ]]; then",
+             "export RANGE42_ANSIBLE_ROLES__DEVKITS_DIR=" + shlex.quote(str(devkit)),
+             "export PATH=" + shlex.quote(str(view / "bin")) + ":" + shlex.quote(str(devkit)) + ':"$PATH"',
+             "fi",
              shlex.join([ansible, "-i", "localhost,", "-c", "local", str(view / "prepare.yml"),
                          "--extra-vars", "@" + str(view / "prepare-vars.json")]) + " || exit $?",
              "range42-context " + _COMMANDS[scope], "exit $?"]
