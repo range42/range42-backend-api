@@ -2502,6 +2502,75 @@
         }
       }
     },
+    "/v1/catalog/sources/{source_id}/native-preview": {
+      "get": {
+        "tags": [
+          "v1 catalog"
+        ],
+        "summary": "Native Preview",
+        "description": "Read only a registered source's reviewed native scenario through server Git.",
+        "operationId": "native_preview_v1_catalog_sources__source_id__native_preview_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "title": "Path"
+            }
+          },
+          {
+            "name": "sha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{40}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sha"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/catalog/sources/{source_id}/bundles/resolve": {
       "post": {
         "tags": [
@@ -6595,6 +6664,122 @@
         }
       }
     },
+    "/v1/admin/workshop": {
+      "get": {
+        "tags": [
+          "v1 admin",
+          "v1 workshop administration"
+        ],
+        "summary": "Status",
+        "operationId": "status_v1_admin_workshop_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workshop/actions": {
+      "post": {
+        "tags": [
+          "v1 admin",
+          "v1 workshop administration"
+        ],
+        "summary": "Action",
+        "operationId": "action_v1_admin_workshop_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workshop/seats/{username}/handout": {
+      "get": {
+        "tags": [
+          "v1 admin",
+          "v1 workshop administration"
+        ],
+        "summary": "Handout",
+        "operationId": "handout_v1_admin_workshop_seats__username__handout_get",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^user(?:0[1-9]|10)$",
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "summary": "Liveness",
@@ -8038,6 +8223,39 @@
           "updated_at"
         ],
         "title": "DeploymentOut"
+      },
+      "Device": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "online": {
+            "type": "boolean",
+            "title": "Online"
+          },
+          "bound": {
+            "type": "boolean",
+            "title": "Bound",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "address",
+          "online"
+        ],
+        "title": "Device"
       },
       "DiskGrowth": {
         "properties": {
@@ -11555,6 +11773,67 @@
           "proxmox_node": "px-testing"
         }
       },
+      "Operation": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "title": "Operation Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": ""
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id",
+          "state"
+        ],
+        "title": "Operation"
+      },
       "Page_AttemptOut_": {
         "properties": {
           "items": {
@@ -13419,6 +13698,93 @@
           "type"
         ],
         "title": "SdnZone"
+      },
+      "Seat": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "proxmox_address": {
+            "type": "string",
+            "title": "Proxmox Address"
+          },
+          "deployer_address": {
+            "type": "string",
+            "title": "Deployer Address"
+          },
+          "account_ready": {
+            "type": "boolean",
+            "title": "Account Ready",
+            "default": false
+          },
+          "key_ready": {
+            "type": "boolean",
+            "title": "Key Ready",
+            "default": false
+          },
+          "handout_ready": {
+            "type": "boolean",
+            "title": "Handout Ready",
+            "default": false
+          },
+          "closed": {
+            "type": "boolean",
+            "title": "Closed",
+            "default": false
+          },
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Device"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/Device"
+            },
+            "type": "array",
+            "title": "Devices"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
+          },
+          "deployment_state": {
+            "type": "string",
+            "title": "Deployment State",
+            "default": "not_created"
+          },
+          "certificate_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate Fingerprint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "proxmox_address",
+          "deployer_address"
+        ],
+        "title": "Seat"
       },
       "SnapshotCreate": {
         "properties": {
@@ -18260,6 +18626,120 @@
         ],
         "title": "VmSummary",
         "description": "A qemu VM or LXC container on a registered host's node."
+      },
+      "WorkshopAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "prepare",
+              "accounts",
+              "keys",
+              "handouts",
+              "bind",
+              "revoke",
+              "close",
+              "deploy",
+              "configure",
+              "reset",
+              "teardown",
+              "replace_key"
+            ],
+            "title": "Action"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^user(?:0[1-9]|10)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "seats": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seats"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "WorkshopAction"
+      },
+      "WorkshopStatus": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "seats": {
+            "items": {
+              "$ref": "#/components/schemas/Seat"
+            },
+            "type": "array",
+            "title": "Seats"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            },
+            "type": "array",
+            "title": "Operations"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "title": "Configuration Revision",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "expires_at",
+          "seats"
+        ],
+        "title": "WorkshopStatus"
       }
     }
   }
