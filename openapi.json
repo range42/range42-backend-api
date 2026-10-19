@@ -18643,9 +18643,22 @@
               "configure",
               "reset",
               "teardown",
-              "replace_key"
+              "replace_key",
+              "link"
             ],
             "title": "Action"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
           },
           "username": {
             "anyOf": [
@@ -18742,6 +18755,17 @@
               }
             ],
             "title": "Cohort Deployment Id"
+          },
+          "cohort_seats": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cohort Seats"
           }
         },
         "type": "object",

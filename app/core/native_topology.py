@@ -89,7 +89,7 @@ def reservations(root: Path, base: Path, manifest: dict) -> dict:
 
 
 def scenario_topology(root: Path, base: Path, manifest: dict) -> dict:
-    keys = ("vm_id", "vm_name", "ip", "bridge", "role", "group", "spec", "cores", "memory_mib", "disk_gib")
+    keys = ("vm_id", "vm_name", "ip", "bridge", "role", "group", "spec", "cores", "memory_mib", "disk_gib", "seat")
     def public(rows):
         if not isinstance(rows, list) or len(rows) > 1024 or any(not isinstance(row, dict) for row in rows):
             raise ValueError("Invalid scenario resource declarations")

@@ -129,12 +129,14 @@ class WorkshopStatus(BaseModel):
     operations: list[Operation] = Field(default_factory=list)
     configuration_revision: str = ''
     cohort_deployment_id: str | None = None
+    cohort_seats: int | None = None
 
 
 class WorkshopAction(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     action: Literal['prepare', 'accounts', 'keys', 'handouts', 'bind', 'revoke', 'close',
-                    'deploy', 'configure', 'reset', 'teardown', 'replace_key']
+                    'deploy', 'configure', 'reset', 'teardown', 'replace_key', 'link']
+    deployment_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
     username: str | None = Field(default=None, pattern=USERNAME)
     node_id: int | None = Field(default=None, gt=0)
     seats: int | None = Field(default=None, ge=1, le=10)
@@ -142,6 +144,8 @@ class WorkshopAction(BaseModel):
 
     @model_validator(mode='after')
     def validate_scope(self):
+        if (self.action == 'link') != (self.deployment_id is not None):
+            raise ValueError('Select a saved deployment only when connecting participant management')
         seat_actions = {'bind', 'revoke', 'close', 'deploy', 'configure', 'reset', 'teardown', 'replace_key'}
         if (self.action in seat_actions) != (self.username is not None):
             raise ValueError('Select one participant for a seat action')
@@ -164,7 +168,7 @@ async def status():
 
 @router.post('/actions', response_model=Operation, status_code=202)
 async def action(request: WorkshopAction):
-    return await agent_request(request.model_dump(exclude={'confirmation'}))
+    return await agent_request(request.model_dump(exclude={'confirmation'} | ({'deployment_id'} if request.deployment_id is None else set())))
 
 
 @router.get('/seats/{username}/handout')

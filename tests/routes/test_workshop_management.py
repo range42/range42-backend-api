@@ -185,3 +185,21 @@ async def test_status_preserves_the_verified_cohort_deployment_link(monkeypatch)
         response = await client.get('/v1/admin/workshop')
         assert response.status_code == 200
         assert response.json()['cohort_deployment_id'] == 'cohort-one'
+
+
+@pytest.mark.asyncio
+async def test_linking_uses_a_bounded_deployment_identifier(monkeypatch):
+    from app.routes.v1.admin import workshop
+    from app.main import create_app
+    calls=[]
+    async def agent(value):
+        calls.append(value)
+        return {'operation_id':'link-one','state':'queued'}
+    monkeypatch.setattr(workshop,'agent_request',agent)
+    async with AsyncClient(transport=ASGITransport(app=create_app()),base_url='http://test') as client:
+        for identifier in ['../other','x/y','a'*129]:
+            assert (await client.post('/v1/admin/workshop/actions',json={'action':'link','deployment_id':identifier})).status_code==422
+        response=await client.post('/v1/admin/workshop/actions',json={'action':'link','deployment_id':'new-cohort'})
+        assert response.status_code==202
+        assert calls[-1]['deployment_id']=='new-cohort'
+        assert (await client.post('/v1/admin/workshop/actions',json={'action':'configure','username':'user01','deployment_id':'new-cohort'})).status_code==422
