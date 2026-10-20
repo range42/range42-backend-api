@@ -124,9 +124,44 @@ async def _closed_scopes(session):
 
 
 async def assert_deployment_admitted(session, deployment_id):
-    for row, _ in await _closed_scopes(session):
-        if row.deployment_id == deployment_id:
-            raise refused("DEPLOYMENT_WRITES_PAUSED")
+    closed = await _closed_scopes(session)
+    if not closed:
+        return
+    if any(row.deployment_id == deployment_id for row, _ in closed):
+        raise refused("DEPLOYMENT_WRITES_PAUSED")
+    deployment = await _deployment(session, deployment_id)
+    claim = await session.scalar(
+        select(DeploymentAllocation)
+        .where(DeploymentAllocation.deployment_id == deployment_id)
+        .execution_options(populate_existing=True)
+    )
+    try:
+        if claim is not None:
+            host = await session.get(
+                ProxmoxHost, deployment.target_host_id, populate_existing=True
+            )
+            validate_binding(claim, deployment, host)
+            vmids = [vm["vm_id"] for vm in claim.assignments]
+        else:
+            # Earlier native workshop controls created separate per-seat records
+            # for the same physical guests. Their different deployment ID is not
+            # a distinct mutation scope. Use the retained server-side descriptor.
+            native = deployment.native or {}
+            vmids = native.get("descriptor", {}).get("declared_vmids")
+        if (
+            not isinstance(vmids, list)
+            or not 1 <= len(vmids) <= 4096
+            or any(
+                type(vmid) is not int or not 100 <= vmid <= 999999999 for vmid in vmids
+            )
+        ):
+            raise ValueError()
+    except (ValueError, TypeError, KeyError, AttributeError, Range42Error):
+        # Legacy work without a trustworthy bounded VM scope cannot safely run
+        # alongside a closed allocation. It needs ownership review first.
+        raise refused() from None
+    if any(set(vmids).intersection(scope["vm_ids"]) for _, scope in closed):
+        raise refused("DEPLOYMENT_WRITES_PAUSED")
 
 
 async def assert_vm_admitted(session, vmid):

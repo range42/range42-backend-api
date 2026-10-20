@@ -374,3 +374,52 @@ async def test_unresolved_remote_snapshot_remains_draining_even_after_lock_loss(
             request_id="2" * 32,
         )
     assert error.value.code == "DEPLOYMENT_ADMISSION_DRAINING"
+
+
+@pytest.mark.asyncio
+async def test_legacy_child_record_cannot_bypass_its_paused_parent_vm_scope(env):
+    mod, factory, _, root = env
+    await change(env)
+    async with factory() as session:
+        session.add(
+            Deployment(
+                id="legacy-child",
+                codename="CHILD",
+                scenario_label="legacy-workshop",
+                project_id="p",
+                target_host_id="h",
+                project_sha="a" * 40,
+                workspace_path=str(root / "child"),
+                native={
+                    "descriptor": {"declared_vmids": [45000]},
+                    "parameters": {"WORKSHOP_ONLY_SEAT": 1},
+                },
+            )
+        )
+        await session.commit()
+    async with factory() as session:
+        with pytest.raises(Range42Error) as error:
+            await mod.assert_deployment_admitted(session, "legacy-child")
+    assert error.value.code == "DEPLOYMENT_WRITES_PAUSED"
+
+
+@pytest.mark.asyncio
+async def test_unscoped_legacy_deployment_cannot_dispatch_while_any_run_is_closed(env):
+    mod, factory, _, root = env
+    await change(env)
+    async with factory() as session:
+        session.add(
+            Deployment(
+                id="unscoped",
+                codename="UNKNOWN",
+                scenario_label="old-lab",
+                project_id="p",
+                target_host_id="h",
+                workspace_path=str(root / "unknown"),
+            )
+        )
+        await session.commit()
+    async with factory() as session:
+        with pytest.raises(Range42Error) as error:
+            await mod.assert_deployment_admitted(session, "unscoped")
+    assert error.value.code == "DEPLOYMENT_ADMISSION_REVIEW_REQUIRED"

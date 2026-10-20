@@ -52,7 +52,9 @@ A committed pause blocks new attempt reservations and checks again immediately
 before checkout/runner dispatch. It also blocks snapshot-set execution, allocation
 release and raw owned-VM power, deletion, snapshot, configuration, NIC and disk
 writes. VM IDs are exclusive across this installation's allocator, so using a
-second credential or target alias cannot bypass the pause. Other runs remain
+second credential or target alias cannot bypass the pause. Earlier native per-seat
+deployment records are checked against their declared VM IDs too; unscoped legacy
+deployments require ownership review while a run is closed. Other runs remain
 available through their scoped v1 operations. Unscoped legacy v0 administrative
 writes are blocked backend-wide while any run is closed. Legacy HTTP writers and
 all detached attempt dispatches now share the provisioning lock; an active owned
