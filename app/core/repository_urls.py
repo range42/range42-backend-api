@@ -12,6 +12,10 @@ GIT_HTTP_ENV = {
     "GIT_CONFIG_KEY_0": "http.followRedirects",
     "GIT_CONFIG_VALUE_0": "false",
     "GIT_TERMINAL_PROMPT": "0",
+    # GitPython clones return a process before its kill_after_timeout watchdog
+    # starts. Bound real libcurl connection/transfer stalls on every read path.
+    "GIT_HTTP_LOW_SPEED_LIMIT": "100",
+    "GIT_HTTP_LOW_SPEED_TIME": "20",
 }
 
 
