@@ -4897,6 +4897,98 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/write-admission": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Get Admission",
+        "operationId": "get_admission_v1_deployments__deployment_id__write_admission_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentAdmissionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Change Admission",
+        "operationId": "change_admission_v1_deployments__deployment_id__write_admission_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentAdmissionChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentAdmissionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts": {
       "get": {
         "tags": [
@@ -8988,6 +9080,172 @@
           "hosts": "all",
           "proxmox_node": "px-testing"
         }
+      },
+      "DeploymentAdmissionChange": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "exclusiveMaximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Request Id"
+          },
+          "pause_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Id"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "RESUME"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "expected_revision",
+          "request_id"
+        ],
+        "title": "DeploymentAdmissionChange"
+      },
+      "DeploymentAdmissionState": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "managed_deployment_writers",
+            "title": "Scope"
+          },
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "draining",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "pause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Id"
+          },
+          "vm_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Vm Ids"
+          },
+          "active_attempts": {
+            "type": "integer",
+            "title": "Active Attempts"
+          },
+          "held_workspace_locks": {
+            "type": "integer",
+            "title": "Held Workspace Locks"
+          },
+          "active_snapshot_operations": {
+            "type": "integer",
+            "title": "Active Snapshot Operations"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "remote_quiescence_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Remote Quiescence Verified"
+          },
+          "capacity_borrowing_allowed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Capacity Borrowing Allowed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "deployment_id",
+          "available",
+          "state",
+          "revision",
+          "pause_id",
+          "vm_ids",
+          "active_attempts",
+          "held_workspace_locks",
+          "active_snapshot_operations",
+          "changed_by",
+          "changed_at",
+          "remote_quiescence_verified",
+          "capacity_borrowing_allowed"
+        ],
+        "title": "DeploymentAdmissionState"
       },
       "DeploymentAllocationOut": {
         "properties": {

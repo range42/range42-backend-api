@@ -124,6 +124,12 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
             message="This deployment already has an active attempt or a runner still shutting down. "
                     "Wait for it to finish before retrying.",
         )
+    from app.core.deployment_admission import assert_deployment_admitted
+    try:
+        await assert_deployment_admitted(session, deployment_id)
+    except Range42Error:
+        await session.rollback()
+        raise
     if not dep.project_sha and scope != "full":
         from app.core.deploy_trigger import resolve_attempt_playbook
         try:

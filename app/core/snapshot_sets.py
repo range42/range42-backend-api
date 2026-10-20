@@ -601,6 +601,8 @@ async def execute(deployment_id, set_id, plan_digest):
     with ProvisioningLock(Path(Settings().workspace_root) / ".locks"):
         async with db.get_session_factory()() as session:
             await session.execute(text("BEGIN IMMEDIATE"))
+            from app.core.deployment_admission import assert_deployment_admitted
+            await assert_deployment_admitted(session, deployment_id)
             snapshot = await session.get(SnapshotSet, set_id)
             operation = await session.scalar(
                 select(SnapshotOperation).where(

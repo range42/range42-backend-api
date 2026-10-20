@@ -522,3 +522,5 @@ Browser requests cannot supply commands, file paths, network policies or source
 revisions. With no worker configured the endpoints return `WORKSHOP_UNAVAILABLE`.
 
 Physical node identity for reusable preparation is an optional, administrator-reviewed [SSH/HTTPS binding](docs/physical-node-identity.md). Recording identity does not enable capacity admission or native preparation.
+
+Deployment Overview supports [durable managed-write pauses](docs/workshop-admission.md) for exact owned VM allocations. A pause coordinates dispatch; it does not release capacity or attest remote quiescence.

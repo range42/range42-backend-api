@@ -1,4 +1,4 @@
-# Durable legacy workshop queue admission
+# Durable workshop and deployment write admission
 
 Administrator-only `GET /v1/admin/workshop/admission` reads the installed
 controller boundary. `POST` changes it using strict desired input:
@@ -36,3 +36,59 @@ Run the focused route checks with
 `python -m pytest -q tests/routes/test_workshop_admission.py tests/routes/test_workshop_management.py`.
 The disposable browser test uses actual source API and verified SSH/dispatcher
 with synthetic roster/job completion; it is not physical deployment acceptance.
+
+
+## Managed deployment and VM writes
+
+Existing deployment Overview also offers **Review maintenance access**. This
+reads `GET /v1/deployments/{deployment_id}/write-admission`; viewers and operators
+can inspect the decision, while only an administrator can change it with `POST`.
+The request shape is the same reviewed pause/resume proof above. VM IDs, target,
+actor and readiness flags cannot be supplied by the browser. The server obtains
+its exact scope from the retained `DeploymentAllocation` and its original target
+and pinned revision. It never infers ownership from a name, template or URL.
+
+A committed pause blocks new attempt reservations and checks again immediately
+before checkout/runner dispatch. It also blocks snapshot-set execution, allocation
+release and raw owned-VM power, deletion, snapshot, configuration, NIC and disk
+writes. VM IDs are exclusive across this installation's allocator, so using a
+second credential or target alias cannot bypass the pause. Other runs remain
+available through their scoped v1 operations. Unscoped legacy v0 administrative
+writes are blocked backend-wide while any run is closed. Legacy HTTP writers and
+all detached attempt dispatches now share the provisioning lock; an active owned
+runner keeps its inherited descriptor even if the API exits.
+
+State is retained in SQLite across restarts. `open`, `draining` and `closed`
+describe new dispatch admission and local ownership only. Counts include all
+nonterminal attempts, held workspace locks and unresolved native snapshot-set
+operations, including a remote operation whose local lock was lost. Accepted
+snapshot reconciliation and attempt cancellation remain available; a pause does
+not replay, cancel or undo accepted remote work. Exact last-request recovery
+returns the original decision, and a stale revision/pause ID cannot resume a
+later administrator's pause. Resume requires typed `RESUME` and is refused
+while those known operations remain. The UI invalidates previous deployment
+preflight approval across pause/resume and discards proofs when the selected
+backend, credential or deployment changes.
+
+Missing, altered or corrupt retained ownership fails closed; restore/reconcile
+that original scope rather than deleting its pause row. Migration 0014 preserves
+existing credentials and refuses downgrade while admission records exist.
+`DEPLOYMENT_WRITES_PAUSED` is 423; changed/draining/review-required decisions are 409.
+
+This does **not** freeze the separate legacy participant controller, stop a VM,
+attest all previous raw/external PVE workers, reserve physical resources, lend
+capacity, or qualify managed environment preparation. `remote_quiescence_verified`
+and `capacity_borrowing_allowed` remain false. Do not stop Friday guests or reuse
+their RAM based on this decision alone. Operators can run accepted project code;
+this is dispatch coordination within one installation, not a sandbox against an
+administrator or arbitrary external hypervisor writers. Shared storage writes
+outside the owned VM scope require their own future capacity coordination.
+
+Focused checks:
+`python -m pytest -q tests/core/test_deployment_admission.py tests/core/test_deployment_admission_migration.py tests/routes/test_deployment_admission.py`.
+Source acceptance used a production-built UI, actual API, real Alembic migrations
+and synthetic retained allocations. Six browser checks and seven accessibility
+scans passed, including actual committed/lost replies, alias refusal, concurrent
+administrator proof and mobile keyboard focus. One other synthetic run reserved
+an unstarted attempt with auto-start disabled; no runner, provider, VPN or VM
+operation ran. All fixture services were stopped after acceptance.

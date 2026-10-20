@@ -30,6 +30,8 @@ async def _session() -> AsyncSession:
 
 
 async def _assert_snapshot_member_free(session: AsyncSession, vmid: int) -> None:
+    from app.core.deployment_admission import assert_vm_admitted
+    await assert_vm_admitted(session, vmid)
     from app.core.snapshot_models import SnapshotOperation, SnapshotSet
     members = await session.scalars(select(SnapshotSet.members).join(
         SnapshotOperation, SnapshotOperation.set_id == SnapshotSet.id
