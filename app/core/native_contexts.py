@@ -33,6 +33,8 @@ class NativeContext:
     provisioning_credential: str = field(default="", repr=False, compare=False)
 
     registration_issue: str = ""
+    purpose: str = "native"
+    execution_ready: bool = True
 
     def issues(self) -> list[str]:
         if self.registration_issue:
@@ -168,6 +170,7 @@ def available_contexts(hosts: list, *, registered: list[NativeContext] | None = 
         rows.append({"id": context.id, "label": context.label, "codename": context.codename,
                      "scenario": context.scenario, "target_host_id": matches[0].id if len(matches) == 1 else None,
                      "ready": not issues, "issues": issues,
+                     "purpose": context.purpose, "execution_ready": context.execution_ready,
                      "workshop_profile": context.workshop_profile.public() if context.workshop_profile else None})
     return rows
 
@@ -186,3 +189,11 @@ def resolve_context(identity: str, host, *, registered: list[NativeContext] | No
         raise invalid(" ".join(issues), "NATIVE_CONTEXT_UNAVAILABLE")
     return replace(context, node_name=getattr(host, "node_name", ""),
                    provisioning_credential=getattr(host, "token_ref", ""))
+
+
+def execution_issue(context, scope):
+    if (getattr(context, 'purpose', 'native') == 'workshop'
+            and not getattr(context, 'execution_ready', False)
+            and scope not in {'teardown', 'delete_vms', 'delete_networks'}):
+        return 'This environment is registered for planning. Its reusable infrastructure has not been qualified. Prepare and verify its source templates and network policy before starting guests.'
+    return ''

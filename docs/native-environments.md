@@ -19,7 +19,10 @@ private participant pool, network count, first bridge number, source template
 IDs and storage. Review expands the pool into exact /28 subnet/gateway/bridge
 pairs. Save requires the same review revision. The backend repeats review and
 refuses changes to target credentials, protected VM ID settings, runtime files
-or the submitted bounds between review and save. Credentials remain encrypted
+or the submitted bounds between review and save. Optional retained gateway references
+are observed through the selected target: current and pending ownership, VM
+generation, bridge/interface and MAC must match. New references are checked again
+on review and save; unrelated guest fields and credentials are never returned. Credentials remain encrypted
 on the existing target record; they are not duplicated in the environment table
 or returned by these endpoints. The UI clears entered credentials on submission
 and when the active backend changes, and does not persist them in browser data.
@@ -39,6 +42,7 @@ context discovery remains available through the existing `/v1/contexts` route.
 | Method and path | Behavior |
 | --- | --- |
 | `GET /v1/environments` | Registered versions, current planning readiness and trusted runtime choices. No runtime filesystem paths or credentials. |
+| `POST /v1/environments/infrastructure/review` | Observe selected managed gateway VM IDs on this profile’s participant bridges. |
 | `POST /v1/environments/review` | Review one `EnvironmentSelection`; return its revision and explicit preparation requirements. |
 | `POST /v1/environments` | Persist the reviewed selection with `review_revision`. |
 | `POST /v1/environments/{id}/review` | Review the current inputs of an existing immutable version. |
@@ -54,7 +58,12 @@ input and are not included in public profile projections.
 ## Readiness boundary
 
 Registration enables planning. Responses deliberately report
-`infrastructure_qualified: false`. Live preflight still needs source template,
+`infrastructure_qualified: false`. Managed versions are workshop-only and cannot
+be used for an unbounded native scenario. Preflight and the attempt dispatcher
+both block guest creation/configuration until infrastructure qualification is
+available. Owned cleanup remains allowed; its original VM generation checks
+still apply. Credential revalidation preserves these immutable pins and remains
+possible while a gateway is offline. Live preflight still needs source template,
 bridge, guest ownership and capacity evidence; laptop access, routing, DNS and
 browser trust require the selected access integration. This form does not
 create or certify bridges, gateways, templates or VPN enrollment. Their accepted

@@ -2,7 +2,7 @@
 import asyncio
 from datetime import datetime
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,10 +10,10 @@ from sqlalchemy import func, select
 
 from app.core.native_contexts import _api_binding, _contexts
 from app.core.native_environment_models import NativeEnvironment
-from app.core.native_environments import EnvironmentSelection, refused, registered_contexts, review, selection_for
+from app.core.native_environments import EnvironmentSelection, refused, registered_contexts, review, review_inputs, selection_for
 from app.core.models import ProxmoxHost
 from app.routes.v1.native import _session
-from app.core.workshop_profiles import WorkshopProfileView
+from app.core.workshop_profiles import InfrastructureGuest, WorkshopProfileView
 
 router = APIRouter(prefix='/environments', tags=['v1 native environments'])
 
@@ -56,6 +56,14 @@ class EnvironmentPage(BaseModel):
     items: list[EnvironmentOut]
     total: int
     base_contexts: list[BaseContextOut]
+
+
+class InfrastructureSelection(EnvironmentSelection):
+    vmids: list[Annotated[int, Field(ge=100, le=999999999)]] = Field(min_length=1, max_length=32)
+
+
+class InfrastructureOut(BaseModel):
+    guests: list[InfrastructureGuest]
 
 
 class EnvironmentRegistration(EnvironmentSelection):
@@ -106,6 +114,15 @@ async def listing(session=Depends(_session)):
          'issues': base.issues()} for base in bases if base.target_api_url and base.target_node]}
 
 
+@router.post('/infrastructure/review', response_model=InfrastructureOut)
+async def infrastructure(payload: InfrastructureSelection, session=Depends(_session)):
+    from app.core.native_environment_infrastructure import observe
+    selection = EnvironmentSelection.model_validate(payload.model_dump(exclude={'vmids'}))
+    _, host = await review_inputs(session, selection)
+    guests = await observe(host, payload.vmids, {network.bridge for network in payload.workshop_profile.networks})
+    return {'guests': guests}
+
+
 @router.post('/review', response_model=EnvironmentReviewOut)
 async def preview(payload: EnvironmentSelection, session=Depends(_session)):
     return await review(session, payload)
@@ -134,14 +151,18 @@ async def create(payload: EnvironmentRegistration, request: Request, session=Dep
 async def review_existing(environment_id: str, session=Depends(_session)):
     row = await record(session, environment_id)
     await unchanged_target(session, row)
-    return await review(session, selection_for(row))
+    current, _ = await review_inputs(session, selection_for(row))
+    return current
 
 
 @router.post('/{environment_id}/revalidate', response_model=EnvironmentOut)
 async def revalidate(environment_id: str, payload: Revalidation, request: Request, session=Depends(_session)):
     row = await record(session, environment_id)
     await unchanged_target(session, row)
-    current = await review(session, selection_for(row))
+    # Preserve credential rotation and owned cleanup when a retained gateway is
+    # offline. New bindings are observed at registration; execution checks its
+    # original pins again before any guest is started.
+    current, _ = await review_inputs(session, selection_for(row))
     if current['revision'] != payload.review_revision:
         raise refused('Environment inputs changed during review. Refresh and review again.')
     row.review_revision = payload.review_revision

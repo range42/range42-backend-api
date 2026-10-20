@@ -104,6 +104,9 @@ async def prepare_project_scenario(
             native = {**native, 'workshop_plan': plan}
         from app.core.native_environments import resolve_registered_context
         context = await resolve_registered_context(session, native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
+        if context.purpose == 'workshop' and not plan:
+            raise Range42Error(status=409, code='NATIVE_ENVIRONMENT_PURPOSE',
+                message='This registered environment is bounded to typed workshop runs. Choose its workshop scenario or an ordinary native context for another workflow.')
         if plan:
             from app.core.workshop_profiles import require_workshop_profile
             require_workshop_profile(context, plan)

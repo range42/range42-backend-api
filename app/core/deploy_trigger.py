@@ -150,6 +150,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         if vmid_check.result == "block":
             raise PreflightBlockedError(message=vmid_check.detail)
         if scenario.native:
+            from app.core.native_contexts import execution_issue
+            if issue := execution_issue(scenario.context, attempt.scope):
+                raise PreflightBlockedError(message=issue)
             from app.core.native_execution import prepare_native_run
             native = scenario.native
             if plan := native.get('workshop_plan'):

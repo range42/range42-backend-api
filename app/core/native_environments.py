@@ -79,11 +79,23 @@ def review_selection(selection, host, base):
             'Laptop access, routing, DNS and browser trust require the selected installation’s access integration.']}
 
 
-async def review(session, selection):
+async def review_inputs(session, selection):
     host = await session.get(ProxmoxHost, selection.target_host_id)
     bases = await asyncio.to_thread(_contexts)
     base = next((item for item in bases if item.id == selection.base_context_id), None)
-    return await asyncio.to_thread(review_selection, selection, host, base)
+    return await asyncio.to_thread(review_selection, selection, host, base), host
+
+
+async def review(session, selection):
+    result, host = await review_inputs(session, selection)
+    if selection.workshop_profile.infrastructure_guests:
+        from app.core.native_environment_infrastructure import canonical, observe, refused
+        expected = selection.workshop_profile.infrastructure_guests
+        actual = await observe(host, [guest.vmid for guest in expected],
+            {network.bridge for network in selection.workshop_profile.networks})
+        if canonical(expected) != canonical(actual):
+            raise refused()
+    return result
 
 
 async def registered_contexts(session, *, identity=None):
@@ -112,7 +124,8 @@ async def registered_contexts(session, *, identity=None):
                 Path('/__unavailable_native_runtime__'), '', '', urlsplit(row.target_api_url).hostname or '')
         result.append(replace(base, id=row.id, label=row.label,
             target_host_id=row.target_host_id, target_node=row.target_node, target_api_url=row.target_api_url,
-            workshop_profile=WorkshopProfile.model_validate_json(row.profile_json), registration_issue=issue))
+            workshop_profile=WorkshopProfile.model_validate_json(row.profile_json), registration_issue=issue,
+            purpose='workshop', execution_ready=False))
     return result
 
 
