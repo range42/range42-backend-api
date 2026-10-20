@@ -83,6 +83,17 @@ def receipt(path: Path) -> dict:
         os.close(descriptor)
 
 
+def _template_network(config):
+    if not isinstance(config, dict):
+        return False
+    nics = {key for key in config if re.fullmatch(r'net[0-9]+', key)}
+    value = config.get('net0')
+    return (nics == {'net0'} and isinstance(value, str)
+        and bool(re.match(r'^[A-Za-z][A-Za-z0-9_-]*=(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}(?:,|$)', value))
+        and len(re.findall(r'(?:^|,)bridge=', value)) == 1
+        and bool(re.search(r'(?:^|,)bridge=[A-Za-z][A-Za-z0-9_.-]{0,14}(?:,|$)', value)))
+
+
 async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | None = None,
                           seat: int = 0, client=None, profile: WorkshopProfile | None = None) -> list[PreflightCheck]:
     if client is None:
@@ -155,13 +166,13 @@ async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | 
             for template in (plan['proxmox_template'], plan['deployer_template']):
                 templates[template] = await read_proxmox_data(client, host, f'{node}/qemu/{template}/config')
             nested = templates[plan['proxmox_template']]
-            template_ok = all(config.get('template') == 1 and 'cloudinit' in config.get('ide2', '')
+            template_ok = all(_template_network(config) and config.get('template') == 1 and 'cloudinit' in config.get('ide2', '')
                 and bool(re.search(r'(?:^|,)size=32G(?:,|$)', config.get('scsi0', '')))
                 and not any(re.fullmatch(r'(?:hostpci|usb|unused)[0-9]+|args|hookscript|cicustom|net[1-9][0-9]*', key) for key in config)
                 and not config.get('lock') and str(config.get('agent', '')).split(',')[0] in {'1', 'enabled=1'}
                 for config in templates.values())
             template_ok = template_ok and nested.get('cpu') == 'host' and bool(re.search(r'(?:^|,)size=128G(?:,|$)', nested.get('scsi1', '')))
-            result('templates', bool(template_ok), 'Both source templates must be unlocked cloud-init templates with an enabled guest agent; nested Proxmox requires host CPU and its separate 128 GiB lab disk.')
+            result('templates', bool(template_ok), 'Both source templates must be unlocked cloud-init templates with one bridged NIC and an enabled guest agent; nested Proxmox requires host CPU and its separate 128 GiB lab disk.')
             bridges = await list_proxmox_data(client, host, node + '/network')
             by_name = {row['iface']: row for row in bridges if isinstance(row.get('iface'), str)}
             expected = {vm['bridge'] for vm in selected}
