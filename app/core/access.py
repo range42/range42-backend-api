@@ -57,6 +57,7 @@ def configured_principals(settings: Settings) -> dict[str, Principal]:
 
 # Route templates, never user-supplied paths. New routes are denied until reviewed.
 VIEWER_READS = frozenset({
+    '/v1/deployments/{deployment_id}/workshop',
     "/v1/auth/me", "/v1/health", "/v1/health/ready", "/v1/infra/mirror/health",
     "/v1/catalog/sources", "/v1/catalog/entries", "/v1/catalog/entries/{source_id}/{path}",
     "/v1/projects/", "/v1/projects/{project_id}",
@@ -79,6 +80,8 @@ OPERATOR_READS = frozenset({
     "/v1/proxmox/hosts/{host_id}/reservations/{reservation_id}", "/v1/admin/retention",
 })
 OPERATOR_WRITES = frozenset({
+    ('POST', '/v1/deployments/{deployment_id}/workshop/participants/{username}/actions'),
+    ('POST', '/v1/projects/{project_id}/native-scenario/preview'),
     ("POST", "/v1/platform/components/preview"),
     ("PUT", "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/nics/{nic_id}"),
     ("PUT", "/v1/proxmox/hosts/{host_id}/vms/{vmid}/hardware/disks/{disk_id}/grow"),

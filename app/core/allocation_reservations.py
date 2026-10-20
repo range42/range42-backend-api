@@ -123,6 +123,12 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
         if current and row.id == current.id:
             continue
         for vm in row.assignments:
+            if exclusive := vm.get('exclusive_network'):
+                subnet = ipaddress.IPv4Network(exclusive)
+                bridges = {nic['bridge'] for nic in vm['nics']}
+                if any(network.bridge in bridges or ipaddress.IPv4Network(network.subnet).overlaps(subnet)
+                       for network in payload.networks):
+                    raise _error('NETWORK_OCCUPIED', 'An isolated workshop bridge or subnet is already owned. Choose a different network for this draft.')
             unavailable_ids.add(vm["vm_id"])
             unavailable_ips.update((nic["bridge"], nic["ip"]) for nic in vm["nics"])
     for network in payload.networks:

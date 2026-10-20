@@ -71,6 +71,76 @@ def test_explicit_context_registration_can_name_an_existing_workspace(tmp_path, 
     assert resolved.inventory_variables["custom_setting"] == "local"
 
 
+@pytest.mark.parametrize('fault', [None, 'missing_binding', 'duplicate_bridge', 'overlapping_network', 'gateway', 'template_in_guest_range', 'unknown_field'])
+def test_workshop_profiles_are_strict_server_configuration_with_exact_target_bindings(tmp_path, monkeypatch, fault):
+    from app.core.native_contexts import available_contexts
+    ws, script, host = context(tmp_path, monkeypatch)
+    profile = {'version': 1, 'id': 'approved-native', 'vmid_ranges': [[45000, 45039]],
+        'proxmox_template': 9240, 'deployer_template': 9241, 'storage': 'lab-storage',
+        'networks': [{'bridge': 'vmbr600', 'subnet': '10.78.0.0/28', 'gateway': '10.78.0.1'}]}
+    entry = {'id': 'approved-context', 'workspace': str(ws), 'context_script': str(script),
+        'target_host_id': host.id, 'target_node': host.node_name, 'target_api_url': host.api_url, 'workshop_profile': profile}
+    if fault == 'missing_binding':
+        del entry['target_host_id']
+    elif fault == 'duplicate_bridge':
+        profile['networks'].append({'bridge': 'vmbr600', 'subnet': '10.78.0.16/28', 'gateway': '10.78.0.17'})
+    elif fault == 'overlapping_network':
+        profile['networks'].append({'bridge': 'vmbr601', 'subnet': '10.78.0.0/28', 'gateway': '10.78.0.1'})
+    elif fault == 'gateway':
+        profile['networks'][0]['gateway'] = '10.78.0.2'
+    elif fault == 'template_in_guest_range':
+        profile['proxmox_template'] = 45001
+    elif fault == 'unknown_field':
+        profile['allow_any_bridge'] = True
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [entry]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
+    if fault:
+        with pytest.raises(Range42Error, match='invalid entry'):
+            available_contexts([host])
+    else:
+        result, = available_contexts([host])
+        assert result['ready'] and result['workshop_profile']['id'] == 'approved-native'
+        assert 'infrastructure_guests' not in result['workshop_profile']
+        assert 'not-public' not in json.dumps(result)
+
+
+def test_explicit_context_binding_selects_one_of_two_profiles_on_the_same_api(tmp_path, monkeypatch):
+    from app.core.native_contexts import available_contexts, resolve_context
+    workspace, script, existing = context(tmp_path, monkeypatch)
+    pool = SimpleNamespace(id='pool-profile', api_url=existing.api_url, node_name=existing.node_name)
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [{
+        'id': 'workshop-pool', 'label': 'Reusable provisioning', 'workspace': str(workspace),
+        'context_script': str(script), 'target_host_id': pool.id, 'target_node': pool.node_name,
+        'target_api_url': pool.api_url,
+    }]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
+    rows = available_contexts([existing, pool])
+    assert rows[0]['ready'] is True
+    assert rows[0]['target_host_id'] == pool.id
+    assert resolve_context('workshop-pool', pool).node_name == pool.node_name
+    with pytest.raises(Range42Error, match='target'):
+        resolve_context('workshop-pool', existing)
+
+
+@pytest.mark.parametrize('field,value', [('node_name', 'another-node'), ('api_url', 'https://192.0.2.10:9443'),
+                                      ('api_url', 'http://192.0.2.10:8006')])
+def test_bound_native_context_rejects_registration_drift(tmp_path, monkeypatch, field, value):
+    from app.core.native_contexts import available_contexts, resolve_context
+    workspace, script, host = context(tmp_path, monkeypatch)
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'version': 1, 'contexts': [{
+        'id': 'bound', 'workspace': str(workspace), 'context_script': str(script),
+        'target_host_id': host.id, 'target_node': host.node_name, 'target_api_url': host.api_url,
+    }]}))
+    monkeypatch.setenv('RANGE42_NATIVE_CONTEXTS_FILE', str(registry))
+    setattr(host, field, value)
+    assert available_contexts([host])[0]['ready'] is False
+    with pytest.raises(Range42Error, match='target'):
+        resolve_context('bound', host)
+
+
 @pytest.mark.parametrize("identity", ["../lab-demo", "/lab-demo", "missing"])
 def test_context_identifiers_never_become_arbitrary_paths(tmp_path, monkeypatch, identity):
     from app.core.native_contexts import resolve_context

@@ -77,3 +77,55 @@ def test_git_does_not_follow_http_redirects(tmp_path, monkeypatch, operation):
         server.shutdown()
         thread.join()
         server.server_close()
+
+
+@pytest.mark.parametrize("operation", ["catalog", "refresh", "compose"])
+def test_stalled_git_http_reads_fail_promptly(tmp_path, monkeypatch, operation):
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from app.core.repository_urls import GIT_HTTP_ENV
+    from app.core.models import Source, SourceRepo
+    from app.routes.v1.catalog import entries, refresh
+    from app.routes.v1.projects import compose
+
+    # Speed the production limit up for this real transport failure fixture.
+    if "GIT_HTTP_LOW_SPEED_TIME" in GIT_HTTP_ENV:
+        monkeypatch.setitem(GIT_HTTP_ENV, "GIT_HTTP_LOW_SPEED_TIME", "1")
+    received = threading.Event()
+    release = threading.Event()
+    class StalledHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.set()
+            release.wait(4)
+            self.send_response(503)
+            self.end_headers()
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), StalledHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    authority = f"127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("RANGE42_GIT_ALLOWED_HOSTS", authority)
+    monkeypatch.setenv("RANGE42_GIT_ALLOW_HTTP", "1")
+    source = Source(id="s", provider="generic", base_url=f"http://{authority}", auth_kind="none")
+    repository = SourceRepo(id="r", source_id="s", owner="o", repo="r", branch="main")
+    start = time.monotonic()
+    try:
+        with pytest.raises(Range42Error) as error:
+            if operation == "catalog":
+                entries._clone_repo(source, repository, tmp_path)
+            elif operation == "refresh":
+                refresh._count_entries_in_repo(source, repository)
+            else:
+                compose._load_base_and_overlay(Project(id="p", base_catalog_url=f"http://{authority}/o/r.git", base_catalog_sha="a" * 40))
+        elapsed = time.monotonic() - start
+        assert received.is_set()
+        assert error.value.code == "GIT_UNREACHABLE"
+        assert elapsed < 3, f"Stalled Git operation took {elapsed:.2f}s instead of respecting the network limit"
+    finally:
+        release.set()
+        server.shutdown()
+        thread.join()
+        server.server_close()

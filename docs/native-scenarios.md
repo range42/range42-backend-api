@@ -37,9 +37,39 @@ For explicit labels, a limited context list or custom template inputs, set `RANG
 
 The workspace directory must match its exported `codename-scenario`. It must contain `sourced_range42.sh`, `inventory/inventory_default.yml`, `secrets/default_vault.yml` and `secrets/vault_pass.txt`. Register exactly one Proxmox host whose API hostname matches the context inventory. `GET /v1/contexts` reports missing prerequisites without returning vault contents or private filesystem paths. It also rejects the older generated-scenario CLI adapter that treats every `main.yml` as requiring `hosts.yml`.
 
+When separate credential profiles share an API hostname, bind each registered
+context explicitly using all three optional fields: `target_host_id`,
+`target_node` and `target_api_url`. The API URL must be HTTPS and match the
+inventory hostname. Discovery selects that exact registration; execution refuses
+a changed ID, node, scheme or port. Existing contexts without explicit bindings
+retain their single-matching-host behavior. A provisioning profile needs its own
+approved credentials and workspace; selecting a different registration does not
+create credentials or broaden an existing profile.
+
 Custom SSH key locations can be supplied through `inventory_variables` using the native `DEPLOYER_CLI__DST_SSH_KEYS_*_DEST_DIR` template variables. Otherwise the standard deployment-user `.ssh/range42/<codename-scenario>/` layout is used.
 
 Native execution calls the installed `range42-context use` followed by its lifecycle command. This performs the normal user-level context switch, including SSH configuration and devkit secret links. Use one API instance and its provisioning lock per deployment user; do not run an independent CLI context switch during an attempt. The API creates a dedicated SSH agent, persists its ownership for restart recovery, and cleans it up on exit.
+
+Reusable installation workshops additionally require an operator-approved
+`workshop_profile` on an explicitly bound context. A normal context alone does
+not approve its bridges for participant use. The profile contains version1,
+an opaque `id`, bounded/disjoint `vmid_ranges`, the two source template VMIDs,
+destination `storage`, and exact `networks` entries (`bridge`, private `/28`
+`subnet`, first-host `gateway`). Templates and infrastructure VMIDs cannot
+overlap the guest ranges. Browser inputs must fit those server-owned bounds.
+Keep this registry outside writable project/workspace trees and mount it read-only
+in a managed service. API discovery exposes approved resource choices; it does
+not establish that preparation or live qualification has completed.
+
+An existing gateway requires an explicit `infrastructure_guests` entry containing
+its exact `vmid`, `node`, `vmgenid`, owner description and approved NICs
+(`interface`, `bridge`, lowercase `mac`). Record these from qualified retained
+infrastructure, never from a guessed name. Current and pending guest NICs are
+checked before launch. Unapproved attachments, changed generations and additional
+NICs on participant bridges block execution; empty physical bridge ports alone
+do not prove separation. Source templates remain stopped and clones are rebound
+to their final participant interface before start. Retain the source profile and
+generation receipts for recovery; do not adopt a replaced gateway to clear a gate.
 
 After selection, an attempt-local copy preserves the saved repository's entire relative layout. Its selected scenario receives context-owned secret/key links. The saved inventory and SSH templates render into the attempt directory; saved repository bundles override the ambient bundle location. The original scenario link, inventory and Git checkout are not rewritten by this execution view. Native parameters reach every `ansible-playbook` invocation, including older wrappers that do not forward arguments.
 
@@ -77,6 +107,70 @@ Local verification on 2026-09-23: the full API suite passed 1,542 tests (8 envir
 Existing VMID protections still apply. The default `blank_scenario_4_subnets` manifest conflicts with 4001–4004; `kunai_lab` conflicts with 1111. Customize those IDs consistently in a fork before using a target with those protections. Native diagnostic targets declared through literal `set_fact` VM parameters and explicit VMID parameters are checked too. `debug_sdn_tests` defaults to existing VM 102 and recreates its NIC and test SDN zone despite declaring zero VMs; select disposable resources explicitly.
 
 Native playbooks are executable deployment code. Preflight identifies the selected context and known VM targets, then reports that arbitrary native stages can affect additional resources. Generated-project capacity, allocation ownership and runtime snapshot controls do not describe native workflows. External controller/catalog readiness, service-specific configuration and the effects of arbitrary custom scripts require scenario acceptance in the selected environment.
+
+## Independently owned installation workshops
+
+A scenario can declare `manifest/workshop.json`:
+
+```json
+{"version":1,"kind":"native-installation","title":"Install Range42","min_seats":1,"max_seats":10}
+```
+
+Its VM manifest has an empty `vms` array: the facilitator supplies the run-specific
+setup through the normal Catalog → project → Deploy flow. `native.workshop`
+contains a unique namespace, participant count, UTC expiry, first guest VMID,
+private network pool, first isolated bridge number, two source template VMIDs
+and destination storage. The preview endpoint
+`POST /v1/projects/{project_id}/native-scenario/preview` uses the same compiler as
+deployment creation. Preview does not reserve resources.
+It also returns `allocation_request` for the existing host reservation endpoint.
+The UI reserves these exact VM IDs and addresses using a browser-owned draft key,
+then supplies `allocation_reservation_id` and the private
+`X-Range42-Reservation-Token` header when creating the deployment. The token is
+never written into project or native scenario JSON. Creation rejects missing,
+expired, foreign or changed mappings and consumes the lease in the same database
+transaction as the immutable run claim. Other native scenarios keep their
+existing context-owned allocation contract.
+
+Each run receives two VMs and a separate /28 for each participant. The backend
+records immutable deployment ownership, VM/NIC assignments, exclusive bridges,
+subnets and namespace in its existing allocation ledger. Other drafts and runs
+cannot acquire those networks. Source templates remain separate from the guest
+claims. Namespace reuse requires owned resource retirement and allocation release.
+
+Instance passwords and salted password hashes are generated once for each run
+and encrypted separately from public deployment metadata. Native execution gets
+private attempt-local inputs; its redaction context includes those credentials,
+and normal attempt cleanup removes temporary plaintext. Per-participant recovery
+uses the ordinary durable attempt history. Reset requires one explicitly selected
+participant; destructive requests still require confirmation and the deployment
+lock prevents overlapping operations.
+
+`GET /v1/deployments/{deployment_id}/workshop` reports participant operation
+outcomes separately from identity and connectivity. The private participant PDF
+route is administrator-only and returns `Cache-Control: no-store`. A local seat
+alias such as `user01` is scoped by the run ID. External identities use a verified
+issuer/subject binding; an email address or VPN user name does not establish it.
+The provider-independent identity value type alone does not register or authorize
+a person. Persistent identity and application admission adapters require their
+own implementation and acceptance.
+
+Template shape, active isolated bridges, available storage, configured guest
+memory ceilings and original clone-generation receipts are checked against the
+selected target before launch. Complete inventory visibility is required for
+capacity checks. These observations do not establish laptop routing, certificate
+trust or application login. Installation adapters must declare and implement those
+capabilities. Unregistered identity/access profiles are rejected; an unconfigured
+access profile keeps participant readiness false. The initial reusable recipe
+still requires qualified templates and prepared bridges. Their automated
+preparation and live end-to-end qualification remain separate acceptance work.
+
+Recovery requires the original clone receipt for every existing VM. During reset
+or retirement, an allocation without a receipt may be skipped only after fresh
+cluster-wide absence proof. This never adopts a live guest or invents a clone
+generation. Existing malformed, changed or unprotected receipts remain blocking.
+Take a protected backup of the database, encryption key and durable run receipt
+directories together before upgrading; migration downgrade refuses populated runs.
 
 Live acceptance remains outstanding: choose an operator-designated disposable context, save a scenario-specific customization, run preflight/full deployment, verify its services and SDN, run only its declared cleanup action, then verify cleanup and protected resources. Repeat per scenario and record the context, full source/runtime revisions and attempt IDs. No existing management context has been designated disposable or used for this work.
 

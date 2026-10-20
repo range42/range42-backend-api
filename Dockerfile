@@ -12,7 +12,7 @@ FROM python:3.12-slim-bookworm AS runtime
 
 ARG APP_UID=1000
 ARG APP_GID=1000
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     openssh-client git ca-certificates zsh jq yq rsync \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -g "${APP_GID}" range42 \

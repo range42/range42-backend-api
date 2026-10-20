@@ -7,6 +7,7 @@ registered Proxmox host; workspace credentials provide Vault and SSH inputs.
 from __future__ import annotations
 
 import uuid
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -113,14 +114,24 @@ async def create_deployment(payload: DeploymentCreate,
     assignments = None
     checked_target = None
     native = None
+    deployment_id = uuid.uuid4().hex[:16]
     if payload.native:
-        candidate = Deployment(project_id=payload.project_id, project_sha=payload.project_sha,
+        candidate = Deployment(id=deployment_id, project_id=payload.project_id, project_sha=payload.project_sha,
                                target_host_id=payload.target_host_id, scenario_label=payload.scenario_label,
                                native=payload.native.model_dump())
         with TemporaryDirectory(prefix="r42-native-create-") as directory:
             scenario = await prepare_project_scenario(session, candidate, dest=Path(directory) / "checkout")
             native = scenario.native
-    if payload.allocation_reservation_id:
+            if plan := native.get('workshop_plan'):
+                from app.core.workshop_runs import validate_activation
+                validate_activation(plan)
+                if not payload.allocation_reservation_id:
+                    raise Range42Error(code='WORKSHOP_RESERVATION_REQUIRED', status=409,
+                        message='Review and reserve the workshop VM IDs and addresses on the selected target before creating this deployment.')
+                assignments = plan['assignments']
+                host = await session.get(ProxmoxHost, payload.target_host_id)
+                checked_target = (host.api_url, host.node_name, host.protected_vmids_override_json)
+    if payload.allocation_reservation_id and not payload.native:
         if not payload.project_sha:
             raise Range42Error(code="ALLOCATION_INVALID", status=422,
                                message="A reservation can be transferred only to a saved, pinned scenario.")
@@ -150,7 +161,7 @@ async def create_deployment(payload: DeploymentCreate,
             details=[{"field": "workspace_root", "reason": e.message}],
         ) from e
     row = Deployment(
-        id=uuid.uuid4().hex[:16],
+        id=deployment_id,
         codename=payload.codename,
         scenario_label=payload.scenario_label,
         project_id=payload.project_id,
@@ -203,6 +214,11 @@ async def create_deployment(payload: DeploymentCreate,
                                message="The target changed while validating the saved allocation; review it and retry.")
         await bind(session, row, host, assignments, reservation_id=payload.allocation_reservation_id,
                    token=x_range42_reservation_token)
+    if native and (plan := native.get('workshop_plan')):
+        from app.core.workshop_models import WorkshopRun
+        from app.core.workshop_runs import create_credentials
+        material = create_credentials(plan)
+        session.add(WorkshopRun(deployment_id=row.id, credentials=json.dumps(material), phase='draft'))
 
     # The password is durable iff the row is — vault_seed reverts the file
     # if the commit does not happen. See app/core/workspace_secrets.

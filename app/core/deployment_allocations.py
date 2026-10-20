@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path
 
 from sqlalchemy import select, text
@@ -104,6 +104,18 @@ async def bind(session, deployment: Deployment, host: ProxmoxHost, assignments: 
         if lease is not None and isinstance(other, AllocationReservation) and other.id == lease.id:
             continue
         other_ids, other_addresses = occupied(other.assignments)
+        namespaces = {vm['run_namespace'] for vm in assignments if vm.get('run_namespace')}
+        other_namespaces = {vm['run_namespace'] for vm in other.assignments if vm.get('run_namespace')}
+        if namespaces & other_namespaces:
+            raise _error('NAMESPACE_OCCUPIED', 'This workshop namespace still belongs to another deployment. Retire and release its owned resources before reusing the namespace.')
+        for owned, adjacent in ((assignments, other.assignments), (other.assignments, assignments)):
+            for vm in owned:
+                if exclusive := vm.get('exclusive_network'):
+                    network = IPv4Network(exclusive)
+                    bridges = {nic['bridge'] for nic in vm['nics']}
+                    if any(nic['bridge'] in bridges or IPv4Address(nic['ip']) in network
+                           for guest in adjacent for nic in guest['nics']):
+                        raise _error('NETWORK_OCCUPIED', 'An isolated workshop bridge or subnet belongs to another draft or deployment. Choose a separate participant network allocation.')
         if ids & other_ids or addresses & other_addresses:
             raise _error("OCCUPIED", "A VM ID or bridge/address pair belongs to another draft or deployment. Review its allocation before deploying.")
     claim = DeploymentAllocation(id=uuid.uuid4().hex, deployment_id=deployment.id,
@@ -116,9 +128,9 @@ async def bind(session, deployment: Deployment, host: ProxmoxHost, assignments: 
 
 
 async def ensure_for_attempt(factory, deployment: Deployment, directory: Path, *, create: bool,
-                             checked_host: ProxmoxHost):
+                             checked_host: ProxmoxHost, declared_assignments: list[dict] | None = None):
     """The launch gate claims manual/older deployments and verifies existing ones."""
-    assignments = manifest_assignments(directory)
+    assignments = declared_assignments if declared_assignments is not None else manifest_assignments(directory)
     async with factory() as session:
         await session.execute(text("BEGIN IMMEDIATE"))
         fresh = await session.get(Deployment, deployment.id)
@@ -132,6 +144,8 @@ async def ensure_for_attempt(factory, deployment: Deployment, directory: Path, *
         ):
             raise _error("TARGET_CHANGED", "The target registration changed after the deployment checks.")
         existing = await session.scalar(select(DeploymentAllocation).where(DeploymentAllocation.deployment_id == fresh.id))
+        if declared_assignments is not None and existing is None:
+            raise _error('OWNERSHIP', 'This workshop no longer owns its resource assignments. Create a new run rather than reusing released allocations.')
         if existing or (create and assignments):
             await bind(session, fresh, host, assignments)
             await session.commit()

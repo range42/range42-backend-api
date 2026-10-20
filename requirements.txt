@@ -25,3 +25,6 @@ GitPython==3.1.43
 
 # Filesystem watching (Linux inotify)
 watchfiles==0.24.0
+
+# Private participant handouts (generated only for an explicitly selected run).
+reportlab==5.0.1
