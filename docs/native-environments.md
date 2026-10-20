@@ -7,7 +7,18 @@ existing backend host registration and native lifecycle; it does not install a
 second orchestration service or require a particular identity/VPN provider.
 
 The backend must already have an installed native runtime with an explicit node
-and verified HTTPS API binding in its trusted context registry. The browser
+and verified HTTPS API binding in its trusted context registry. The native backend installer records its authenticated registered target in
+`<workspace>/.range42-target.json` (version1, target host ID, node and HTTPS API
+origin). Automatic context discovery reads this credential-free private binding;
+it refuses malformed, oversized, linked or group/world-writable files instead of
+falling back to an unbound context. An explicit `RANGE42_NATIVE_CONTEXTS_FILE`
+registry remains authoritative. Earlier installations without a binding retain
+legacy CLI discovery, but cannot register reusable provisioning environments
+until the installer records their binding. The installer preserves a matching
+binding and refuses to overwrite a different one; retargeting needs a reviewed
+migration. This does not qualify physical infrastructure.
+
+The browser
 selects that runtime by ID; it cannot submit filesystem paths or shell commands.
 A dedicated target credential may have a different registered host ID but must
 identify the same node and HTTPS endpoint. Native workshop execution uses that

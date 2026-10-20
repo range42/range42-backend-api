@@ -261,3 +261,19 @@ async def test_credential_revalidation_preserves_cleanup_authority_when_gateway_
     assert updated.status_code == 200, updated.text
     assert updated.json()['infrastructure_qualified'] is False
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_installer_bound_workspace_supports_settings_review_without_registry_edits(environment, monkeypatch):
+    client, _, workspace, _ = environment
+    monkeypatch.delenv('RANGE42_NATIVE_CONTEXTS_FILE')
+    (workspace / '.range42-target.json').write_text(json.dumps({'version': 1,
+        'target_host_id': 'h', 'target_node': 'n', 'target_api_url': 'https://192.0.2.10:8006'}))
+    bases = (await client.get('/v1/environments')).json()['base_contexts']
+    assert len(bases) == 1 and bases[0]['ready'] is True
+    assert bases[0]['id'] == 'lab-demo'
+    review = await client.post('/v1/environments/review', json=selection())
+    assert review.status_code == 200, review.text
+    created = await client.post('/v1/environments', json={**selection(), 'review_revision': review.json()['revision']})
+    assert created.status_code == 201, created.text
+    assert created.json()['infrastructure_qualified'] is False

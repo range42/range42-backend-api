@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 from urllib.parse import urlsplit
 
 import yaml
@@ -106,6 +107,32 @@ def _address(inventory: Path) -> str:
         return ""
 
 
+def _discovered_context(workspace: Path) -> dict:
+    row = {'id': workspace.name, 'workspace': str(workspace)}
+    path = workspace / '.range42-target.json'
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return row
+    except OSError:
+        raise invalid('The native workspace target binding is invalid', 'NATIVE_CONTEXT_UNAVAILABLE') from None
+    try:
+        with os.fdopen(descriptor) as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022 or info.st_size > 16384:
+                raise ValueError()
+            binding = json.loads(stream.read(16385))
+        fields = {'target_host_id', 'target_node', 'target_api_url'}
+        if (not isinstance(binding, dict) or set(binding) != fields | {'version'}
+                or type(binding['version']) is not int or binding['version'] != 1
+                or any(not isinstance(binding[key], str) or not binding[key] for key in fields)):
+            raise ValueError()
+        row.update({key: binding[key] for key in fields})
+        return row
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        raise invalid('The native workspace target binding is invalid', 'NATIVE_CONTEXT_UNAVAILABLE') from None
+
+
 def _contexts() -> list[NativeContext]:
     registry = os.getenv("RANGE42_NATIVE_CONTEXTS_FILE")
     if registry:
@@ -121,7 +148,7 @@ def _contexts() -> list[NativeContext]:
             raise invalid("The operator's native context registry is invalid", "NATIVE_CONTEXT_UNAVAILABLE") from None
     else:
         root = Path(os.getenv("RANGE42_CONTEXT_ROOT", str(Path.home() / "range42.config")))
-        rows = [{"id": path.name, "workspace": str(path)} for path in sorted(root.iterdir())
+        rows = [_discovered_context(path) for path in sorted(root.iterdir())
                 if path.is_dir() and (path / "sourced_range42.sh").is_file()] if root.is_dir() else []
     result = []
     seen = set()
