@@ -5387,6 +5387,56 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Retire Unused Capacity",
+        "operationId": "retire_unused_capacity_v1_deployments__deployment_id__capacity_delete",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveCapacity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityHoldStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/deployments/{deployment_id}/capacity/review": {
@@ -9512,6 +9562,38 @@
             "type": "boolean",
             "const": false,
             "title": "Root Accepted"
+          },
+          "native_request_may_have_been_sent": {
+            "type": "boolean",
+            "title": "Native Request May Have Been Sent",
+            "default": false
+          },
+          "unused_retirement_review_available": {
+            "type": "boolean",
+            "title": "Unused Retirement Review Available",
+            "default": false
+          },
+          "retired_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired By"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
           }
         },
         "additionalProperties": false,
@@ -9576,6 +9658,11 @@
             "type": "boolean",
             "const": false,
             "title": "Infrastructure Qualified"
+          },
+          "unused_retirement_eligible": {
+            "type": "boolean",
+            "title": "Unused Retirement Eligible",
+            "default": false
           }
         },
         "additionalProperties": false,

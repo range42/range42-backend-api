@@ -54,6 +54,10 @@ class CapacityHoldOut(StrictObservation):
     requirements: list[HeldGuest]
     reservation_recorded: Literal[True]
     root_accepted: Literal[False]
+    native_request_may_have_been_sent: bool = False
+    unused_retirement_review_available: bool = False
+    retired_by: str | None = None
+    retired_at: str | None = None
 
 
 class CapacityHoldStatus(StrictObservation):
@@ -76,3 +80,4 @@ class CapacityHoldReview(StrictObservation):
     assessment: CapacityAssessment
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]
+    unused_retirement_eligible: bool = False

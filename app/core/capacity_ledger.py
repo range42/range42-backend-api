@@ -7,6 +7,7 @@ No attempt outcome, expiry, stopped state or missing receipt releases a hold.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 import uuid
 
 from sqlalchemy import select, text
@@ -26,6 +27,9 @@ from app.core.physical_nodes import (
 )
 from app.core.workshop_runs import WorkshopSpec, compile_plan, validate_activation
 
+# A locally terminal runner can still have an uncertain native outcome.
+CAPACITY_SETTLED_ATTEMPT_STATES = tuple(state for state in TERMINAL_ATTEMPT_STATES if state not in {'unknown', 'partial'})
+
 
 def refused(
     code="CAPACITY_REVIEW_REQUIRED",
@@ -35,6 +39,8 @@ def refused(
 
 
 def record_digest(row):
+    lifecycle = [row.native_request_id, row.native_request_actor,
+                 row.retired_by, row.retirement_approval_revision]
     return digest(
         [
             row.id,
@@ -50,7 +56,7 @@ def record_digest(row):
             row.approval_revision,
             row.approved_by,
             row.revision,
-        ]
+        ] + (['native-lifecycle-v1', *lifecycle] if any(value is not None for value in lifecycle) else [])
     )
 
 
@@ -59,6 +65,10 @@ def commitment(row):
         value = CapacityCommitment.model_validate_json(row.record_json)
         if (
             row.status not in {"pending_root", "active", "releasing", "retired"}
+            or (row.native_request_id is None) != (row.native_request_actor is None)
+            or (row.native_request_id is not None and not re.fullmatch(r'[a-f0-9]{32}', row.native_request_id))
+            or (row.retired_by is None) != (row.retirement_approval_revision is None)
+            or (row.retired_by is not None and row.status != 'retired')
             or type(row.revision) is not int
             or row.revision < 1
             or row.record_digest != record_digest(row)
@@ -207,6 +217,7 @@ class CapacityReviewWitness:
     binding_revision: str
     assessment: dict
     observed_at: datetime
+    unused_retirement_eligible: bool = False
 
     @property
     def revision(self):
@@ -258,7 +269,109 @@ async def review(factory, deployment_id, observed, *, agent_revision):
             binding_revision,
             assessment,
             datetime.now(timezone.utc),
+            bool(existing and existing.status == 'pending_root' and existing.native_request_id is None
+                 and not await work_in_progress(session, deployment_id)
+                 and not guest_present(observed, candidate)),
         )
+
+
+def guest_present(observed, candidate):
+    return bool({guest.vm_id for guest in observed.resources.guests}
+                & {guest.vm_id for guest in candidate.guests})
+
+
+async def work_in_progress(session, deployment_id):
+    deployment = await session.get(Deployment, deployment_id, populate_existing=True)
+    attempt = await session.scalar(select(Attempt.id).where(
+        Attempt.deployment_id == deployment_id,
+        Attempt.state.not_in(CAPACITY_SETTLED_ATTEMPT_STATES)))
+    return (deployment is None or deployment.state == 'unknown' or attempt is not None
+            or await session.get(WorkspaceLock, deployment_id) is not None)
+
+
+async def current_lifecycle_hold(session, reviewed):
+    candidate, plan_revision, binding_revision, plan = await demand(
+        session, reviewed.deployment_id, reviewed.observed, reviewed.agent_revision)
+    rows, _, revision = await retained(session)
+    row = next((row for row in rows if row.deployment_id == reviewed.deployment_id), None)
+    if row is None or row.status != 'pending_root':
+        raise refused()
+    saved = commitment(row)
+    expected = saved.model_copy(update={'guests': [guest.model_copy(update={'materialization': None}) for guest in saved.guests]})
+    if (row.plan_revision != plan_revision or row.binding_revision != binding_revision
+            or expected != candidate):
+        raise refused()
+    return row, candidate, revision, plan_revision, binding_revision, plan
+
+
+def assert_fresh_lifecycle_review(reviewed, revision, plan_revision, binding_revision):
+    if (revision != reviewed.registry_revision or plan_revision != reviewed.plan_revision
+            or binding_revision != reviewed.binding_revision
+            or not 0 <= (datetime.now(timezone.utc) - reviewed.observed_at).total_seconds() <= 120):
+        raise refused()
+
+
+async def journal_native_request(factory, reviewed, *, actor, expected_revision):
+    """Persist an original request BEFORE any future native RPC.
+
+    The native acceptance adapter is not implemented. This journal grants no
+    execution. Once present, treat the RPC as possibly sent until independent
+    native reconciliation proves its outcome; a timeout never clears it.
+    """
+    async with factory() as session:
+        await session.execute(text('BEGIN IMMEDIATE'))
+        row, candidate, revision, plan_revision, binding_revision, plan = await current_lifecycle_hold(session, reviewed)
+        if row.approval_revision != expected_revision:
+            raise refused()
+        if row.native_request_id is not None:
+            return row
+        assert_fresh_lifecycle_review(reviewed, revision, plan_revision, binding_revision)
+        validate_activation(plan)
+        if guest_present(reviewed.observed, candidate) or await work_in_progress(session, reviewed.deployment_id):
+            raise refused('CAPACITY_WORK_IN_PROGRESS', 'Resolve original guest or uncertain execution state before requesting native acceptance.')
+        row.native_request_id = uuid.uuid4().hex
+        row.native_request_actor = actor
+        row.revision += 1
+        row.record_digest = record_digest(row)
+        await session.commit()
+        return row
+
+
+async def retire_unused(factory, reviewed, *, actor, expected_revision):
+    """Retire only a never-dispatched, independently absent, idle intent.
+
+    Does not delete any guest, provider identity or allocation. Materialized,
+    active or possibly dispatched intents require the future native retirement
+    adapter. Keep original intent/audit records after releasing the commitment.
+    """
+    async with factory() as session:
+        await session.execute(text('BEGIN IMMEDIATE'))
+        rows, _, _ = await retained(session)
+        previous = next((row for row in rows if row.deployment_id == reviewed.deployment_id), None)
+        if previous and previous.status == 'retired':
+            if previous.retirement_approval_revision == expected_revision:
+                return previous
+            raise refused()
+        row, candidate, revision, plan_revision, binding_revision, _ = await current_lifecycle_hold(session, reviewed)
+        if row.native_request_id is not None:
+            raise refused('CAPACITY_NATIVE_RECONCILIATION_REQUIRED',
+                          'Native acceptance may have been requested. Preserve this commitment until the original native request is reconciled and retired.')
+        assert_fresh_lifecycle_review(reviewed, revision, plan_revision, binding_revision)
+        if expected_revision != reviewed.revision:
+            raise refused()
+        if guest_present(reviewed.observed, candidate) or await work_in_progress(session, reviewed.deployment_id):
+            raise refused('CAPACITY_WORK_IN_PROGRESS',
+                          'Original guests or uncertain work still exist. No capacity was released.')
+        saved = commitment(row).model_copy(update={'phase': 'retired'})
+        row.status = 'retired'
+        row.record_json = saved.model_dump_json()
+        row.retired_at = datetime.now(timezone.utc)
+        row.retired_by = actor
+        row.retirement_approval_revision = expected_revision
+        row.revision += 1
+        row.record_digest = record_digest(row)
+        await session.commit()
+        return row
 
 
 async def reserve(factory, reviewed, *, actor, expected_revision=None):
@@ -292,18 +405,7 @@ async def reserve(factory, reviewed, *, actor, expected_revision=None):
             ):
                 raise refused()
             return existing
-        deployment = await session.get(Deployment, reviewed.deployment_id)
-        running = await session.scalar(
-            select(Attempt.id).where(
-                Attempt.deployment_id == reviewed.deployment_id,
-                Attempt.state.not_in(TERMINAL_ATTEMPT_STATES),
-            )
-        )
-        if (
-            deployment.state == "unknown"
-            or running is not None
-            or await session.get(WorkspaceLock, reviewed.deployment_id)
-        ):
+        if await work_in_progress(session, reviewed.deployment_id):
             raise refused(
                 "CAPACITY_WORK_IN_PROGRESS",
                 "Resolve running or uncertain work before creating a new capacity intent. Existing commitments remain retained.",

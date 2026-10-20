@@ -62,6 +62,11 @@ async def status(session, deployment_id):
             "requirements": [guest.model_dump() for guest in record.guests],
             "reservation_recorded": True,
             "root_accepted": False,
+            "native_request_may_have_been_sent": row.native_request_id is not None or row.status in {'active', 'releasing'},
+            "unused_retirement_review_available": row.status == 'pending_root' and row.native_request_id is None,
+            "retired_by": row.retired_by,
+            "retired_at": ((row.retired_at if row.retired_at.tzinfo else row.retired_at.replace(tzinfo=timezone.utc)).isoformat()
+                           if row.retired_at else None),
         }
     return {
         "deployment_id": dep.id,
@@ -122,6 +127,7 @@ async def review_capacity(
         "assessment": reviewed.assessment,
         "execution_ready": False,
         "infrastructure_qualified": False,
+        "unused_retirement_eligible": reviewed.unused_retirement_eligible,
     }
 
 
@@ -137,5 +143,15 @@ async def reserve_capacity(
         actor=request.state.principal.actor_id,
         expected_revision=payload.review_revision,
     )
+    async with db.get_session_factory()() as session:
+        return await status(session, deployment_id)
+
+
+@router.delete('/{deployment_id}/capacity', response_model=CapacityHoldStatus)
+async def retire_unused_capacity(deployment_id: str, payload: ReserveCapacity, request: Request, response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    reviewed = await observe(deployment_id)
+    await capacity_ledger.retire_unused(db.get_session_factory(), reviewed,
+        actor=request.state.principal.actor_id, expected_revision=payload.review_revision)
     async with db.get_session_factory()() as session:
         return await status(session, deployment_id)

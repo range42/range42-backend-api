@@ -149,6 +149,7 @@ async def test_changed_native_generation_or_target_refuses_earlier_http_approval
             path, json={"review_revision": inspected.json()["review_revision"]}
         )
         assert refused.status_code == 409, refused.text
+
         assert (await client.get(path)).json()["hold"] is None
 
         async def changed_target(config):
@@ -163,3 +164,50 @@ async def test_changed_native_generation_or_target_refuses_earlier_http_approval
         monkeypatch.setattr(routes, "inspect_capacity", changed_target)
         refused = await client.post(path + "/review", json={})
         assert refused.status_code == 409, refused.text
+
+
+@pytest.mark.asyncio
+async def test_release_unused_intent_keeps_original_allocation_and_never_grants_execution(ledger, monkeypatch):
+    _, factory = ledger
+    transport(monkeypatch)
+    from app.main import create_app
+    from app.core.allocation_models import DeploymentAllocation
+    from sqlalchemy import select, func
+    path = '/v1/deployments/' + 'a' * 16 + '/capacity'
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url='http://test') as client:
+        review = (await client.post(path + '/review', json={})).json()
+        assert (await client.post(path, json={'review_revision': review['review_revision']})).status_code == 200
+        fresh = (await client.post(path + '/review', json={})).json()
+        assert fresh.get('unused_retirement_eligible') is True, 'Missing independently reviewed unused-intent release'
+        release = await client.request('DELETE', path, json={'review_revision': fresh['review_revision']})
+        assert release.status_code == 200, release.text
+        assert release.headers['cache-control'] == 'no-store'
+        value = release.json()
+        assert value['hold']['status'] == 'retired'
+        assert value['hold']['retired_by'] == 'development'
+        assert value['execution_ready'] is value['hold']['root_accepted'] is False
+        assert (await client.get(path)).json() == value
+    async with factory() as session:
+        assert await session.scalar(select(func.count()).select_from(DeploymentAllocation)) == 2
+
+
+@pytest.mark.asyncio
+async def test_unused_release_has_no_browser_native_receipt_override_and_refuses_journaled_request(ledger, monkeypatch):
+    mod, factory = ledger
+    transport(monkeypatch)
+    from app.main import create_app
+    from app.core.access import Principal, allowed
+    path = '/v1/deployments/' + 'a' * 16 + '/capacity'
+    for role in ['operator', 'viewer']:
+        assert not allowed(Principal('staff', role), 'DELETE', '/v1/deployments/{deployment_id}/capacity')
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url='http://test') as client:
+        response = await client.request('DELETE', path, json={'review_revision': '0' * 64, 'native_request_id': None})
+        assert response.status_code == 422
+        approved = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+        row = await mod.reserve(factory, approved, actor='director')
+        fresh = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+        await mod.journal_native_request(factory, fresh, actor='director', expected_revision=row.approval_revision)
+        fresh = (await client.post(path + '/review', json={})).json()
+        assert fresh['unused_retirement_eligible'] is False
+        response = await client.request('DELETE', path, json={'review_revision': fresh['review_revision']})
+        assert response.status_code == 409 and response.json()['code'] == 'CAPACITY_NATIVE_RECONCILIATION_REQUIRED'

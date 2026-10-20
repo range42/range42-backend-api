@@ -126,6 +126,127 @@ async def test_two_aliases_and_concurrent_reservations_cannot_both_spend_the_sam
         assert row.status == "pending_root" and row.physical_node_id == "a" * 32
 
 
+async def reserve_first(mod, factory):
+    approved = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+    row = await mod.reserve(factory, approved, actor='director')
+    fresh = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+    return row, fresh
+
+
+@pytest.mark.asyncio
+async def test_unused_absent_intent_retires_once_and_releases_only_its_commitment(ledger):
+    mod, factory = ledger
+    original, fresh = await reserve_first(mod, factory)
+    assert hasattr(mod, 'retire_unused'), 'Missing verified retirement for an unused intent'
+    retired = await mod.retire_unused(factory, fresh, actor='second-director', expected_revision=fresh.revision)
+    assert retired.id == original.id and retired.status == 'retired'
+    assert retired.retired_by == 'second-director' and retired.native_request_id is None
+    assert mod.commitment(retired).phase == 'retired'
+    repeated = await mod.retire_unused(factory, fresh, actor='another-director', expected_revision=fresh.revision)
+    assert repeated.revision == retired.revision and repeated.retired_by == 'second-director'
+    second = await mod.review(factory, 'b' * 16, observation(), agent_revision='f' * 64)
+    assert second.assessment['admissible'] is True
+    from app.core.capacity_models import CapacityHold
+    from app.core.allocation_models import DeploymentAllocation
+    async with factory() as session:
+        claim = await session.scalar(select(DeploymentAllocation).where(DeploymentAllocation.deployment_id == 'a' * 16))
+        assert claim is not None
+        await mod.assert_allocation_releasable(session, claim)
+        assert await session.scalar(select(func.count()).select_from(CapacityHold)) == 1
+
+
+@pytest.mark.asyncio
+async def test_journaled_native_request_cannot_be_mistaken_for_unused_after_a_lost_reply(ledger):
+    mod, factory = ledger
+    row, fresh = await reserve_first(mod, factory)
+    assert hasattr(mod, 'journal_native_request'), 'Missing durable pre-RPC native request journal'
+    sent = await mod.journal_native_request(factory, fresh, actor='director', expected_revision=row.approval_revision)
+    assert sent.native_request_id and sent.native_request_actor == 'director'
+    again = await mod.journal_native_request(factory, fresh, actor='other-director', expected_revision=row.approval_revision)
+    assert again.native_request_id == sent.native_request_id and again.native_request_actor == 'director'
+    current = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+    from app.core.errors import Range42Error
+    with pytest.raises(Range42Error) as refused:
+        await mod.retire_unused(factory, current, actor='director', expected_revision=current.revision)
+    assert refused.value.code == 'CAPACITY_NATIVE_RECONCILIATION_REQUIRED'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('uncertain', ['guest', 'attempt', 'unknown', 'workspace', 'stale'])
+async def test_unused_retirement_refuses_materialized_busy_or_stale_state(ledger, uncertain):
+    mod, factory = ledger
+    row, fresh = await reserve_first(mod, factory)
+    from app.core.models import Deployment, Attempt, WorkspaceLock
+    from app.core.capacity_models import CapacityHold
+    from app.core.errors import Range42Error
+    if uncertain == 'guest':
+        observed = observation().model_copy(deep=True)
+        observed.resources.guests[0].vm_id = 46000
+        fresh = await mod.review(factory, 'a' * 16, observed, agent_revision='f' * 64)
+    elif uncertain != 'stale':
+        async with factory() as session:
+            if uncertain == 'attempt':
+                session.add(Attempt(id='pending-native', deployment_id='a' * 16, scope='full', state='unknown'))
+            elif uncertain == 'unknown':
+                (await session.get(Deployment, 'a' * 16)).state = 'unknown'
+            else:
+                from datetime import datetime, timezone
+                session.add(WorkspaceLock(deployment_id='a' * 16, owner='another-worker', heartbeat_at=datetime.now(timezone.utc)))
+            await session.commit()
+    assert hasattr(mod, 'retire_unused'), 'Missing verified unused-intent retirement'
+    with pytest.raises(Range42Error):
+        await mod.retire_unused(factory, fresh, actor='director', expected_revision='0' * 64 if uncertain == 'stale' else fresh.revision)
+    async with factory() as session:
+        assert (await session.get(CapacityHold, row.id)).status == 'pending_root'
+
+
+@pytest.mark.asyncio
+async def test_native_journal_and_unused_retirement_cannot_both_win(ledger):
+    mod, factory = ledger
+    row, fresh = await reserve_first(mod, factory)
+    assert hasattr(mod, 'retire_unused') and hasattr(mod, 'journal_native_request'), 'Missing atomic capacity lifecycle'
+    results = await asyncio.gather(
+        mod.retire_unused(factory, fresh, actor='director', expected_revision=fresh.revision),
+        mod.journal_native_request(factory, fresh, actor='director', expected_revision=row.approval_revision),
+        return_exceptions=True)
+    from app.core.capacity_models import CapacityHold
+    from app.core.errors import Range42Error
+    assert sum(isinstance(result, CapacityHold) for result in results) == 1
+    assert sum(isinstance(result, Range42Error) for result in results) == 1
+    async with factory() as session:
+        held = await session.get(CapacityHold, row.id)
+        assert (held.status == 'retired') != (held.native_request_id is not None)
+
+
+@pytest.mark.asyncio
+async def test_unknown_attempt_outcome_blocks_a_new_reservation_even_when_deployment_is_pending(ledger):
+    mod, factory = ledger
+    from app.core.models import Attempt
+    from app.core.errors import Range42Error
+    async with factory() as session:
+        session.add(Attempt(id='uncertain-prior', deployment_id='a' * 16, scope='full', state='unknown'))
+        await session.commit()
+    fresh = await mod.review(factory, 'a' * 16, observation(), agent_revision='f' * 64)
+    with pytest.raises(Range42Error) as refused:
+        await mod.reserve(factory, fresh, actor='director')
+    assert refused.value.code == 'CAPACITY_WORK_IN_PROGRESS'
+
+
+@pytest.mark.asyncio
+async def test_expiry_prevents_a_first_native_request_but_allows_unused_cleanup(ledger, monkeypatch):
+    from datetime import datetime, timezone
+    from app.core.errors import Range42Error
+    from app.core.workshop_runs import validate_activation
+    mod, factory = ledger
+    row, fresh = await reserve_first(mod, factory)
+    monkeypatch.setattr(mod, 'validate_activation', lambda plan: validate_activation(plan, now=datetime(2100, 1, 1, tzinfo=timezone.utc)))
+    with pytest.raises(Range42Error) as refused:
+        await mod.journal_native_request(factory, fresh, actor='director', expected_revision=row.approval_revision)
+    assert refused.value.code == 'WORKSHOP_EXPIRED'
+    retired = await mod.retire_unused(factory, fresh, actor='director', expected_revision=fresh.revision)
+    assert retired.status == 'retired'
+
+
 @pytest.mark.asyncio
 async def test_lost_reservation_reply_reuses_original_hold_and_terminal_attempt_does_not_release_it(
     ledger,
