@@ -49,6 +49,17 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         values.update(proxmox_api_host=urlsplit(context.target_api_url).netloc,
                       proxmox_node=context.target_node, proxmox_api_validate_certs=True)
     if workshop_plan:
+        # The same registered credential used for admission must perform writes.
+        # Old context vaults may contain a broader, unrelated Proxmox identity.
+        try:
+            identity, secret = context.provisioning_credential.split('=', 1)
+            user, token_id = identity.split('!', 1)
+            if not user or not token_id or not secret or any(char.isspace() for char in context.provisioning_credential):
+                raise ValueError()
+        except (AttributeError, ValueError):
+            raise invalid('The selected workshop target requires its own valid Proxmox API credential',
+                          'WORKSHOP_PROVISIONING_CREDENTIAL_REQUIRED') from None
+        values.update(proxmox_api_user=user, proxmox_api_token_id=token_id, proxmox_api_token_secret=secret)
         if type(workshop_seat) is not int or not 0 <= workshop_seat <= workshop_plan['seats']:
             raise invalid('Select a participant allocated to this workshop')
         values.update(range42_workshop_plan=workshop_plan,

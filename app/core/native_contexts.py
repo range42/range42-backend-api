@@ -30,6 +30,7 @@ class NativeContext:
     target_node: str = ""
     target_api_url: str = ""
     workshop_profile: WorkshopProfile | None = None
+    provisioning_credential: str = field(default="", repr=False, compare=False)
 
     def issues(self) -> list[str]:
         required = {
@@ -175,4 +176,5 @@ def resolve_context(identity: str, host) -> NativeContext:
         raise invalid("The selected context and registered target must match the approved Proxmox host, node and API binding", "NATIVE_CONTEXT_TARGET_MISMATCH")
     if issues := context.issues():
         raise invalid(" ".join(issues), "NATIVE_CONTEXT_UNAVAILABLE")
-    return replace(context, node_name=getattr(host, "node_name", ""))
+    return replace(context, node_name=getattr(host, "node_name", ""),
+                   provisioning_credential=getattr(host, "token_ref", ""))

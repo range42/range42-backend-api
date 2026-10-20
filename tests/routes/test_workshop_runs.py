@@ -55,7 +55,9 @@ async def workshop_env(tmp_path, monkeypatch):
     monkeypatch.setattr(scenario_module, 'checkout_repository', checkout)
     await _seed(db, tmp_path, repo_owner='range42', repo_name='playbooks')
     async with db.get_session_factory()() as session:
-        (await session.get(ProxmoxHost, 'h')).api_url = 'https://192.0.2.10:8006'
+        host = await session.get(ProxmoxHost, 'h')
+        host.api_url = 'https://192.0.2.10:8006'
+        host.token_ref = 'workshop@pve!limited=FIXTURE-SELECTED-TOKEN'
         await session.commit()
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as client:
@@ -356,8 +358,12 @@ async def test_native_launch_rechecks_claims_and_redacts_run_local_credentials(w
     values = json.loads((directory / 'native-context/variables.json').read_text())
     assert values['range42_workshop_plan'] == created.json()['native']['workshop_plan']
     assert values['range42_workshop_participants'] == material
+    assert values['proxmox_api_user'] == 'workshop@pve'
+    assert values['proxmox_api_token_secret'] == 'FIXTURE-SELECTED-TOKEN'
     redacted_values = json.loads((directory / 'redaction.json').read_text())
     assert all(value in redacted_values for record in material.values() for value in record.values())
+    assert 'FIXTURE-SELECTED-TOKEN' in redacted_values
+    assert 'workshop@pve!limited=FIXTURE-SELECTED-TOKEN' in redacted_values
 
 
 @pytest.mark.asyncio

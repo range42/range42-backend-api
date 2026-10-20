@@ -109,6 +109,7 @@ def test_execution_receives_server_owned_plan_without_mutating_selected_context(
     from tests.core.test_native_contexts import context
 
     workspace, _, host = context(tmp_path, monkeypatch)
+    host.token_ref = 'isolated@pve!run-only=SELECTED-HOST-SECRET'
     repo = tmp_path / 'repo'
     scenario(repo)
     plan = compile_plan(WorkshopSpec.model_validate(specification()), run_id='a' * 16)
@@ -119,6 +120,10 @@ def test_execution_receives_server_owned_plan_without_mutating_selected_context(
         workshop_credentials={'user01': {'proxmox_password': 'TEST-PRIVATE', 'deployer_password': 'OTHER-PRIVATE'}},
         workshop_seat=1)
     material = json.loads(run.variables_file.read_text())
+    assert material['proxmox_api_user'] == 'isolated@pve'
+    assert material['proxmox_api_token_id'] == 'run-only'
+    assert material['proxmox_api_token_secret'] == 'SELECTED-HOST-SECRET'
+    assert 'SELECTED-HOST-SECRET' not in repr(resolve_context('lab-demo', host))
     assert material['range42_workshop_plan'] == plan
     assert material['range42_workshop_selected_seat'] == 1
     assert material['range42_workshop_participants']['user01']['proxmox_password'] == 'TEST-PRIVATE'
@@ -160,3 +165,26 @@ def test_a_fresh_run_has_fresh_credentials_and_usable_salted_password_hashes():
     checked = subprocess.run(['openssl', 'passwd', '-6', '-salt', salt, '-stdin'],
         input=record['deployer_password'], text=True, capture_output=True, check=True).stdout.strip()
     assert checked == encoded
+
+
+@pytest.mark.parametrize("credential", ["", "user!token=", "user=secret", "!token=secret", "user!token=secret\nnext"])
+def test_workshop_execution_refuses_missing_or_malformed_selected_credential(tmp_path, monkeypatch, credential):
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    from app.core.workshop_runs import WorkshopSpec, compile_plan
+    from app.core.errors import Range42Error
+    from tests.core.test_native_contexts import context
+
+    workspace, _, host = context(tmp_path, monkeypatch)
+    host.token_ref = credential
+    repo = tmp_path / 'repo'
+    scenario(repo)
+    with pytest.raises(Range42Error) as refused:
+        prepare_native_run(repo, inspect_native_scenario(repo, 'training/exercise-a'),
+            resolve_context('lab-demo', host), scope='full', features={}, parameters={},
+            artifact_dir=tmp_path / 'attempt',
+            workshop_plan=compile_plan(WorkshopSpec.model_validate(specification()), run_id='a' * 16))
+    assert refused.value.code == 'WORKSHOP_PROVISIONING_CREDENTIAL_REQUIRED'
+    assert not (tmp_path / 'attempt').exists()
+    assert (workspace / 'secrets/default_vault.yml').read_text() == '$ANSIBLE_VAULT;1.1;AES256\n'

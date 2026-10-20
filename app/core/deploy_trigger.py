@@ -268,6 +268,10 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 yield value
         tainted.update(strings(vault_values))
         tainted.update(strings(workshop_credentials))
+        if scenario.native.get('workshop_plan'):
+            # Never let the selected target's secret escape through native logs.
+            tainted.add(scenario.context.provisioning_credential)
+            tainted.add(scenario.context.provisioning_credential.split('=', 1)[1])
     elif scenario is not None:
         runtime_vars = target_runtime_variables(target_host, ws)
         extravars.update(runtime_vars)
