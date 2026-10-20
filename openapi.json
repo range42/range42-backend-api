@@ -7256,6 +7256,211 @@
           }
         }
       }
+    },
+    "/v1/environments": {
+      "get": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Listing",
+        "operationId": "listing_v1_environments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Create",
+        "operationId": "create_v1_environments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/review": {
+      "post": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Preview",
+        "operationId": "preview_v1_environments_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{environment_id}/review": {
+      "post": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Review Existing",
+        "operationId": "review_existing_v1_environments__environment_id__review_post",
+        "parameters": [
+          {
+            "name": "environment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Environment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{environment_id}/revalidate": {
+      "post": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Revalidate",
+        "operationId": "revalidate_v1_environments__environment_id__revalidate_post",
+        "parameters": [
+          {
+            "name": "environment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Environment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Revalidation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7881,6 +8086,47 @@
           "total"
         ],
         "title": "AuditPage"
+      },
+      "BaseContextOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "target_node": {
+            "type": "string",
+            "title": "Target Node"
+          },
+          "target_api_url": {
+            "type": "string",
+            "title": "Target Api Url"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "target_node",
+          "target_api_url",
+          "ready",
+          "issues"
+        ],
+        "title": "BaseContextOut"
       },
       "BundleResolveRequest": {
         "properties": {
@@ -8589,6 +8835,226 @@
           "url"
         ],
         "title": "DownloadUrlIn"
+      },
+      "EnvironmentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "base_context_id": {
+            "type": "string",
+            "title": "Base Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "target_node": {
+            "type": "string",
+            "title": "Target Node"
+          },
+          "workshop_profile": {
+            "$ref": "#/components/schemas/WorkshopProfileView"
+          },
+          "ready_for_planning": {
+            "type": "boolean",
+            "title": "Ready For Planning"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "approved_by": {
+            "type": "string",
+            "title": "Approved By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "base_context_id",
+          "target_host_id",
+          "target_node",
+          "workshop_profile",
+          "ready_for_planning",
+          "infrastructure_qualified",
+          "issues",
+          "created_at",
+          "approved_by"
+        ],
+        "title": "EnvironmentOut"
+      },
+      "EnvironmentPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "base_contexts": {
+            "items": {
+              "$ref": "#/components/schemas/BaseContextOut"
+            },
+            "type": "array",
+            "title": "Base Contexts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "base_contexts"
+        ],
+        "title": "EnvironmentPage"
+      },
+      "EnvironmentRegistration": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\r\\n\\x00-\\x1f]+$",
+            "title": "Label"
+          },
+          "base_context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Base Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Target Host Id"
+          },
+          "workshop_profile": {
+            "$ref": "#/components/schemas/WorkshopProfile"
+          },
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Review Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "base_context_id",
+          "target_host_id",
+          "workshop_profile",
+          "review_revision"
+        ],
+        "title": "EnvironmentRegistration"
+      },
+      "EnvironmentReviewOut": {
+        "properties": {
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "base_context_id": {
+            "type": "string",
+            "title": "Base Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "workshop_profile": {
+            "$ref": "#/components/schemas/WorkshopProfileView"
+          },
+          "ready_for_planning": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ready For Planning"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "label",
+          "base_context_id",
+          "target_host_id",
+          "workshop_profile",
+          "ready_for_planning",
+          "infrastructure_qualified",
+          "requirements"
+        ],
+        "title": "EnvironmentReviewOut"
+      },
+      "EnvironmentSelection": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\r\\n\\x00-\\x1f]+$",
+            "title": "Label"
+          },
+          "base_context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Base Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Target Host Id"
+          },
+          "workshop_profile": {
+            "$ref": "#/components/schemas/WorkshopProfile"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "base_context_id",
+          "target_host_id",
+          "workshop_profile"
+        ],
+        "title": "EnvironmentSelection"
       },
       "ErrorDetail": {
         "properties": {
@@ -11153,6 +11619,78 @@
         ],
         "title": "IdentityOut"
       },
+      "InfrastructureGuest": {
+        "properties": {
+          "vmid": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vmid"
+          },
+          "node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Node"
+          },
+          "vmgenid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+            "title": "Vmgenid"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Owner"
+          },
+          "nics": {
+            "items": {
+              "$ref": "#/components/schemas/InfrastructureNic"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Nics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vmid",
+          "node",
+          "vmgenid",
+          "owner",
+          "nics"
+        ],
+        "title": "InfrastructureGuest"
+      },
+      "InfrastructureNic": {
+        "properties": {
+          "interface": {
+            "type": "string",
+            "pattern": "^net(?:[0-9]|[12][0-9]|3[01])$",
+            "title": "Interface"
+          },
+          "bridge": {
+            "type": "string",
+            "pattern": "^vmbr[0-9]{1,11}$",
+            "title": "Bridge"
+          },
+          "mac": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$",
+            "title": "Mac"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "interface",
+          "bridge",
+          "mac"
+        ],
+        "title": "InfrastructureNic"
+      },
       "LiveNatReport": {
         "properties": {
           "available": {
@@ -13224,6 +13762,21 @@
         "additionalProperties": false,
         "type": "object",
         "title": "RetentionPolicyStatus"
+      },
+      "Revalidation": {
+        "properties": {
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Review Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_revision"
+        ],
+        "title": "Revalidation"
       },
       "RollbackRequest": {
         "properties": {
@@ -18968,6 +19521,33 @@
         ],
         "title": "WorkshopAction"
       },
+      "WorkshopNetwork": {
+        "properties": {
+          "bridge": {
+            "type": "string",
+            "pattern": "^vmbr[0-9]{1,11}$",
+            "title": "Bridge"
+          },
+          "subnet": {
+            "type": "string",
+            "maxLength": 18,
+            "title": "Subnet"
+          },
+          "gateway": {
+            "type": "string",
+            "maxLength": 15,
+            "title": "Gateway"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bridge",
+          "subnet",
+          "gateway"
+        ],
+        "title": "WorkshopNetwork"
+      },
       "WorkshopPreview": {
         "properties": {
           "sha": {
@@ -19005,6 +19585,144 @@
           "workshop"
         ],
         "title": "WorkshopPreview"
+      },
+      "WorkshopProfile": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "title": "Id"
+          },
+          "vmid_ranges": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Vmid Ranges"
+          },
+          "networks": {
+            "items": {
+              "$ref": "#/components/schemas/WorkshopNetwork"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Networks"
+          },
+          "proxmox_template": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Proxmox Template"
+          },
+          "deployer_template": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Deployer Template"
+          },
+          "storage": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+            "title": "Storage"
+          },
+          "infrastructure_guests": {
+            "items": {
+              "$ref": "#/components/schemas/InfrastructureGuest"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Infrastructure Guests"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "id",
+          "vmid_ranges",
+          "networks",
+          "proxmox_template",
+          "deployer_template",
+          "storage"
+        ],
+        "title": "WorkshopProfile"
+      },
+      "WorkshopProfileView": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "title": "Id"
+          },
+          "vmid_ranges": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Vmid Ranges"
+          },
+          "networks": {
+            "items": {
+              "$ref": "#/components/schemas/WorkshopNetwork"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Networks"
+          },
+          "proxmox_template": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Proxmox Template"
+          },
+          "deployer_template": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Deployer Template"
+          },
+          "storage": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+            "title": "Storage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "id",
+          "vmid_ranges",
+          "networks",
+          "proxmox_template",
+          "deployer_template",
+          "storage"
+        ],
+        "title": "WorkshopProfileView"
       },
       "WorkshopSpec": {
         "properties": {

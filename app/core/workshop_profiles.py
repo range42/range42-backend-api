@@ -41,7 +41,7 @@ class InfrastructureGuest(StrictModel):
         return self
 
 
-class WorkshopProfile(StrictModel):
+class WorkshopProfileView(StrictModel):
     version: int = Field(ge=1, le=1)
     id: str = Field(pattern=r'^[a-z][a-z0-9-]{0,63}$')
     vmid_ranges: list[list[int]] = Field(min_length=1, max_length=16)
@@ -49,6 +49,9 @@ class WorkshopProfile(StrictModel):
     proxmox_template: int = Field(ge=100, le=999999999)
     deployer_template: int = Field(ge=100, le=999999999)
     storage: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_.-]{0,63}$')
+
+
+class WorkshopProfile(WorkshopProfileView):
     infrastructure_guests: list[InfrastructureGuest] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode='after')

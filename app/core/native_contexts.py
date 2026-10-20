@@ -32,7 +32,11 @@ class NativeContext:
     workshop_profile: WorkshopProfile | None = None
     provisioning_credential: str = field(default="", repr=False, compare=False)
 
+    registration_issue: str = ""
+
     def issues(self) -> list[str]:
+        if self.registration_issue:
+            return [self.registration_issue]
         required = {
             self.workspace / "sourced_range42.sh": "Context environment is missing; initialize this workspace with range42-context init.",
             self.workspace / "inventory/inventory_default.yml": "Context inventory is missing; initialize this workspace with range42-context init.",
@@ -154,9 +158,9 @@ def _contexts() -> list[NativeContext]:
     return result
 
 
-def available_contexts(hosts: list) -> list[dict]:
+def available_contexts(hosts: list, *, registered: list[NativeContext] | None = None) -> list[dict]:
     rows = []
-    for context in _contexts():
+    for context in [*_contexts(), *(registered or [])]:
         matches = [host for host in hosts if _matches(context, host)]
         issues = context.issues()
         if len(matches) != 1:
@@ -168,8 +172,12 @@ def available_contexts(hosts: list) -> list[dict]:
     return rows
 
 
-def resolve_context(identity: str, host) -> NativeContext:
-    context = next((value for value in _contexts() if value.id == identity), None)
+def resolve_context(identity: str, host, *, registered: list[NativeContext] | None = None) -> NativeContext:
+    contexts = [*_contexts(), *(registered or [])]
+    matches = [value for value in contexts if value.id == identity]
+    if len(matches) > 1:
+        raise invalid("Native environment identities conflict", "NATIVE_CONTEXT_UNAVAILABLE")
+    context = next(iter(matches), None)
     if context is None:
         raise invalid("Choose an existing Range42 context from the environment list", "NATIVE_CONTEXT_UNAVAILABLE")
     if host is None or not _matches(context, host):
