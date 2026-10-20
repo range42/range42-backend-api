@@ -30,6 +30,8 @@ async def _claim(session, deployment_id):
 
 
 async def _idle_binding(session, claim):
+    from app.core.deployment_admission import assert_deployment_admitted
+    await assert_deployment_admitted(session, claim.deployment_id)
     deployment = await session.get(Deployment, claim.deployment_id)
     host = await session.get(ProxmoxHost, deployment.target_host_id)
     validate_binding(claim, deployment, host)

@@ -57,6 +57,7 @@ def configured_principals(settings: Settings) -> dict[str, Principal]:
 
 # Route templates, never user-supplied paths. New routes are denied until reviewed.
 VIEWER_READS = frozenset({
+    "/v1/deployments/{deployment_id}/write-admission",
     '/v1/deployments/{deployment_id}/workshop',
     "/v1/auth/me", "/v1/health", "/v1/health/ready", "/v1/infra/mirror/health",
     "/v1/catalog/sources", "/v1/catalog/entries", "/v1/catalog/entries/{source_id}/{path}",

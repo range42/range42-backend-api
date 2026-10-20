@@ -98,6 +98,7 @@ def create_app() -> FastAPI:
     maintenance_gate = MaintenanceGate(
         Path(settings.maintenance_lock_file) if settings.maintenance_lock_file else None
     )
+    from app.core.deployment_admission_middleware import LegacyWriteAdmissionMiddleware
     middleware = [
         Middleware(
             CORSMiddleware,
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
         Middleware(TraceIdMiddleware),
         Middleware(BearerAuthMiddleware, token=token, principals=principals, audit_enabled=settings.audit_enabled),
         Middleware(MaintenanceMiddleware, gate=maintenance_gate),
+        Middleware(LegacyWriteAdmissionMiddleware),
     ]
 
     _app = FastAPI(

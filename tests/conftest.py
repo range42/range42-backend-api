@@ -25,10 +25,28 @@ os.environ.setdefault(
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+    # Legacy writers now consult durable admission too. Give route-unit tests
+    # real isolated state instead of accidentally sharing the checkout database.
+    import asyncio
+    from app.core import db
+    from app.core.models import Base
     from app.main import app
 
-    return TestClient(app)
+    monkeypatch.setenv("RANGE42_WORKSPACE_ROOT", str(tmp_path / "workspace"))
+    engine = db.build_engine(f"sqlite+aiosqlite:///{tmp_path}/client.db")
+    async def prepare():
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    asyncio.run(prepare())
+    monkeypatch.setattr(db, "_engine", engine)
+    monkeypatch.setattr(db, "_Session", db.session_factory(engine))
+    test_client = TestClient(app)
+    try:
+        yield test_client
+    finally:
+        test_client.close()
+        asyncio.run(engine.dispose())
 
 
 @pytest.fixture(scope="session")

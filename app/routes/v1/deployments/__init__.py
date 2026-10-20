@@ -14,6 +14,8 @@ from app.routes.v1.deployments.snapshot_sets import router as snapshot_sets_rout
 from app.routes.v1.deployments.workshop import router as workshop_router
 from app.routes.v1.deployments.identities import router as identities_router
 
+from app.routes.v1.deployments.write_admission import router as write_admission_router
+
 router = APIRouter(prefix="/deployments", tags=["v1 deployments"])
 router.include_router(crud_router)
 router.include_router(allocations_router)
@@ -29,3 +31,5 @@ router.include_router(snapshot_sets_router)
 router.include_router(workshop_router)
 
 router.include_router(identities_router)
+
+router.include_router(write_admission_router)

@@ -92,12 +92,11 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
     try:
         dep = await session.get(Deployment, attempt.deployment_id)
         validate_concrete_scope(dep, attempt.scope)
-        if dep.project_sha and (dep.native or attempt.scope in ("full", "runtime")):
-            root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
-            with ProvisioningLock(root / ".locks") as lock:
-                await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
-        else:
-            await _start_attempt(session, attempt=attempt, runner=runner)
+        from app.core.deployment_admission import assert_deployment_admitted
+        root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
+        with ProvisioningLock(root / ".locks") as lock:
+            await assert_deployment_admitted(session, dep.id)
+            await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
     except Exception as exc:
         await session.rollback()
         await finish_attempt(attempt_id=attempt_id, rc=None,
