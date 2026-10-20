@@ -28,9 +28,18 @@ class NodeAttestation(BaseModel):
     boot_id: str = Field(
         pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     )
-    supported_operations: list[Literal["inspect"]] = Field(min_length=1, max_length=1)
+    supported_operations: list[Literal["inspect", "capacity"]] = Field(
+        min_length=1, max_length=2
+    )
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]
+
+    @field_validator("supported_operations")
+    @classmethod
+    def bounded_operations(cls, value):
+        if value not in [["inspect"], ["inspect", "capacity"]]:
+            raise ValueError("Unsupported physical-node capabilities")
+        return value
 
     @field_validator("execution_ready", "infrastructure_qualified", mode="before")
     @classmethod

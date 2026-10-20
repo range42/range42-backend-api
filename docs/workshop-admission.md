@@ -153,3 +153,31 @@ completion, grant a physical capacity reservation, prepare a new environment or
 lend Friday's RAM. `remote_quiescence_verified` and
 `capacity_borrowing_allowed` remain false. Legacy controller admission and
 managed VM write admission remain separate, explicit decisions.
+
+## Read configured physical resources
+
+An administrator with a current retained physical-node binding can request
+`POST /v1/proxmox/hosts/{host_id}/physical-node/capacity/review` with the closed
+body `{}`. The dedicated root inspector must separately enable the fixed
+capacity read capability. A browser cannot supply limits, commands, a node,
+backing identities or readiness flags. Responses are `no-store`.
+
+The API checks the original node/hardware, installation and root policy against
+the retained binding, independently verifies the actual HTTPS leaf and generated
+node certificate, and rechecks target, credential and agent configuration after
+the observation. Changed or missing binding facts require a fresh identity
+review. Aliases remain one physical node.
+
+The response includes bounded current/pending guest commitments, the explicit
+host memory reserve/shared CPU budget and conservative disk facts. Stopped
+guests keep their resumable resources. Negative memory headroom remains negative
+in the response and UI. The read creates no allocation, attempt or reservation;
+`allocation_granted`, `execution_ready` and `infrastructure_qualified` are false.
+The UI exposes this under existing environment Settings, after identity review.
+Refresh or changed target/credentials discards old evidence.
+
+This is an observation contract. Durable physical holds, shared pool/cluster
+accounting across concurrent runs, original-generation reconciliation and scoped
+maintenance/resume guards are still required before capacity admission or loans.
+A current free-memory sample or a successful read cannot authorize VM suspension
+or a new workshop deployment.

@@ -124,7 +124,12 @@ def agent_configuration(host_id, node_name):
         raise unavailable() from None
 
 
-async def inspect_agent(config):
+async def read_agent(config, *, action="inspect", maximum=LIMIT, timeout=15):
+    if (action, maximum, timeout) not in [
+        ("inspect", LIMIT, 15),
+        ("capacity", 4194304, 110),
+    ]:
+        raise unavailable()
     process = None
     try:
         process = await asyncio.create_subprocess_exec(
@@ -143,17 +148,17 @@ async def inspect_agent(config):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        async with asyncio.timeout(15):
-            process.stdin.write(b'{"action":"inspect"}\n')
+        async with asyncio.timeout(timeout):
+            process.stdin.write(json.dumps({"action": action}).encode() + b"\n")
             await process.stdin.drain()
             process.stdin.close()
             raw = b""
-            while len(raw) <= LIMIT:
-                chunk = await process.stdout.read(min(4096, LIMIT + 1 - len(raw)))
+            while len(raw) <= maximum:
+                chunk = await process.stdout.read(min(65536, maximum + 1 - len(raw)))
                 if not chunk:
                     break
                 raw += chunk
-            if len(raw) > LIMIT or await process.wait() != 0:
+            if len(raw) > maximum or await process.wait() != 0:
                 raise ValueError()
         value = json.loads(raw, object_pairs_hook=unique_keys)
         if (
@@ -162,19 +167,28 @@ async def inspect_agent(config):
             or value["ok"] is not True
         ):
             raise ValueError()
-        result = NodeAttestation.model_validate(value["result"])
+        return value["result"]
+    except (TimeoutError, OSError, ValueError, TypeError, RuntimeError):
+        raise unavailable() from None
+    finally:
+        if process is not None and process.returncode is None:
+            process.kill()
+            while await process.stdout.read(65536):
+                pass
+            await process.wait()
+
+
+async def inspect_agent(config):
+    try:
+        result = NodeAttestation.model_validate(await read_agent(config))
         if (result.installation_id, result.node_name) != (
             config.installation_id,
             config.node_name,
         ):
             raise ValueError()
         return result
-    except (TimeoutError, OSError, ValueError, TypeError, RuntimeError):
+    except (ValueError, TypeError):
         raise unavailable() from None
-    finally:
-        if process is not None and process.returncode is None:
-            process.kill()
-            await process.wait()
 
 
 def peer_certificate_digest(response):
