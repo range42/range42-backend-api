@@ -32,6 +32,8 @@ def test_capacity_upgrade_preserves_credentials_and_downgrade_retains_uncertain_
     upgraded = migrate("upgrade", "head")
     assert upgraded.returncode == 0, upgraded.stderr
     with sqlite3.connect(database) as db:
+        columns = {row[1] for row in db.execute('PRAGMA table_info(capacity_holds)')}
+        assert {'native_request_id', 'native_request_actor', 'retired_by', 'retirement_approval_revision'} <= columns, 'Missing original native-request and retirement audit migration'
         assert db.execute(
             "SELECT name FROM sqlite_master WHERE name='capacity_holds'"
         ).fetchone(), "Missing durable capacity migration"
@@ -67,3 +69,12 @@ def test_capacity_upgrade_preserves_credentials_and_downgrade_retains_uncertain_
             == "pending_root"
         )
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    restored = migrate('upgrade', 'head')
+    assert restored.returncode == 0, restored.stderr
+    with sqlite3.connect(database) as db:
+        db.execute('UPDATE capacity_holds SET native_request_id=?,native_request_actor=?', ('3' * 32, 'director'))
+    refused = migrate('downgrade', '0016_capacity_holds')
+    assert refused.returncode != 0 and 'Native capacity lifecycle audit exists' in refused.stderr
+    with sqlite3.connect(database) as db:
+        assert db.execute('SELECT native_request_id FROM capacity_holds').fetchone()[0] == '3' * 32
+        assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'

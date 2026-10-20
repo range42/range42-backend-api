@@ -87,15 +87,47 @@ Changing a source, target, configuration, policy or resource plan invalidates
 the reviewed approval. Failed or uncertain attempts never release capacity.
 
 This candidate currently creates only `pending_root` intents. Native physical
-acceptance, execution receipts, unused-intent cancellation, retirement and
-controlled capacity loans remain unimplemented. No hold authorizes execution;
+acceptance, execution receipts, materialized retirement and controlled capacity
+loans remain unimplemented. No hold authorizes execution;
 Start and managed VM actions remain blocked until physical acceptance exists.
 Allocation release is refused while a retained hold exists. Unplanned staff VM
 writes, ordinary provisioning and unscoped legacy writes are refused while any
 hold is retained, preventing them from silently consuming reserved capacity.
 An individual participant's inner Range42 backend has its own separate state.
 
-Do not install this candidate as a complete workshop lifecycle: a retained
-pending intent has no qualified cancellation path yet. Native acceptance and
-verified retirement must be completed before advertising the feature as ready.
+Do not advertise this candidate as a complete workshop lifecycle. Native
+acceptance and materialized retirement still need independent qualification.
 Identity/VPN integration configuration is independent of these resource gates.
+
+### Release an unused reservation
+
+Migration0017 retains the original pre-RPC native request ID/actor and unused
+retirement approval/actor. Existing0016 records keep their original digest when
+all new fields are null. A downgrade refuses to remove any native lifecycle audit.
+
+Deployment Overview can review release of a `pending_root` intent. The review
+requires the independently verified original node and fresh native inventory.
+`DELETE /v1/deployments/{id}/capacity` accepts only the opaque `review_revision`,
+repeats SSH/TLS observation before acquiring the SQLite writer, and then rechecks
+the original plan/bindings, registry revision, actual guest absence and idle
+execution state. Unknown or partial attempt outcomes, workspace locks and any
+planned guest still present prevent unused release. Expiry does not release a
+hold automatically; explicit unused cleanup remains possible after expiry.
+
+The backend's internal `journal_native_request` must commit the original request
+ID before the future native adapter sends its first RPC. It never sends an RPC
+or grants execution itself. Once journaled, conservatively treat the request as
+possibly sent. Timeouts, missing receipts and pending status cannot clear that
+marker or permit unused release. Retrying the journal preserves its original
+request ID and actor. A new native request is refused after workshop expiry.
+
+Unused retirement and dispatch journaling serialize under the same writer; they
+cannot both win. Retirement preserves the original hold, actor, approval,
+allocation and audit record. No VM or provider account is deleted. The retired
+run cannot reserve again; create a new run when needed. Releasing its allocation
+is a separate existing operation with its own independent absence checks.
+
+The UI confirms unused release, restores keyboard focus, and recovers a lost
+reply by reading retained state without replaying the DELETE. Materialized or
+possibly dispatched intents require the future native reconciliation/retirement
+adapter. The physical acceptance and execution gates remain closed.

@@ -32,3 +32,7 @@ class CapacityHold(Base):
         DateTime(timezone=True), nullable=False
     )
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    native_request_id: Mapped[str | None] = mapped_column(String(32))
+    native_request_actor: Mapped[str | None] = mapped_column(String(128))
+    retired_by: Mapped[str | None] = mapped_column(String(128))
+    retirement_approval_revision: Mapped[str | None] = mapped_column(String(64))
