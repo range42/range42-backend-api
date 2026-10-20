@@ -107,5 +107,17 @@ class RunIdentities(BaseModel):
     deployment_id: str
     expires_at: str
     teams: list[str]
+    participants_per_environment: Annotated[int, Field(ge=1, le=10)] = 1
     run_revision: str
     state: IdentityState
+
+
+class IdentityIntegrationCapabilities(Strict):
+    optional: Literal[True] = True
+    configuration_state: Literal['not_configured', 'configured', 'invalid_configuration']
+    provider_access_verified: Literal[False] = False
+    required_for_environment_deployment: Literal[False] = False
+
+
+class IdentityCapabilities(IdentityIntegrationCapabilities):
+    deployment_id: str

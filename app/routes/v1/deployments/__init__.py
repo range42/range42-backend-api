@@ -39,3 +39,6 @@ router.include_router(write_admission_router)
 
 router.include_router(workshop_ownership_router)
 router.include_router(legacy_workshop_router)
+
+from app.routes.v1.deployments.capacity import router as capacity_router
+router.include_router(capacity_router)

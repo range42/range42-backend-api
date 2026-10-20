@@ -155,6 +155,8 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         if legacy_workshop.is_legacy(dep):
             await legacy_workshop.parameters(session, dep, operation, scope=scope)
         await assert_deployment_admitted(session, deployment_id)
+        from app.core.capacity_ledger import assert_dispatch_accepted
+        await assert_dispatch_accepted(session, deployment_id)
     except Range42Error:
         await session.rollback()
         raise

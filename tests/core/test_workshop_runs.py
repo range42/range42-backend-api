@@ -19,6 +19,25 @@ def specification(**changes):
     }
 
 
+def test_five_group_environments_keep_ten_guests_when_two_people_share_each():
+    from app.core.workshop_runs import WorkshopSpec, compile_plan
+    legacy = compile_plan(WorkshopSpec.model_validate(specification()), run_id='a' * 32)
+    grouped = compile_plan(WorkshopSpec.model_validate(specification(participants_per_environment=2)), run_id='a' * 32)
+    assert grouped['participants_per_environment'] == 2
+    assert len(grouped['participants']) == 5
+    assert grouped['guests'] == legacy['guests']
+    assert grouped['assignments'] == legacy['assignments']
+    assert grouped['capacity'] == legacy['capacity']
+    assert 'participants_per_environment' not in legacy  # Original immutable plans stay byte-compatible.
+
+
+@pytest.mark.parametrize('size', [True, 0, 11, 2.0, '2'])
+def test_group_size_is_a_bounded_strict_integer(size):
+    from app.core.workshop_runs import WorkshopSpec
+    with pytest.raises(ValidationError):
+        WorkshopSpec.model_validate(specification(participants_per_environment=size))
+
+
 def test_resource_plan_has_separate_seats_and_immutable_run_ownership():
     from app.core.workshop_runs import WorkshopSpec, compile_plan
     spec = WorkshopSpec.model_validate(specification())

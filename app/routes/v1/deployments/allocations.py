@@ -34,6 +34,8 @@ async def _idle_binding(session, claim):
     await assert_deployment_admitted(session, claim.deployment_id)
     from app.core.workshop_ownership import assert_releasable
     await assert_releasable(session, claim)
+    from app.core.capacity_ledger import assert_allocation_releasable
+    await assert_allocation_releasable(session, claim)
     deployment = await session.get(Deployment, claim.deployment_id)
     host = await session.get(ProxmoxHost, deployment.target_host_id)
     validate_binding(claim, deployment, host)
