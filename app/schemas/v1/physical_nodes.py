@@ -46,6 +46,6 @@ class PhysicalNodeReview(BaseModel):
     node_certificate_sha256: str
     boot_id: str
     configuration_revision: str
-    supported_operations: list[Literal["inspect"]]
+    supported_operations: list[Literal["inspect", "capacity"]]
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]

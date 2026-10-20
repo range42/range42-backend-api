@@ -7222,6 +7222,58 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/physical-node/capacity/review": {
+      "post": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Capacity Review",
+        "operationId": "capacity_review_v1_proxmox_hosts__host_id__physical_node_capacity_review_post",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectNode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts/{host_id}/physical-node": {
       "get": {
         "tags": [
@@ -9144,6 +9196,111 @@
           "message"
         ],
         "title": "CapacityIssue"
+      },
+      "CapacityObservation": {
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "range42-capacity-observation-v1",
+            "title": "Protocol"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeAttestation"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/PhysicalResources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "protocol",
+          "node",
+          "resources"
+        ],
+        "title": "CapacityObservation"
+      },
+      "CapacityReview": {
+        "properties": {
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "observed_at": {
+            "type": "string",
+            "title": "Observed At"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/CapacityObservation"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CapacitySummary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target_host_id",
+          "observed_at",
+          "observation",
+          "summary"
+        ],
+        "title": "CapacityReview"
+      },
+      "CapacitySummary": {
+        "properties": {
+          "configured_memory_mib": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Configured Memory Mib"
+          },
+          "memory_headroom_mib": {
+            "type": "integer",
+            "title": "Memory Headroom Mib"
+          },
+          "configured_vcpus": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Configured Vcpus"
+          },
+          "vcpu_headroom": {
+            "type": "integer",
+            "title": "Vcpu Headroom"
+          },
+          "resumable_guests": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Resumable Guests"
+          },
+          "allocation_granted": {
+            "type": "boolean",
+            "const": false,
+            "title": "Allocation Granted"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configured_memory_mib",
+          "memory_headroom_mib",
+          "configured_vcpus",
+          "vcpu_headroom",
+          "resumable_guests",
+          "allocation_granted",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "CapacitySummary"
       },
       "CatalogEntryDetail": {
         "properties": {
@@ -12559,6 +12716,85 @@
         ],
         "title": "Generation"
       },
+      "GuestResources": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "qemu",
+              "lxc"
+            ],
+            "title": "Kind"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped",
+              "paused",
+              "suspended"
+            ],
+            "title": "State"
+          },
+          "template": {
+            "type": "boolean",
+            "title": "Template"
+          },
+          "vmgenid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vmgenid"
+          },
+          "resumable": {
+            "type": "boolean",
+            "title": "Resumable"
+          },
+          "memory_mib": {
+            "type": "integer",
+            "maximum": 1073741824.0,
+            "minimum": 0.0,
+            "title": "Memory Mib"
+          },
+          "vcpus": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 0.0,
+            "title": "Vcpus"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Configuration Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vm_id",
+          "kind",
+          "state",
+          "template",
+          "vmgenid",
+          "resumable",
+          "memory_mib",
+          "vcpus",
+          "configuration_revision"
+        ],
+        "title": "GuestResources"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -13957,6 +14193,95 @@
         ],
         "title": "NicView"
       },
+      "NodeAttestation": {
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "range42-preparation-agent-v1",
+            "title": "Protocol"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Physical Node Id"
+          },
+          "hardware_binding": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Hardware Binding"
+          },
+          "node_name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$",
+            "title": "Node Name"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Installation Id"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Configuration Revision"
+          },
+          "api_certificate_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Api Certificate Sha256"
+          },
+          "node_certificate_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Node Certificate Sha256"
+          },
+          "boot_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Boot Id"
+          },
+          "supported_operations": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "inspect",
+                "capacity"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Supported Operations"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "protocol",
+          "physical_node_id",
+          "hardware_binding",
+          "node_name",
+          "installation_id",
+          "configuration_revision",
+          "api_certificate_sha256",
+          "node_certificate_sha256",
+          "boot_id",
+          "supported_operations",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "NodeAttestation"
+      },
       "NodeNetworkAddItemReply": {
         "properties": {
           "action": {
@@ -15252,7 +15577,10 @@
           "supported_operations": {
             "items": {
               "type": "string",
-              "const": "inspect"
+              "enum": [
+                "inspect",
+                "capacity"
+              ]
             },
             "type": "array",
             "title": "Supported Operations"
@@ -15321,6 +15649,74 @@
           "needs_review"
         ],
         "title": "PhysicalNodeStatus"
+      },
+      "PhysicalResources": {
+        "properties": {
+          "logical_cpus": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 1.0,
+            "title": "Logical Cpus"
+          },
+          "memory_total_mib": {
+            "type": "integer",
+            "maximum": 1073741824.0,
+            "minimum": 1.0,
+            "title": "Memory Total Mib"
+          },
+          "max_vcpus": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 1.0,
+            "title": "Max Vcpus"
+          },
+          "memory_reserve_mib": {
+            "type": "integer",
+            "maximum": 1073741824.0,
+            "minimum": 512.0,
+            "title": "Memory Reserve Mib"
+          },
+          "guests": {
+            "items": {
+              "$ref": "#/components/schemas/GuestResources"
+            },
+            "type": "array",
+            "maxItems": 1024,
+            "title": "Guests"
+          },
+          "storage": {
+            "items": {
+              "$ref": "#/components/schemas/StorageResources"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Storage"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "logical_cpus",
+          "memory_total_mib",
+          "max_vcpus",
+          "memory_reserve_mib",
+          "guests",
+          "storage",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "PhysicalResources"
       },
       "PreflightRequest": {
         "properties": {
@@ -19419,6 +19815,83 @@
         ],
         "title": "StoragePool"
       },
+      "StorageResources": {
+        "properties": {
+          "storage": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+            "title": "Storage"
+          },
+          "namespace": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?$",
+            "title": "Namespace"
+          },
+          "pool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Pool Id"
+          },
+          "cluster_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Cluster Id"
+          },
+          "rados_pool_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Rados Pool Id"
+          },
+          "replicas": {
+            "type": "integer",
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Replicas"
+          },
+          "logical_available_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Logical Available Bytes"
+          },
+          "cluster_raw_available_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Cluster Raw Available Bytes"
+          },
+          "potential_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Potential Bytes"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeResources"
+            },
+            "type": "array",
+            "maxItems": 4096,
+            "title": "Volumes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "storage",
+          "namespace",
+          "pool_id",
+          "cluster_id",
+          "rados_pool_id",
+          "replicas",
+          "logical_available_bytes",
+          "cluster_raw_available_bytes",
+          "potential_bytes",
+          "volumes"
+        ],
+        "title": "StorageResources"
+      },
       "TaskStatus": {
         "properties": {
           "upid": {
@@ -22052,6 +22525,28 @@
         ],
         "title": "VmSummary",
         "description": "A qemu VM or LXC container on a registered host's node."
+      },
+      "VolumeResources": {
+        "properties": {
+          "volume": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,255}$",
+            "title": "Volume"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Size Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "volume",
+          "size_bytes"
+        ],
+        "title": "VolumeResources"
       },
       "WorkshopAction": {
         "properties": {
