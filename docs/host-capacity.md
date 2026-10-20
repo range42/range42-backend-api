@@ -131,3 +131,34 @@ The UI confirms unused release, restores keyboard focus, and recovers a lost
 reply by reading retained state without replaying the DELETE. Materialized or
 possibly dispatched intents require the future native reconciliation/retirement
 adapter. The physical acceptance and execution gates remain closed.
+
+
+## Workshop physical acceptance
+
+Workshop reservations live in the existing deployment Overview. After reviewing
+and recording the exact server-derived plan, an administrator can request
+physical acceptance when the original node binding explicitly advertises native
+admission. The browser sends only the saved approval revision; it cannot supply
+resource amounts, a request identity, actor or native receipt.
+
+`POST /v1/deployments/{deployment_id}/capacity/native` observes the original
+verified SSH/HTTPS target, commits the original request journal with SQLite FULL
+synchronization, then contacts the
+bounded Root dispatcher. The local writer is closed during RPC. Root independently
+checks configured guest and storage budgets and durably retains the acceptance.
+A verified matching reply is recorded in `native_receipt_json` with the capacity
+audit digest. Physical acceptance still grants no VM execution: preparation and
+a bounded executor must be independently qualified.
+
+After a lost reply, Overview reads status and offers explicit reconciliation.
+`POST /v1/deployments/{deployment_id}/capacity/native/reconcile` accepts `{}` and
+reads only the original request through `capacity-status`; it does not replay
+admission. Missing, malformed, mismatched or absent replies retain the entire
+commitment and journal. A retained accepted receipt is historical evidence, not
+current live health. No timeout, expiry or failed attempt releases it.
+
+Migration0018 preserves older record digests when the receipt is null and refuses
+downgrade while any native receipt remains. Back up the API database together
+with the physical node's complete original identity/capacity state. Do not erase
+one side to resolve a lost acknowledgement. This change introduces no provider
+setup or onboarding requirement and performs no VM, network or account operation.

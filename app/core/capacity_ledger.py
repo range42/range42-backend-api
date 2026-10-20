@@ -57,6 +57,7 @@ def record_digest(row):
             row.approved_by,
             row.revision,
         ] + (['native-lifecycle-v1', *lifecycle] if any(value is not None for value in lifecycle) else [])
+        + (['native-receipt-v1', row.native_receipt_json] if row.native_receipt_json is not None else [])
     )
 
 
@@ -141,6 +142,7 @@ async def demand(session, deployment_id, observed, agent_revision):
             "configuration_revision",
             "api_certificate_sha256",
             "node_certificate_sha256",
+            "supported_operations",
         ]:
             if getattr(approved, field) != getattr(observed.node, field):
                 raise ValueError("Original node binding differs")
@@ -314,11 +316,14 @@ def assert_fresh_lifecycle_review(reviewed, revision, plan_revision, binding_rev
 async def journal_native_request(factory, reviewed, *, actor, expected_revision):
     """Persist an original request BEFORE any future native RPC.
 
-    The native acceptance adapter is not implemented. This journal grants no
+    The fixed native acceptance adapter consumes this journal; it grants no
     execution. Once present, treat the RPC as possibly sent until independent
     native reconciliation proves its outcome; a timeout never clears it.
     """
     async with factory() as session:
+        # NORMAL WAL commits can be lost after power loss even though a remote
+        # native commit already escaped. Seal this journal before any RPC.
+        await session.execute(text('PRAGMA synchronous=FULL'))
         await session.execute(text('BEGIN IMMEDIATE'))
         row, candidate, revision, plan_revision, binding_revision, plan = await current_lifecycle_hold(session, reviewed)
         if row.approval_revision != expected_revision:

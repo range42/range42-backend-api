@@ -74,8 +74,9 @@ async def test_browser_cannot_submit_hardware_identity_paths_ready_flags_or_comm
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('operations', [['inspect'], ['inspect', 'capacity'], ['inspect', 'capacity', 'capacity-admit', 'capacity-status']])
 async def test_inspect_review_save_and_lost_reply_recovery_use_only_server_observation(
-    client_node, monkeypatch
+    client_node, monkeypatch, operations
 ):
     client, db = client_node
     from app.routes.v1.proxmox import physical_nodes as routes
@@ -96,7 +97,7 @@ async def test_inspect_review_save_and_lost_reply_recovery_use_only_server_obser
     async def inspect(configuration):
         assert configuration == config
         calls.append("ssh")
-        return NodeAttestation(**proof())
+        return NodeAttestation(**proof(supported_operations=operations))
 
     async def verify(host, observed):
         assert (
@@ -109,6 +110,7 @@ async def test_inspect_review_save_and_lost_reply_recovery_use_only_server_obser
     review = await client.post("/v1/proxmox/hosts/h/physical-node/review", json={})
     assert review.status_code == 200, review.text
     assert review.json()["physical_node_id"] == "a" * 32
+    assert review.json()['supported_operations'] == operations
     assert "PRIVATE-NODE-CREDENTIAL" not in review.text
     body = {"review_revision": review.json()["revision"]}
     first = await client.post("/v1/proxmox/hosts/h/physical-node", json=body)

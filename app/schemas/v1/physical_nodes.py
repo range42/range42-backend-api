@@ -1,6 +1,7 @@
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.core.physical_nodes import NodeOperation
 
 
 class InspectNode(BaseModel):
@@ -46,6 +47,6 @@ class PhysicalNodeReview(BaseModel):
     node_certificate_sha256: str
     boot_id: str
     configuration_revision: str
-    supported_operations: list[Literal["inspect", "capacity"]]
+    supported_operations: list[NodeOperation]
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]
