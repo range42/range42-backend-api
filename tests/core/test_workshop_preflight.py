@@ -9,7 +9,7 @@ from tests.core.test_workshop_runs import specification
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('fault', [None, 'bridge', 'shared_bridge', 'template', 'wrong_disks', 'passthrough', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
+@pytest.mark.parametrize('fault', [None, 'bridge', 'shared_bridge', 'template', 'wrong_disks', 'passthrough', 'missing_nic', 'malformed_nic', 'api_template_list', 'api_template_text', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
 async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(fault):
     from app.core.workshop_runs import WorkshopSpec, compile_plan
     from app.core.workshop_preflight import workshop_checks
@@ -46,6 +46,7 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
         elif path.endswith('/config'):
             template = 9230 if '/9230/' in path else 9222
             result = {'template': 0 if fault == 'template' else 1, 'cpu': 'host', 'agent': 'enabled=1',
+                'net0': 'virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr422',
                 'scsi0': f'ceph-control:base-{template}-disk-0,size=32G', 'ide2': 'ceph-control:vm-cloudinit,media=cdrom'}
             if template == 9230:
                 result['scsi1'] = f'ceph-control:base-{template}-disk-1,size=128G'
@@ -53,6 +54,14 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
                 result['scsi0'] = f'ceph-control:base-{template}-disk-0,size=24G'
             if fault == 'passthrough':
                 result['hostpci0'] = '0000:01:00.0'
+            if fault == 'missing_nic':
+                result.pop('net0')
+            elif fault == 'malformed_nic':
+                result['net0'] = 'virtio=not-a-mac,bridge=vmbr422'
+            if fault == 'api_template_list':
+                result = []
+            elif fault == 'api_template_text':
+                result = 'private-template-upstream-response'
         else:
             raise AssertionError('Unexpected path: ' + path)
         return httpx.Response(200, json={'data': result})
@@ -68,7 +77,7 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
         assert '/nodes/node-a/qemu/9222/config' in seen
         assert '/nodes/node-a/network' in seen
     public = json.dumps([asdict(check) for check in checks])
-    assert 'test-private' not in public and 'not for the public report' not in public
+    assert 'test-private' not in public and 'not for the public report' not in public and 'private-template-upstream-response' not in public
 
 
 @pytest.mark.asyncio
