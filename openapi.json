@@ -4729,7 +4729,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ParticipantAction"
+                "$ref": "#/components/schemas/app__routes__v1__deployments__workshop__ParticipantAction"
               }
             }
           }
@@ -4972,6 +4972,272 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeploymentAdmissionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/allocations/import": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Import Status",
+        "operationId": "import_status_v1_deployments__deployment_id__allocations_import_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Save Import",
+        "operationId": "save_import_v1_deployments__deployment_id__allocations_import_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOwnership"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/allocations/import/review": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Review Import",
+        "operationId": "review_import_v1_deployments__deployment_id__allocations_import_review_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectOwnership"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/workshop/legacy/participants/{username}/preflight": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Participant Preflight",
+        "operationId": "participant_preflight_v1_deployments__deployment_id__workshop_legacy_participants__username__preflight_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Username"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParticipantPreflight"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/workshop/legacy/participants/{username}/actions": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Participant Action",
+        "operationId": "participant_action_v1_deployments__deployment_id__workshop_legacy_participants__username__actions_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Username"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routes__v1__deployments__legacy_workshop__ParticipantAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptOut"
                 }
               }
             }
@@ -8441,6 +8707,48 @@
         ],
         "title": "AllocationVm"
       },
+      "Assignment": {
+        "properties": {
+          "instance_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Instance Id"
+          },
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "vm_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Vm Name"
+          },
+          "nics": {
+            "items": {
+              "$ref": "#/components/schemas/Nic"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Nics"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instance_id",
+          "vm_id",
+          "vm_name",
+          "nics",
+          "generation"
+        ],
+        "title": "Assignment"
+      },
       "AttemptCreate": {
         "properties": {
           "scope": {
@@ -8969,6 +9277,36 @@
           "name"
         ],
         "title": "CatalogEntrySummary"
+      },
+      "Cohort": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "project_sha": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+            "title": "Project Sha"
+          },
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "project_sha",
+          "target_host_id"
+        ],
+        "title": "Cohort"
       },
       "ComposeRequest": {
         "properties": {
@@ -12188,6 +12526,39 @@
         ],
         "title": "GatewayNicCapacity"
       },
+      "Generation": {
+        "properties": {
+          "owner": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Owner"
+          },
+          "vmgenid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+            "title": "Vmgenid"
+          },
+          "receipt_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Receipt Sha256"
+          },
+          "configuration_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Configuration Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "owner",
+          "vmgenid",
+          "receipt_sha256",
+          "configuration_sha256"
+        ],
+        "title": "Generation"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -12200,6 +12571,48 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "Handoff": {
+        "properties": {
+          "import_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Import Id"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "acknowledged"
+            ],
+            "title": "Phase"
+          },
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          },
+          "allocation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "import_id",
+          "phase",
+          "review_revision"
+        ],
+        "title": "Handoff"
       },
       "HardwareResult": {
         "properties": {
@@ -12986,6 +13399,12 @@
         "type": "object",
         "title": "InspectNode"
       },
+      "InspectOwnership": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "InspectOwnership"
+      },
       "Job": {
         "properties": {
           "person_id": {
@@ -13358,6 +13777,40 @@
           "proxmox_node"
         ],
         "title": "NativeNatRule"
+      },
+      "Nic": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "maximum": 31.0,
+            "minimum": 0.0,
+            "title": "Index"
+          },
+          "bridge": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,14}$",
+            "title": "Bridge"
+          },
+          "ip": {
+            "type": "string",
+            "title": "Ip"
+          },
+          "prefix": {
+            "type": "integer",
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Prefix"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "bridge",
+          "ip",
+          "prefix"
+        ],
+        "title": "Nic"
       },
       "NicChanges": {
         "properties": {
@@ -14011,6 +14464,233 @@
         ],
         "title": "Operation"
       },
+      "OwnershipReview": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "witness": {
+            "$ref": "#/components/schemas/OwnershipWitness"
+          },
+          "capacity_borrowing_allowed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Capacity Borrowing Allowed"
+          },
+          "remote_quiescence_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Remote Quiescence Verified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "revision",
+          "witness",
+          "capacity_borrowing_allowed",
+          "remote_quiescence_verified"
+        ],
+        "title": "OwnershipReview"
+      },
+      "OwnershipStatus": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "unimported",
+              "pending_controller",
+              "claim_saved",
+              "active",
+              "released"
+            ],
+            "title": "Phase"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "allocation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation Id"
+          },
+          "ownership_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownership Revision"
+          },
+          "project_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Sha"
+          },
+          "target_host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Host Id"
+          },
+          "assignments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Assignments"
+          },
+          "resume_review_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Review Revision"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By"
+          },
+          "capacity_borrowing_allowed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Capacity Borrowing Allowed"
+          },
+          "remote_quiescence_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Remote Quiescence Verified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "phase",
+          "import_id",
+          "allocation_id",
+          "ownership_revision",
+          "project_sha",
+          "target_host_id",
+          "assignments",
+          "resume_review_revision",
+          "changed_by",
+          "capacity_borrowing_allowed",
+          "remote_quiescence_verified"
+        ],
+        "title": "OwnershipStatus"
+      },
+      "OwnershipWitness": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version"
+          },
+          "cohort": {
+            "$ref": "#/components/schemas/Cohort"
+          },
+          "node_name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$",
+            "title": "Node Name"
+          },
+          "api_certificate_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Api Certificate Sha256"
+          },
+          "node_certificate_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Node Certificate Sha256"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/Assignment"
+            },
+            "type": "array",
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Assignments"
+          },
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Handoff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "cohort",
+          "node_name",
+          "api_certificate_sha256",
+          "node_certificate_sha256",
+          "assignments",
+          "review_revision"
+        ],
+        "title": "OwnershipWitness"
+      },
       "Page_AttemptOut_": {
         "properties": {
           "items": {
@@ -14383,7 +15063,7 @@
         ],
         "title": "Page[VmSummary]"
       },
-      "ParticipantAction": {
+      "ParticipantPreflight": {
         "properties": {
           "action": {
             "type": "string",
@@ -14394,17 +15074,6 @@
               "teardown"
             ],
             "title": "Action"
-          },
-          "confirmation": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confirmation"
           }
         },
         "additionalProperties": false,
@@ -14412,7 +15081,7 @@
         "required": [
           "action"
         ],
-        "title": "ParticipantAction"
+        "title": "ParticipantPreflight"
       },
       "Person": {
         "properties": {
@@ -15818,6 +16487,21 @@
           "cards"
         ],
         "title": "RuntimeReport"
+      },
+      "SaveOwnership": {
+        "properties": {
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_revision"
+        ],
+        "title": "SaveOwnership"
       },
       "SavePhysicalNode": {
         "properties": {
@@ -21877,6 +22561,74 @@
           "seats"
         ],
         "title": "WorkshopStatus"
+      },
+      "app__routes__v1__deployments__legacy_workshop__ParticipantAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "deploy",
+              "configure",
+              "reset",
+              "teardown"
+            ],
+            "title": "Action"
+          },
+          "dispatch_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "title": "Dispatch Id"
+          },
+          "confirm_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Username"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "dispatch_id"
+        ],
+        "title": "ParticipantAction"
+      },
+      "app__routes__v1__deployments__workshop__ParticipantAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "deploy",
+              "configure",
+              "reset",
+              "teardown"
+            ],
+            "title": "Action"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ParticipantAction"
       }
     }
   }

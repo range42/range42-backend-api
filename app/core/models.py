@@ -162,3 +162,5 @@ from app.core import native_environment_models as _native_environment_models  # 
 from app.core import physical_node_models as _physical_node_models  # noqa: E402, F401
 
 from app.core import deployment_admission_models as _deployment_admission_models  # noqa: E402, F401
+
+from app.core import workshop_ownership_models as _workshop_ownership_models  # noqa: E402, F401

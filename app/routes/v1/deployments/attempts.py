@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.attempt_lifecycle import TERMINAL_ATTEMPT_STATES, finish_attempt
@@ -50,8 +51,27 @@ async def create_attempt(deployment_id: str, payload: AttemptCreate,
 
 async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
                           session: AsyncSession, *, operation: dict | None = None,
-                          legacy_vars: dict | None = None):
+                          legacy_vars: dict | None = None, dispatch_id: str | None = None):
     """Reserve all jobs through one lock predicate; runtime intent is server-owned."""
+    from app.core.workshop_ownership_models import WorkshopLegacyDispatch
+    if dispatch_id is not None:
+        if (not isinstance(dispatch_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', dispatch_id)
+                or not operation or operation.get('kind') != 'legacy_workshop' or legacy_vars is not None):
+            raise Range42Error(status=400, code='WORKSHOP_DISPATCH_INVALID', message='Use a retained participant operation identifier.')
+        # Serialize deduplication and attempt creation in the same durable writer
+        # transaction. A lost reply never starts an existing attempt again.
+        await session.rollback()
+        await session.execute(text('BEGIN IMMEDIATE'))
+        previous = await session.get(WorkshopLegacyDispatch, (deployment_id, dispatch_id))
+        if previous is not None:
+            if previous.operation != operation:
+                raise Range42Error(status=409, code='WORKSHOP_DISPATCH_CHANGED', message='This operation identifier already belongs to a different participant action.')
+            retained = await session.get(Attempt, previous.attempt_id)
+            if retained is None:
+                raise Range42Error(status=409, code='WORKSHOP_DISPATCH_REVIEW_REQUIRED', message='Preserve the retained operation and inspect its missing attempt before recovery.')
+            result = AttemptOut.model_validate(retained, from_attributes=True)
+            await session.rollback()
+            return result
     dep = (await session.execute(
         select(Deployment).where(Deployment.id == deployment_id))).scalar_one_or_none()
     if dep is None:
@@ -59,7 +79,13 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
-    scope = "runtime" if operation is not None else payload.scope
+    from app.core import legacy_workshop_operations as legacy_workshop
+    legacy_operation = operation is not None and operation.get('kind') == 'legacy_workshop'
+    scope = "runtime" if operation is not None and not legacy_operation else payload.scope
+    if legacy_workshop.is_legacy(dep):
+        await legacy_workshop.parameters(session, dep, operation, scope=scope)
+    elif legacy_operation:
+        raise legacy_workshop.refused()
     validate_concrete_scope(dep, scope)
     validate_project_revision(dep, scope, payload.project_sha)
     if scope in {"rollback_all", "rollback_team"} and legacy_vars is None:
@@ -126,6 +152,8 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         )
     from app.core.deployment_admission import assert_deployment_admitted
     try:
+        if legacy_workshop.is_legacy(dep):
+            await legacy_workshop.parameters(session, dep, operation, scope=scope)
         await assert_deployment_admitted(session, deployment_id)
     except Range42Error:
         await session.rollback()
@@ -137,6 +165,9 @@ async def reserve_attempt(deployment_id: str, payload: AttemptCreate,
         except Exception:
             await session.rollback()
             raise
+    if dispatch_id is not None:
+        session.add(WorkshopLegacyDispatch(deployment_id=deployment_id, dispatch_id=dispatch_id,
+                                          attempt_id=row.id, operation=operation))
     await session.commit()
     await session.refresh(row)
 

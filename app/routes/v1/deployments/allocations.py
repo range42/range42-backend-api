@@ -32,6 +32,8 @@ async def _claim(session, deployment_id):
 async def _idle_binding(session, claim):
     from app.core.deployment_admission import assert_deployment_admitted
     await assert_deployment_admitted(session, claim.deployment_id)
+    from app.core.workshop_ownership import assert_releasable
+    await assert_releasable(session, claim)
     deployment = await session.get(Deployment, claim.deployment_id)
     host = await session.get(ProxmoxHost, deployment.target_host_id)
     validate_binding(claim, deployment, host)
@@ -80,6 +82,8 @@ async def release_deployment_allocations(deployment_id: str):
             deployment, fresh_host = await _idle_binding(session, fresh)
             if observed != (fresh.id, deployment.current_attempt_id) or (host.api_url, host.node_name) != (fresh_host.api_url, fresh_host.node_name):
                 raise _error("BUSY", "The deployment changed while verifying absence; its assignments were retained. Retry the release.")
+            from app.core.workshop_ownership import record_release
+            await record_release(session, fresh)
             await session.delete(fresh)
             await session.commit()
     return Response(status_code=204)
