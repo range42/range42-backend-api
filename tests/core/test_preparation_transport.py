@@ -180,3 +180,137 @@ def test_https_peer_certificate_must_match_the_root_agent_before_recording_any_i
     )
     with pytest.raises(ValueError):
         mod.peer_certificate_digest(httpx.Response(200))
+
+
+def per_node_config(tmp_path, monkeypatch):
+    path = config(tmp_path, monkeypatch)
+    value = json.loads(path.read_text())
+    value["version"] = 2
+    value["agents"][0]["ssh_config"] = value.pop("ssh_config")
+    path.write_text(json.dumps(value))
+    return path, value
+
+
+def test_per_node_transport_revision_survives_other_node_enrollment(
+    tmp_path, monkeypatch
+):
+    mod = transport()
+    path, value = per_node_config(tmp_path, monkeypatch)
+    first = mod.agent_configuration("first", "pve-test")
+    other_ssh = tmp_path / "other_ssh"
+    other_ssh.write_text("Host range42-preparation-other\n  HostName 192.0.2.11\n")
+    other_ssh.chmod(0o600)
+    other = {
+        "target_host_id": "second",
+        "node_name": "pve-second",
+        "ssh_alias": "range42-preparation-other",
+        "ssh_config": str(other_ssh),
+    }
+    value["agents"].insert(0, other)
+    path.write_text(json.dumps(value))
+    assert mod.agent_configuration("first", "pve-test") == first
+    second = mod.agent_configuration("second", "pve-second")
+    assert second.ssh_config == other_ssh
+    other_ssh.write_text(other_ssh.read_text() + "  Port 2222\n")
+    assert mod.agent_configuration("first", "pve-test") == first
+    assert mod.agent_configuration("second", "pve-second").revision != second.revision
+    value["agents"].reverse()
+    path.write_text(json.dumps(value))
+    assert mod.agent_configuration("first", "pve-test") == first
+    value["agents"] = [
+        row for row in value["agents"] if row["target_host_id"] == "first"
+    ]
+    path.write_text(json.dumps(value))
+    assert mod.agent_configuration("first", "pve-test") == first
+
+
+def test_legacy_transport_preserves_original_review_revision(tmp_path, monkeypatch):
+    import hashlib
+
+    mod = transport()
+    path = config(tmp_path, monkeypatch)
+    value = json.loads(path.read_text())
+    expected = mod.digest(
+        [value, hashlib.sha256((tmp_path / "ssh_config").read_bytes()).hexdigest()]
+    )
+    assert mod.agent_configuration("first", "pve-test").revision == expected
+
+
+@pytest.mark.parametrize(
+    "change", ["selected-alias", "selected-path", "selected-bytes", "installation"]
+)
+def test_selected_transport_changes_require_a_new_review(tmp_path, monkeypatch, change):
+    mod = transport()
+    path, value = per_node_config(tmp_path, monkeypatch)
+    first = mod.agent_configuration("first", "pve-test")
+    if change == "selected-alias":
+        value["agents"][0]["ssh_alias"] = "range42-preparation-replacement"
+    elif change == "selected-path":
+        new_ssh = tmp_path / "new_ssh"
+        new_ssh.write_bytes(first.ssh_config.read_bytes())
+        new_ssh.chmod(0o600)
+        value["agents"][0]["ssh_config"] = str(new_ssh)
+    elif change == "selected-bytes":
+        first.ssh_config.write_text(first.ssh_config.read_text() + "  Port 2222\n")
+    else:
+        value["installation_id"] = "d" * 32
+    path.write_text(json.dumps(value))
+    assert mod.agent_configuration("first", "pve-test").revision != first.revision
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "shared-config",
+        "missing-config",
+        "public-config",
+        "linked-config",
+        "relative-config",
+        "unknown-command",
+        "duplicate-host",
+        "boolean-version",
+    ],
+)
+def test_per_node_registry_keeps_the_private_fixed_transport_boundary(
+    tmp_path, monkeypatch, kind
+):
+    from app.core.errors import Range42Error
+
+    mod = transport()
+    path, value = per_node_config(tmp_path, monkeypatch)
+    row = value["agents"][0]
+    if kind == "shared-config":
+        value["ssh_config"] = row["ssh_config"]
+    elif kind == "missing-config":
+        row.pop("ssh_config")
+    elif kind == "public-config":
+        (tmp_path / "ssh_config").chmod(0o644)
+    elif kind == "linked-config":
+        link = tmp_path / "linked_ssh"
+        link.symlink_to(tmp_path / "ssh_config")
+        row["ssh_config"] = str(link)
+    elif kind == "relative-config":
+        row["ssh_config"] = "ssh_config"
+    elif kind == "unknown-command":
+        row["command"] = "/bin/sh"
+    elif kind == "duplicate-host":
+        value["agents"].append(dict(row))
+    else:
+        value["version"] = True
+    path.write_text(json.dumps(value))
+    with pytest.raises(Range42Error) as error:
+        mod.agent_configuration("first", "pve-test")
+    assert error.value.code == "PREPARATION_AGENT_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("value", [{}, {"agents": []}, [], None, {"version": 2}])
+def test_incomplete_transport_registry_has_a_bounded_error(
+    tmp_path, monkeypatch, value
+):
+    from app.core.errors import Range42Error
+
+    path = config(tmp_path, monkeypatch)
+    path.write_text(json.dumps(value))
+    with pytest.raises(Range42Error) as error:
+        transport().agent_configuration("first", "pve-test")
+    assert error.value.code == "PREPARATION_AGENT_UNAVAILABLE"

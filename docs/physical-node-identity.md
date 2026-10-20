@@ -114,3 +114,36 @@ network-isolated container. This does not enroll or qualify a live PVE host,
 reserve RAM/storage/vCPU, fence direct writers or prepare native infrastructure.
 
 The read-only node certificate contract is checked against the [Proxmox certificate API](https://github.com/proxmox/pve-manager/blob/master/PVE/API2/Certificates.pm) and [certificate management documentation](https://github.com/proxmox/pve-docs/blob/master/certificate-management.adoc).
+
+## Independent transports for additional physical nodes
+
+Registry version2 places `ssh_config` in each agent entry and removes it from
+the root object. It retains the same installation identity and fixed protocol:
+
+```json
+{
+  "version": 2,
+  "installation_id": "cccccccccccccccccccccccccccccccc",
+  "agents": [
+    {
+      "target_host_id": "host-a",
+      "node_name": "node-a",
+      "ssh_alias": "range42-preparation-node-a",
+      "ssh_config": "/run/secrets/node-a-ssh-config"
+    }
+  ]
+}
+```
+
+The selected entry, its protected SSH configuration bytes, and installation ID
+bind its review revision. Adding, removing or reordering other valid nodes does
+not invalidate that node's recorded binding or accepted capacity. Changes to
+the selected entry or SSH configuration still require a new review. The entire
+registry remains shape-validated; duplicate targets and unknown fields refuse
+operation. Protect each node's referenced trust and service-key files through
+the installation workflow as with version1.
+
+Version1 remains supported with its original whole-registry digest. Converting
+an existing registry from version1 to version2 requires an explicit node review;
+there is no automatic migration or rewrite of retained acceptance receipts.
+This is transport configuration only and enables no VM execution or onboarding.

@@ -76,24 +76,33 @@ def agent_configuration(host_id, node_name):
         value = json.loads(raw, object_pairs_hook=unique_keys)
         if (
             not isinstance(value, dict)
-            or set(value) != {"version", "installation_id", "ssh_config", "agents"}
-            or type(value["version"]) is not int
-            or value["version"] != 1
+            or type(value.get("version")) is not int
+            or value["version"] not in {1, 2}
+            or set(value)
+            != (
+                {"version", "installation_id", "ssh_config", "agents"}
+                if value["version"] == 1
+                else {"version", "installation_id", "agents"}
+            )
             or not isinstance(value["installation_id"], str)
             or not re.fullmatch(r"[0-9a-f]{32}", value["installation_id"])
-            or not isinstance(value["ssh_config"], str)
+            or (value["version"] == 1 and not isinstance(value["ssh_config"], str))
             or not isinstance(value["agents"], list)
             or not 1 <= len(value["agents"]) <= 64
         ):
             raise ValueError()
-        ssh_config = Path(value["ssh_config"])
-        ssh_digest = hashlib.sha256(protected_bytes(ssh_config)).hexdigest()
+        per_node = value["version"] == 2
         selected = None
         hosts = set()
         for row in value["agents"]:
             if (
                 not isinstance(row, dict)
-                or set(row) != {"target_host_id", "node_name", "ssh_alias"}
+                or set(row)
+                != (
+                    {"target_host_id", "node_name", "ssh_alias", "ssh_config"}
+                    if per_node
+                    else {"target_host_id", "node_name", "ssh_alias"}
+                )
                 or any(not isinstance(row[key], str) for key in row)
                 or not re.fullmatch(
                     r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", row["target_host_id"]
@@ -113,33 +122,48 @@ def agent_configuration(host_id, node_name):
                 selected = row
         if selected is None:
             raise ValueError()
+        ssh_config = Path(selected["ssh_config"] if per_node else value["ssh_config"])
+        ssh_digest = hashlib.sha256(protected_bytes(ssh_config)).hexdigest()
+        # Existing v1 bindings retain their exact digest. In v2, unrelated node
+        # enrollment/reordering must not invalidate an already accepted hold.
+        reviewed = (
+            {
+                "version": 2,
+                "installation_id": value["installation_id"],
+                "agent": selected,
+            }
+            if per_node
+            else value
+        )
         return AgentConfiguration(
             selected["ssh_alias"],
             ssh_config,
             value["installation_id"],
             node_name,
-            digest([value, ssh_digest]),
+            digest([reviewed, ssh_digest]),
         )
     except (OSError, ValueError, TypeError):
         raise unavailable() from None
 
 
-async def read_agent(config, *, action="inspect", maximum=LIMIT, timeout=15, request=None):
+async def read_agent(
+    config, *, action="inspect", maximum=LIMIT, timeout=15, request=None
+):
     if (action, maximum, timeout) not in [
         ("inspect", LIMIT, 15),
         ("capacity", 4194304, 110),
-        ('capacity-admit', LIMIT, 110),
-        ('capacity-status', LIMIT, 15),
+        ("capacity-admit", LIMIT, 110),
+        ("capacity-status", LIMIT, 15),
     ]:
         raise unavailable()
-    payload = {'action': action}
-    if action in {'capacity-admit', 'capacity-status'}:
+    payload = {"action": action}
+    if action in {"capacity-admit", "capacity-status"}:
         if not isinstance(request, dict):
             raise unavailable()
-        payload['request'] = request
+        payload["request"] = request
     elif request is not None:
         raise unavailable()
-    raw_request = json.dumps(payload).encode() + b'\n'
+    raw_request = json.dumps(payload).encode() + b"\n"
     if len(raw_request) > 65536:
         raise unavailable()
     process = None
