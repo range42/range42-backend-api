@@ -157,3 +157,5 @@ from app.core import allocation_models as _allocation_models  # noqa: E402, F401
 from app.core import snapshot_models as _snapshot_models  # noqa: E402, F401
 from app.core import audit as _audit  # noqa: E402, F401
 from app.core import workshop_models as _workshop_models  # noqa: E402, F401
+
+from app.core import native_environment_models as _native_environment_models  # noqa: E402, F401

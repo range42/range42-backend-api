@@ -44,6 +44,9 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
                        workshop_state_dir: Path | None = None) -> NativeRun:
     if scope not in descriptor["actions"]:
         raise invalid("This saved scenario does not declare that lifecycle action", "NATIVE_ACTION_UNAVAILABLE")
+    from app.core.native_contexts import execution_issue
+    if issue := execution_issue(context, scope):
+        raise invalid(issue, 'WORKSHOP_INFRASTRUCTURE_UNQUALIFIED')
     values = native_variables(descriptor, features, parameters)
     if context.target_api_url:
         values.update(proxmox_api_host=urlsplit(context.target_api_url).netloc,

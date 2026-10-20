@@ -174,3 +174,42 @@ def test_generated_only_cli_adapter_is_not_offered_for_native_deployments(tmp_pa
     row = available_contexts([host])[0]
     assert row["ready"] is False
     assert any("native" in issue.lower() for issue in row["issues"])
+
+
+def test_installer_binding_makes_discovered_workspace_explicit_without_registry_edits(tmp_path, monkeypatch):
+    from app.core.native_contexts import _contexts, resolve_context
+    workspace, _, host = context(tmp_path, monkeypatch)
+    (workspace / '.range42-target.json').write_text(json.dumps({'version': 1,
+        'target_host_id': host.id, 'target_node': host.node_name, 'target_api_url': host.api_url}))
+    found, = _contexts()
+    assert (found.target_host_id, found.target_node, found.target_api_url) == (host.id, host.node_name, host.api_url)
+    host.node_name = 'different-node'
+    with pytest.raises(Range42Error, match='target'):
+        resolve_context(workspace.name, host)
+
+
+@pytest.mark.parametrize('fault', ['missing_field', 'unknown_field', 'oversize', 'symlink', 'invalid_json', 'http', 'writable'])
+def test_invalid_installer_binding_cannot_fall_back_to_unbound_discovery(tmp_path, monkeypatch, fault):
+    from app.core.native_contexts import _contexts
+    workspace, _, host = context(tmp_path, monkeypatch)
+    binding = {'version': 1, 'target_host_id': host.id, 'target_node': host.node_name, 'target_api_url': host.api_url}
+    path = workspace / '.range42-target.json'
+    if fault == 'missing_field':
+        binding.pop('target_node')
+    elif fault == 'unknown_field':
+        binding['workspace'] = '/etc'
+    elif fault == 'http':
+        binding['target_api_url'] = 'http://192.0.2.10:8006'
+    path.write_text(json.dumps(binding))
+    if fault == 'oversize':
+        path.write_text(' ' * 16385)
+    elif fault == 'invalid_json':
+        path.write_text('{')
+    elif fault == 'symlink':
+        target = tmp_path / 'foreign.json'
+        path.rename(target)
+        path.symlink_to(target)
+    elif fault == 'writable':
+        path.chmod(0o666)
+    with pytest.raises(Range42Error, match='binding|invalid'):
+        _contexts()

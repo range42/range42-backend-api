@@ -81,6 +81,10 @@ async def run_preflight(deployment_id: str,
             ) else None
             report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
             if scenario.native:
+                from app.core.native_contexts import execution_issue
+                if issue := execution_issue(scenario.context, scope):
+                    report.checks.append(PreflightCheck(check='native_environment_qualification', result='block',
+                        code='WORKSHOP_INFRASTRUCTURE_UNQUALIFIED', detail=issue))
                 if plan := scenario.native.get('workshop_plan'):
                     from app.core.workshop_preflight import workshop_checks
                     from app.core.deployment_allocations import ensure_for_attempt

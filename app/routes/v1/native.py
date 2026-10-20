@@ -26,7 +26,9 @@ async def _session():
 @router.get("/contexts")
 async def contexts(session: AsyncSession = Depends(_session)):
     hosts = list((await session.execute(select(ProxmoxHost))).scalars())
-    rows = await asyncio.to_thread(available_contexts, hosts)
+    from app.core.native_environments import registered_contexts
+    registered = await registered_contexts(session)
+    rows = await asyncio.to_thread(available_contexts, hosts, registered=registered)
     return {"items": rows, "total": len(rows), "setup_hint": (
         "Initialize an environment with range42-context init on the deployer-cli. "
         "Run this backend there as the deployment user and configure RANGE42_CONTEXT_ROOT "

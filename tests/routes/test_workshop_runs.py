@@ -410,3 +410,89 @@ async def test_invalid_workshop_is_rejected_before_persisting_a_run(workshop_env
     assert result.status_code in (409, 422), result.text
     async with db.get_session_factory()() as session:
         assert await session.scalar(text('SELECT count(*) FROM workshop_runs')) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scope,allowed_cleanup', [('full', False), ('configure', False), ('teardown', True)])
+async def test_managed_planning_profile_cannot_start_guests_before_infrastructure_qualification(workshop_env, monkeypatch, scope, allowed_cleanup):
+    from app.core import deploy_trigger
+    from app.core.models import Attempt
+    from app.core.native_contexts import _contexts
+    from app.core.errors import PreflightBlockedError
+    from app.core.preflight import PreflightCheck
+    client, db, _ = workshop_env
+    selection = {'label': 'Planned infrastructure', 'base_context_id': 'lab-demo', 'target_host_id': 'h',
+        'workshop_profile': _contexts()[0].workshop_profile.model_dump()}
+    revision = (await client.post('/v1/environments/review', json=selection)).json()['revision']
+    environment = await client.post('/v1/environments', json={**selection, 'review_revision': revision})
+    assert environment.status_code == 201, environment.text
+    payload = creation()
+    payload['native']['context_id'] = environment.json()['id']
+    created = await create_reserved(client, payload)
+    assert created.status_code == 201, created.text
+    started = await client.post(f"/v1/deployments/{created.json()['id']}/attempts",
+        json={'scope': scope, **({'confirm_codename': 'COURSE'} if allowed_cleanup else {})})
+    assert started.status_code == 201, started.text
+    async def checks(*args, **kwargs):
+        return [PreflightCheck(check='read_only_fixture', result='pass')]
+    monkeypatch.setattr('app.core.workshop_preflight.workshop_checks', checks)
+    monkeypatch.setattr(deploy_trigger, '_decrypt_vault', lambda *_: {})
+    calls = []
+    class Handle:
+        pid = None
+        async def wait(self):
+            return 0
+        async def kill(self):
+            pass
+    class Runner:
+        async def start(self, **kwargs):
+            calls.append(kwargs)
+            return Handle()
+    async with db.get_session_factory()() as session:
+        attempt = await session.get(Attempt, started.json()['id'])
+        if allowed_cleanup:
+            await deploy_trigger.start_attempt(session, attempt=attempt, runner=Runner())
+        else:
+            with pytest.raises(PreflightBlockedError, match='not been qualified'):
+                await deploy_trigger.start_attempt(session, attempt=attempt, runner=Runner())
+    assert bool(calls) is allowed_cleanup
+
+
+@pytest.mark.asyncio
+async def test_workshop_only_managed_environment_cannot_execute_an_unbounded_native_scenario(workshop_env):
+    from app.core.native_contexts import _contexts
+    client, _, repo = workshop_env
+    selection = {'label': 'Workshop only', 'base_context_id': 'lab-demo', 'target_host_id': 'h',
+        'workshop_profile': _contexts()[0].workshop_profile.model_dump()}
+    revision = (await client.post('/v1/environments/review', json=selection)).json()['revision']
+    environment = await client.post('/v1/environments', json={**selection, 'review_revision': revision})
+    (repo / 'scenarios/installer-course/manifest/workshop.json').unlink()
+    payload = creation()
+    payload['native'] = {'path': 'scenarios/installer-course', 'context_id': environment.json()['id']}
+    response = await client.post('/v1/deployments/', json=payload)
+    assert response.status_code == 409, response.text
+    assert response.json()['code'] == 'NATIVE_ENVIRONMENT_PURPOSE'
+
+
+@pytest.mark.asyncio
+async def test_preflight_reports_missing_managed_infrastructure_qualification(workshop_env, monkeypatch):
+    from app.core.native_contexts import _contexts
+    from app.core.preflight import PreflightCheck
+    client, _, _ = workshop_env
+    selection = {'label': 'Planning only', 'base_context_id': 'lab-demo', 'target_host_id': 'h',
+        'workshop_profile': _contexts()[0].workshop_profile.model_dump()}
+    revision = (await client.post('/v1/environments/review', json=selection)).json()['revision']
+    environment = await client.post('/v1/environments', json={**selection, 'review_revision': revision})
+    payload = creation()
+    payload['native']['context_id'] = environment.json()['id']
+    created = await create_reserved(client, payload)
+    async def reachable(*args, **kwargs):
+        return PreflightCheck(check='proxmox_api', result='pass')
+    async def prerequisites(*args, **kwargs):
+        return []
+    monkeypatch.setattr('app.routes.v1.deployments.preflight.check_proxmox_api_status', reachable)
+    monkeypatch.setattr('app.core.workshop_preflight.workshop_checks', prerequisites)
+    response = await client.post(f"/v1/deployments/{created.json()['id']}/preflight", json={'scope': 'full'})
+    assert response.status_code == 200, response.text
+    assert any(check['check'] == 'native_environment_qualification' and check['result'] == 'block'
+        and check['code'] == 'WORKSHOP_INFRASTRUCTURE_UNQUALIFIED' for check in response.json()['checks'])

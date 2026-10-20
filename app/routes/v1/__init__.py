@@ -31,3 +31,6 @@ router.include_router(access_router)
 router.include_router(native_router)
 
 router.include_router(platform_router)
+
+from app.routes.v1.environments import router as environments_router  # noqa: E402
+router.include_router(environments_router)

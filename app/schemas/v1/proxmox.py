@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator
 
 
 class HostIn(BaseModel):
@@ -36,6 +36,17 @@ class HostOut(BaseModel):
     protected_vmids_override: list[list[int]] | None = None
     added_at: datetime
     last_health_check: dict | None = None
+
+
+class HostCredentialReview(BaseModel):
+    revision: str
+    host: HostOut
+
+
+class HostCredentialRotation(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    expected_revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+    token_ref: SecretStr = Field(min_length=3, max_length=4096)
 
 
 class HostHealth(BaseModel):

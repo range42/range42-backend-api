@@ -81,7 +81,6 @@ async def prepare_project_scenario(
     root, token, project = await checkout_project_repository(session, deployment.project_id,
         dest=dest, sha=project_sha or deployment.project_sha or "")
     if getattr(deployment, "native", None):
-        from app.core.native_contexts import resolve_context
         from app.core.native_scenarios import inside, inspect_native_scenario, invalid, native_variables, native_vmids
         if project.subdir:
             root = inside(root, project.subdir)
@@ -103,7 +102,11 @@ async def prepare_project_scenario(
                 'networks': plan['networks'], 'reservations': {'status': 'checked',
                     'issues': ['Workshop assignments are checked against the backend allocation ledger; live availability is checked before execution.']}}
             native = {**native, 'workshop_plan': plan}
-        context = resolve_context(native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
+        from app.core.native_environments import resolve_registered_context
+        context = await resolve_registered_context(session, native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
+        if context.purpose == 'workshop' and not plan:
+            raise Range42Error(status=409, code='NATIVE_ENVIRONMENT_PURPOSE',
+                message='This registered environment is bounded to typed workshop runs. Choose its workshop scenario or an ordinary native context for another workflow.')
         if plan:
             from app.core.workshop_profiles import require_workshop_profile
             require_workshop_profile(context, plan)
