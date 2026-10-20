@@ -520,3 +520,5 @@ outside this container. Configure its dedicated SSH key with a forced command,
 `restrict`, strict pinned host-key verification, and read-only client mounts.
 Browser requests cannot supply commands, file paths, network policies or source
 revisions. With no worker configured the endpoints return `WORKSHOP_UNAVAILABLE`.
+
+Physical node identity for reusable preparation is an optional, administrator-reviewed [SSH/HTTPS binding](docs/physical-node-identity.md). Recording identity does not enable capacity admission or native preparation.
