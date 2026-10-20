@@ -68,3 +68,34 @@ Measurements do not reserve resources or control external Proxmox writers. The
 checks target one node; they do not perform automatic placement, replication,
 or exact per-user quota enforcement. This provides the v1 replacement for the
 capacity surface requested in backend issue #47.
+
+## Durable workshop capacity candidate
+
+Migration0016 adds nonexpiring capacity holds for canonical workshop allocations.
+Deployment Overview can review the server-compiled plan against the independently
+verified physical node, configured guests, host reserve, shared CPU policy and
+actual Ceph pool/cluster identities. Stopped ordinary guests retain their full
+configured commitments. Target aliases cannot provide a second resource budget.
+
+`GET /v1/deployments/{id}/capacity` reads retained state without provider calls.
+`POST .../capacity/review` accepts an empty object and performs a fresh bounded
+inspection. `POST .../capacity` accepts only the opaque `review_revision`; the
+backend recomputes the exact saved plan and current budgets under its SQLite
+writer before retaining a hold. Competing reservations serialize. A retry after
+a lost response recovers the original intent rather than creating another hold.
+Changing a source, target, configuration, policy or resource plan invalidates
+the reviewed approval. Failed or uncertain attempts never release capacity.
+
+This candidate currently creates only `pending_root` intents. Native physical
+acceptance, execution receipts, unused-intent cancellation, retirement and
+controlled capacity loans remain unimplemented. No hold authorizes execution;
+Start and managed VM actions remain blocked until physical acceptance exists.
+Allocation release is refused while a retained hold exists. Unplanned staff VM
+writes, ordinary provisioning and unscoped legacy writes are refused while any
+hold is retained, preventing them from silently consuming reserved capacity.
+An individual participant's inner Range42 backend has its own separate state.
+
+Do not install this candidate as a complete workshop lifecycle: a retained
+pending intent has no qualified cancellation path yet. Native acceptance and
+verified retirement must be completed before advertising the feature as ready.
+Identity/VPN integration configuration is independent of these resource gates.

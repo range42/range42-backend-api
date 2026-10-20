@@ -29,6 +29,8 @@ class LegacyWriteAdmissionMiddleware:
                 async with get_session_factory()() as session:
                     if await _closed_scopes(session):
                         raise refused("DEPLOYMENT_WRITES_PAUSED")
+                    from app.core.capacity_ledger import assert_unscoped_writes_accepted
+                    await assert_unscoped_writes_accepted(session)
                 return await self.app(scope, receive, send)
         except Range42Error as error:
             response = JSONResponse(

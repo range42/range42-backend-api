@@ -4805,6 +4805,48 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/identities/capabilities": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Capabilities",
+        "operationId": "capabilities_v1_deployments__deployment_id__identities_capabilities_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityCapabilities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/deployments/{deployment_id}/identities": {
       "get": {
         "tags": [
@@ -5238,6 +5280,150 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AttemptOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/capacity": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Get Capacity",
+        "operationId": "get_capacity_v1_deployments__deployment_id__capacity_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityHoldStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Reserve Capacity",
+        "operationId": "reserve_capacity_v1_deployments__deployment_id__capacity_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveCapacity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityHoldStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/capacity/review": {
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Review Capacity",
+        "operationId": "review_capacity_v1_deployments__deployment_id__capacity_review_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCapacity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityHoldReview"
                 }
               }
             }
@@ -8069,6 +8255,37 @@
         }
       }
     },
+    "/v1/integrations/identity": {
+      "get": {
+        "tags": [
+          "v1 integrations"
+        ],
+        "summary": "Identity Capability",
+        "operationId": "identity_capability_v1_integrations_identity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityIntegrationCapabilities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments": {
       "get": {
         "tags": [
@@ -9174,6 +9391,257 @@
         ],
         "title": "BundleResolveRequest"
       },
+      "CapacityAssessment": {
+        "properties": {
+          "admissible": {
+            "type": "boolean",
+            "title": "Admissible"
+          },
+          "memory_headroom_mib": {
+            "type": "integer",
+            "title": "Memory Headroom Mib"
+          },
+          "vcpu_headroom": {
+            "type": "integer",
+            "title": "Vcpu Headroom"
+          },
+          "pools": {
+            "patternProperties": {
+              "^[0-9a-f]{64}$": {
+                "$ref": "#/components/schemas/PoolBudget"
+              }
+            },
+            "type": "object",
+            "title": "Pools"
+          },
+          "clusters": {
+            "patternProperties": {
+              "^[0-9a-f]{64}$": {
+                "$ref": "#/components/schemas/ClusterBudget"
+              }
+            },
+            "type": "object",
+            "title": "Clusters"
+          },
+          "blocking_codes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "MEMORY_COMMITTED",
+                "CPU_BUDGET_COMMITTED",
+                "SHARED_STORAGE_COMMITTED"
+              ]
+            },
+            "type": "array",
+            "title": "Blocking Codes"
+          },
+          "allocation_granted": {
+            "type": "boolean",
+            "const": false,
+            "title": "Allocation Granted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "admissible",
+          "memory_headroom_mib",
+          "vcpu_headroom",
+          "pools",
+          "clusters",
+          "blocking_codes",
+          "allocation_granted"
+        ],
+        "title": "CapacityAssessment"
+      },
+      "CapacityHoldOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "allocation_id": {
+            "type": "string",
+            "title": "Allocation Id"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "title": "Physical Node Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_root",
+              "active",
+              "releasing",
+              "retired"
+            ],
+            "title": "Status"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "approval_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Approval Revision"
+          },
+          "approved_by": {
+            "type": "string",
+            "title": "Approved By"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/HeldGuest"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "reservation_recorded": {
+            "type": "boolean",
+            "const": true,
+            "title": "Reservation Recorded"
+          },
+          "root_accepted": {
+            "type": "boolean",
+            "const": false,
+            "title": "Root Accepted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "allocation_id",
+          "physical_node_id",
+          "status",
+          "revision",
+          "approval_revision",
+          "approved_by",
+          "created_at",
+          "requirements",
+          "reservation_recorded",
+          "root_accepted"
+        ],
+        "title": "CapacityHoldOut"
+      },
+      "CapacityHoldReview": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "title": "Physical Node Id"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "observed_at": {
+            "type": "string",
+            "title": "Observed At"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/HeldGuest"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/PhysicalResources"
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/CapacityAssessment"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "review_revision",
+          "physical_node_id",
+          "node_name",
+          "observed_at",
+          "requirements",
+          "resources",
+          "assessment",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "CapacityHoldReview"
+      },
+      "CapacityHoldStatus": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "applicable": {
+            "type": "boolean",
+            "title": "Applicable"
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapacityHoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "live_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Live Verified"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "applicable",
+          "hold",
+          "live_verified",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "CapacityHoldStatus"
+      },
       "CapacityIssue": {
         "properties": {
           "code": {
@@ -9434,6 +9902,38 @@
           "name"
         ],
         "title": "CatalogEntrySummary"
+      },
+      "ClusterBudget": {
+        "properties": {
+          "available_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Available Bytes"
+          },
+          "potential_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Potential Bytes"
+          },
+          "held_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Held Bytes"
+          },
+          "raw_headroom_bytes": {
+            "type": "integer",
+            "title": "Raw Headroom Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "available_bytes",
+          "potential_bytes",
+          "held_bytes",
+          "raw_headroom_bytes"
+        ],
+        "title": "ClusterBudget"
       },
       "Cohort": {
         "properties": {
@@ -12985,6 +13485,97 @@
         ],
         "title": "HardwareValues"
       },
+      "HeldGuest": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vm Id"
+          },
+          "memory_mib": {
+            "type": "integer",
+            "maximum": 1073741824.0,
+            "minimum": 1.0,
+            "title": "Memory Mib"
+          },
+          "vcpus": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 1.0,
+            "title": "Vcpus"
+          },
+          "storage": {
+            "items": {
+              "$ref": "#/components/schemas/HeldStorage"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Storage"
+          },
+          "materialization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaterializationReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vm_id",
+          "memory_mib",
+          "vcpus",
+          "storage",
+          "materialization"
+        ],
+        "title": "HeldGuest"
+      },
+      "HeldStorage": {
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Pool Id"
+          },
+          "cluster_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Cluster Id"
+          },
+          "namespace": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?$",
+            "title": "Namespace"
+          },
+          "replicas": {
+            "type": "integer",
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Replicas"
+          },
+          "logical_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Logical Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pool_id",
+          "cluster_id",
+          "namespace",
+          "replicas",
+          "logical_bytes"
+        ],
+        "title": "HeldStorage"
+      },
       "HostCapacity": {
         "properties": {
           "host_id": {
@@ -13375,6 +13966,85 @@
           "operation"
         ],
         "title": "IdentityAction"
+      },
+      "IdentityCapabilities": {
+        "properties": {
+          "optional": {
+            "type": "boolean",
+            "const": true,
+            "title": "Optional",
+            "default": true
+          },
+          "configuration_state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "configured",
+              "invalid_configuration"
+            ],
+            "title": "Configuration State"
+          },
+          "provider_access_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Provider Access Verified",
+            "default": false
+          },
+          "required_for_environment_deployment": {
+            "type": "boolean",
+            "const": false,
+            "title": "Required For Environment Deployment",
+            "default": false
+          },
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configuration_state",
+          "deployment_id"
+        ],
+        "title": "IdentityCapabilities"
+      },
+      "IdentityIntegrationCapabilities": {
+        "properties": {
+          "optional": {
+            "type": "boolean",
+            "const": true,
+            "title": "Optional",
+            "default": true
+          },
+          "configuration_state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "configured",
+              "invalid_configuration"
+            ],
+            "title": "Configuration State"
+          },
+          "provider_access_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Provider Access Verified",
+            "default": false
+          },
+          "required_for_environment_deployment": {
+            "type": "boolean",
+            "const": false,
+            "title": "Required For Environment Deployment",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configuration_state"
+        ],
+        "title": "IdentityIntegrationCapabilities"
       },
       "IdentityOut": {
         "properties": {
@@ -13820,6 +14490,42 @@
           "uid"
         ],
         "title": "MaintenanceLockIdentity"
+      },
+      "MaterializationReceipt": {
+        "properties": {
+          "vmgenid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+            "title": "Vmgenid"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Configuration Revision"
+          },
+          "receipt_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Receipt Sha256"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/OriginalVolume"
+            },
+            "type": "array",
+            "maxItems": 256,
+            "title": "Volumes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vmgenid",
+          "configuration_revision",
+          "receipt_sha256",
+          "volumes"
+        ],
+        "title": "MaterializationReceipt"
       },
       "Membership": {
         "properties": {
@@ -14789,6 +15495,40 @@
         ],
         "title": "Operation"
       },
+      "OriginalVolume": {
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Pool Id"
+          },
+          "namespace": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?$",
+            "title": "Namespace"
+          },
+          "volume": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,255}$",
+            "title": "Volume"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Size Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pool_id",
+          "namespace",
+          "volume",
+          "size_bytes"
+        ],
+        "title": "OriginalVolume"
+      },
       "OwnershipReview": {
         "properties": {
           "deployment_id": {
@@ -15718,6 +16458,51 @@
         ],
         "title": "PhysicalResources"
       },
+      "PoolBudget": {
+        "properties": {
+          "cluster_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Cluster Id"
+          },
+          "replicas": {
+            "type": "integer",
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Replicas"
+          },
+          "available_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Available Bytes"
+          },
+          "potential_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Potential Bytes"
+          },
+          "held_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Held Bytes"
+          },
+          "logical_headroom_bytes": {
+            "type": "integer",
+            "title": "Logical Headroom Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cluster_id",
+          "replicas",
+          "available_bytes",
+          "potential_bytes",
+          "held_bytes",
+          "logical_headroom_bytes"
+        ],
+        "title": "PoolBudget"
+      },
       "PreflightRequest": {
         "properties": {
           "scope": {
@@ -16546,6 +17331,21 @@
           "vm_name": "web-server-01"
         }
       },
+      "ReserveCapacity": {
+        "properties": {
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_revision"
+        ],
+        "title": "ReserveCapacity"
+      },
       "RetentionPolicy": {
         "properties": {
           "keep_count": {
@@ -16620,6 +17420,12 @@
         ],
         "title": "Revalidation"
       },
+      "ReviewCapacity": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewCapacity"
+      },
       "RollbackRequest": {
         "properties": {
           "scope": {
@@ -16672,6 +17478,13 @@
             },
             "type": "array",
             "title": "Teams"
+          },
+          "participants_per_environment": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Participants Per Environment",
+            "default": 1
           },
           "run_revision": {
             "type": "string",
@@ -22907,6 +23720,13 @@
             "maximum": 10.0,
             "minimum": 1.0,
             "title": "Seats"
+          },
+          "participants_per_environment": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Participants Per Environment",
+            "default": 1
           },
           "expires_at": {
             "type": "string",

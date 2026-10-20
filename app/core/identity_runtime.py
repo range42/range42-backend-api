@@ -15,6 +15,22 @@ def unavailable():
         message='The identity integration is unavailable. Configure the platform identity runtime, then refresh before making changes.')
 
 
+def identity_configuration():
+    """Report installation configuration, never provider health or access grants."""
+    config = os.environ.get('RANGE42_IDENTITY_SSH_CONFIG')
+    if not config:
+        return 'not_configured', None
+    try:
+        path = Path(config)
+        info = path.lstat()
+        if (not path.is_absolute() or not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022
+                or info.st_uid not in {0, os.geteuid()} or info.st_nlink != 1):
+            raise ValueError()
+        return 'configured', path
+    except (OSError, ValueError):
+        return 'invalid_configuration', None
+
+
 def unique_keys(pairs):
     result = {}
     for name, value in pairs:
@@ -45,15 +61,10 @@ def decode_result(raw):
 
 
 async def identity_request(value):
-    config = os.environ.get('RANGE42_IDENTITY_SSH_CONFIG')
     process = None
     try:
-        if not config:
-            raise ValueError()
-        path = Path(config)
-        info = path.lstat()
-        if (not path.is_absolute() or not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022
-                or info.st_uid not in {0, os.geteuid()} or info.st_nlink != 1):
+        configuration_state, path = identity_configuration()
+        if configuration_state != 'configured':
             raise ValueError()
         raw = json.dumps(value).encode()
         if len(raw) > 16384:

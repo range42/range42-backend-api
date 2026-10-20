@@ -170,6 +170,8 @@ async def assert_vm_admitted(session, vmid):
     for _, scope in await _closed_scopes(session):
         if vmid in scope["vm_ids"]:
             raise refused("DEPLOYMENT_WRITES_PAUSED")
+    from app.core.capacity_ledger import assert_vm_capacity_accepted
+    await assert_vm_capacity_accepted(session, vmid)
 
 
 async def snapshot(session, deployment_id):

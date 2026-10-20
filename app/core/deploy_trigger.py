@@ -97,6 +97,8 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
         with ProvisioningLock(root / ".locks") as lock:
             await assert_deployment_admitted(session, dep.id)
+            from app.core.capacity_ledger import assert_dispatch_accepted
+            await assert_dispatch_accepted(session, dep.id)
             if legacy_workshop.is_legacy(dep):
                 await legacy_workshop.parameters(session, dep, attempt.operation, scope=attempt.scope)
             await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)

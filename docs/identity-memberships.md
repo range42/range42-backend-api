@@ -11,8 +11,8 @@ valid participant seats and the protected registry's current desired state.
 `POST` on the same path accepts the reviewed `registry_id`, `expected_revision`,
 `run_revision` and one operation:
 
-- `scope.register` initializes the roster with the saved deadline and one
-  participant place per workshop seat.
+- `scope.register` initializes the roster with the saved deadline and the
+  saved number of participant places per environment (one by default).
 - `person.register` associates a run alias with a new temporary/permanent person,
   or an explicitly selected existing person reference.
 - `membership.set` assigns that person a participant/facilitator/director/observer
@@ -58,3 +58,52 @@ this optional source test does not prove SSH deployment. Separate disposable
 browser acceptance uses actual host-key-verified localhost SSH, synthetic records
 and the production-built UI. Neither proves real IdP/VPN provisioning or laptop
 connectivity. Public CI does not need private repository access.
+
+## Optional integration boundary
+
+Environment planning, resource reservation, provisioning, group reset and
+retirement do not require an identity dispatcher, Keycloak or Headscale.
+`GET /v1/deployments/{deployment_id}/identities/capabilities` is an administrator
+read of local installation configuration; it performs no SSH or provider call.
+The same installation-wide review is available without a workshop at
+`GET /v1/integrations/identity`, presented in Deployer UI under
+Settings → Integrations. This is configuration visibility, not an account
+provisioner or a browser control for installing arbitrary adapters.
+It reports `not_configured`, `configured` or `invalid_configuration`, with
+`optional: true`, `required_for_environment_deployment: false` and
+`provider_access_verified: false`. Configuration is not a provider health check.
+It exposes neither config paths nor credentials and sends no-store headers.
+
+The Overview roster checks this capability before contacting the dispatcher.
+An absent integration displays its optional status and hides unavailable roster
+actions. An enabled integration failure remains visible and never silently
+switches identity stores. Environment execution still requires its independent
+infrastructure, ownership and capacity checks. An unavailable VPN integration
+does not imply that laptop reachability or network isolation is ready.
+
+Keep selected identity and network adapters in the installation integration
+service, behind the existing bounded protocol. The core owns saved run/group
+policy and validates requested scopes. Adapters own provider-specific subjects,
+credentials, reconciliation and confirmed revocation. Configuration must select
+reviewed, installed adapters; project or catalog content cannot load arbitrary
+Python modules, shell commands or provider credentials. Keycloak and Headscale
+are installation choices, not mandatory dependencies of public Range42 packages
+or CI. This change adds capability reporting, not provider installation or a
+plugin loader. Managed onboarding and provider setup remain separate work.
+
+## Shared group environments
+
+The workshop input `seats` counts environments. Optional
+`participants_per_environment` is a strict integer from1 through10, default1.
+Five environments with two participants each still allocate ten guests,
+100GiB RAM,30vCPUs and960GiB potential virtual disks. A larger group does not
+multiply VMs. Original default-one compiled plans omit the new field so existing
+immutable resource plans and receipts stay compatible.
+
+The backend derives the roster's per-team limit from the saved plan, never from
+an onboarding request. The optional registry enforces that limit atomically;
+the UI shows environments as full only when all places are occupied. Removing
+one person's membership preserves their partner's desired membership and does
+not reset the shared environment. Resetting an environment affects the whole
+group. These desired-state rules do not provision individual operating-system,
+Proxmox, IdP or VPN accounts.
