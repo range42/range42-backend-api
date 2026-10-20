@@ -349,3 +349,100 @@ async def test_registered_host_health_verifies_tls_certificates(tmp_path, monkey
         assert verifications and all(value is not False for value in verifications)
     finally:
         await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_explicit_credential_rotation_preserves_host_placement_and_protection(tmp_path, monkeypatch):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as client:
+            created = await client.post('/v1/proxmox/hosts', json={'name': 'scoped-workshops',
+                'api_url': 'https://pve.test:8006', 'node_name': 'pve-a',
+                'token_ref': 'workshop@pve!old=OLD-PRIVATE-CREDENTIAL', 'token_scope': 'workshop-only',
+                'default_bridge': 'vmbr600', 'protected_vmids_override': [[100, 999], [43000, 43999]]})
+            before = created.json()
+            path = f"/v1/proxmox/hosts/{before['id']}/credential"
+            review = await client.post(path + '/review')
+            assert review.status_code == 200, review.text
+            assert review.json()['host'] == before
+            assert 'PRIVATE-CREDENTIAL' not in review.text
+            rotated = await client.put(path, json={'expected_revision': review.json()['revision'],
+                'token_ref': 'workshop@pve!renewed=NEW-PRIVATE-CREDENTIAL'})
+            assert rotated.status_code == 200, rotated.text
+            assert rotated.json() == before
+            assert 'PRIVATE-CREDENTIAL' not in rotated.text
+            from app.core.models import ProxmoxHost
+            async with dbmod.get_session_factory()() as session:
+                host = await session.get(ProxmoxHost, before['id'])
+                assert host.token_ref == 'workshop@pve!renewed=NEW-PRIVATE-CREDENTIAL'
+            stale = await client.put(path, json={'expected_revision': review.json()['revision'],
+                'token_ref': 'workshop@pve!other=STALE-PRIVATE-CREDENTIAL'})
+            assert stale.status_code == 409
+            assert 'PRIVATE-CREDENTIAL' not in stale.text
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('field,value', [('api_url', 'https://other.test:8006'), ('node_name', 'other-node'),
+    ('default_bridge', 'vmbr0'), ('protected_vmids_override', None)])
+async def test_credential_rotation_cannot_change_other_target_fields(tmp_path, monkeypatch, field, value):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as client:
+            created = await client.post('/v1/proxmox/hosts', json={'name': 'target',
+                'api_url': 'https://pve.test:8006', 'node_name': 'pve-a', 'token_ref': 'r42@pve!old=PRIVATE-OLD'})
+            path = f"/v1/proxmox/hosts/{created.json()['id']}/credential"
+            review = await client.post(path + '/review')
+            assert review.status_code == 200, review.text
+            result = await client.put(path, json={'expected_revision': review.json()['revision'],
+                'token_ref': 'r42@pve!new=PRIVATE-NEW', field: value})
+            assert result.status_code == 422 and 'PRIVATE-NEW' not in result.text
+    finally:
+        await dbmod.dispose_engine()
+
+
+def test_explicit_target_credential_changes_are_administrator_only():
+    from app.core.access import Principal, allowed
+    for method, path in [('POST', '/v1/proxmox/hosts/{host_id}/credential/review'),
+                         ('PUT', '/v1/proxmox/hosts/{host_id}/credential')]:
+        assert allowed(Principal('admin', 'admin'), method, path)
+        assert not allowed(Principal('operator', 'operator'), method, path)
+        assert not allowed(Principal('viewer', 'viewer'), method, path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('credential', ['PRIVATE-MALFORMED', 'r42@pve!token=', 'r42@pve!token=PRIVATE\nVALUE',
+                                        'r42@pve!token=PRIVATE VALUE', 'r42!token=PRIVATE-VALUE'])
+async def test_malformed_rotated_credentials_are_not_stored_or_returned(tmp_path, monkeypatch, credential):
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as client:
+            created = await client.post('/v1/proxmox/hosts', json={'name': 'target', 'api_url': 'https://pve.test:8006',
+                'node_name': 'pve-a', 'token_ref': 'r42@pve!old=OLD-PRIVATE'})
+            path = f"/v1/proxmox/hosts/{created.json()['id']}/credential"
+            review = (await client.post(path + '/review')).json()
+            result = await client.put(path, json={'expected_revision': review['revision'], 'token_ref': credential})
+            assert result.status_code == 422
+            assert 'PRIVATE' not in result.text
+            unchanged = (await client.post(path + '/review')).json()
+            assert unchanged['revision'] == review['revision']
+    finally:
+        await dbmod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_credential_replacements_cannot_both_consume_one_review(tmp_path, monkeypatch):
+    import asyncio
+    app, dbmod = await _boot(tmp_path, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://t') as client:
+            created = await client.post('/v1/proxmox/hosts', json={'name': 'target', 'api_url': 'https://pve.test:8006',
+                'node_name': 'pve-a', 'token_ref': 'r42@pve!old=PRIVATE-OLD'})
+            path = f"/v1/proxmox/hosts/{created.json()['id']}/credential"
+            review = (await client.post(path + '/review')).json()
+            results = await asyncio.gather(*(client.put(path, json={'expected_revision': review['revision'],
+                'token_ref': 'r42@pve!new=PRIVATE-' + str(index)}) for index in range(2)))
+            assert sorted(result.status_code for result in results) == [200, 409]
+    finally:
+        await dbmod.dispose_engine()

@@ -82,3 +82,26 @@ native preparation lifecycle and live qualification remain separate work.
 
 This is an administrator configuration workflow. It does not add project/team
 tenancy or claim that an installation-wide operator is a limited facilitator.
+
+## Replace a stored target credential
+
+Settings offers an explicit credential replacement for an existing registered
+target. It reviews the current target first, then sends only the replacement
+credential and the review revision. This preserves the target ID, node, API
+address, token scope, bridge defaults and protected VM IDs. It does not issue or
+revoke a Proxmox token; obtain the replacement through the selected installation’s
+approved Proxmox access workflow. Syntax is validated, but storing a credential
+does not establish live connectivity or privileges.
+
+`POST /v1/proxmox/hosts/{host_id}/credential/review` returns a credential-free
+host projection and opaque revision. `PUT /v1/proxmox/hosts/{host_id}/credential`
+accepts `expected_revision` and `token_ref` only. Both endpoints are administrator
+only. The persistent transaction serializes review comparison and replacement;
+stale reviews and extra target fields are refused. The stored credential remains
+encrypted, cached health is cleared, and affected environment versions require
+review/revalidation with unchanged resource bounds. This deliberately avoids the
+installation bundle’s broader name-based host re-registration API for a human
+credential-only operation. Entered replacements are cleared after submission,
+cancel, component disposal or backend change and are never saved in browser
+settings. A local input typo can be corrected without obtaining a new review;
+a failed submitted replacement requires a new review before retrying.

@@ -4943,6 +4943,100 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/credential/review": {
+      "post": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Review Credential",
+        "operationId": "review_credential_v1_proxmox_hosts__host_id__credential_review_post",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostCredentialReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/credential": {
+      "put": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Rotate Credential",
+        "operationId": "rotate_credential_v1_proxmox_hosts__host_id__credential_put",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostCredentialRotation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts/{host_id}/health": {
       "get": {
         "tags": [
@@ -11395,6 +11489,47 @@
           "limitations"
         ],
         "title": "HostCapacity"
+      },
+      "HostCredentialReview": {
+        "properties": {
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "host": {
+            "$ref": "#/components/schemas/HostOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "host"
+        ],
+        "title": "HostCredentialReview"
+      },
+      "HostCredentialRotation": {
+        "properties": {
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Revision"
+          },
+          "token_ref": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 3,
+            "format": "password",
+            "title": "Token Ref",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "token_ref"
+        ],
+        "title": "HostCredentialRotation"
       },
       "HostFirewall": {
         "properties": {

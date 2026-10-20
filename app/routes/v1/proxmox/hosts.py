@@ -1,7 +1,9 @@
 """/v1/proxmox/hosts CRUD + health probe."""
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import time
 import uuid
 from datetime import datetime, timezone
@@ -9,17 +11,17 @@ from datetime import datetime, timezone
 import httpx
 
 from app.core.proxmox_tls import proxmox_verify
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Request, Response, status
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AuthFailedError, Range42Error
 from app.core.logging import get_logger
 from app.core.models import ProxmoxHost
-from app.routes.v1.proxmox._helpers import _session
+from app.routes.v1.proxmox._helpers import _get_host, _session
 from app.schemas.v1.common import Page
-from app.schemas.v1.proxmox import HostHealth, HostIn, HostOut
+from app.schemas.v1.proxmox import HostCredentialReview, HostCredentialRotation, HostHealth, HostIn, HostOut
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -184,6 +186,46 @@ async def delete_host(host_id: str, session: AsyncSession = Depends(_session)):
         raise Range42Error(status=409, code="HOST_IN_USE", error="host_in_use",
             message="This target is referenced by a deployment or provisioning environment. Preserve those bindings before removing it.") from None
     return None
+
+
+def _credential_revision(row: ProxmoxHost) -> str:
+    binding = [row.id, row.name, row.api_url, row.node_name, row.token_ref,
+               row.token_scope, row.default_bridge, row.protected_vmids_override_json]
+    return hashlib.sha256(json.dumps(binding, separators=(',', ':')).encode()).hexdigest()
+
+
+@router.post('/hosts/{host_id}/credential/review', response_model=HostCredentialReview)
+async def review_credential(host_id: str, session: AsyncSession = Depends(_session)):
+    row = await _get_host(host_id, session)
+    return HostCredentialReview(revision=_credential_revision(row), host=_row_to_out(row))
+
+
+@router.put('/hosts/{host_id}/credential', response_model=HostOut)
+async def rotate_credential(host_id: str, payload: HostCredentialRotation, request: Request,
+                            session: AsyncSession = Depends(_session)):
+    credential = payload.token_ref.get_secret_value()
+    try:
+        identity, secret = credential.split('=', 1)
+        user, token = identity.split('!')
+        name, realm = user.split('@')
+        if not all((name, realm, token, secret)) or any(char.isspace() for char in credential):
+            raise ValueError()
+    except ValueError:
+        raise Range42Error(status=422, code='INVALID_TARGET_CREDENTIAL',
+            message='Enter a user@realm!token-id=secret Proxmox API credential.') from None
+    # Serialize review comparison and replacement, including two simultaneous
+    # rotations. The backend's persistent state uses the existing SQLite store.
+    await session.execute(text('BEGIN IMMEDIATE'))
+    row = await _get_host(host_id, session)
+    if not secrets.compare_digest(payload.expected_revision, _credential_revision(row)):
+        raise Range42Error(status=409, code='TARGET_CREDENTIAL_REVIEW_REQUIRED',
+            message='The target changed after review. Review its current binding before replacing the credential.')
+    row.token_ref = credential
+    row.last_health_check_json = None
+    await session.commit()
+    await session.refresh(row)
+    log.info('proxmox_host_credential_rotated', host_id=row.id, actor_id=request.state.principal.actor_id)
+    return _row_to_out(row)
 
 
 @router.get("/hosts/{host_id}/health", response_model=HostHealth)

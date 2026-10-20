@@ -277,3 +277,24 @@ async def test_installer_bound_workspace_supports_settings_review_without_regist
     created = await client.post('/v1/environments', json={**selection(), 'review_revision': review.json()['revision']})
     assert created.status_code == 201, created.text
     assert created.json()['infrastructure_qualified'] is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_target_rotation_requires_environment_revalidation_without_changing_bounds(environment):
+    client, _, _, _ = environment
+    chosen = selection()
+    reviewed = (await client.post('/v1/environments/review', json=chosen)).json()
+    created = await client.post('/v1/environments', json={**chosen, 'review_revision': reviewed['revision']})
+    ident = created.json()['id']
+    review = (await client.post('/v1/proxmox/hosts/workshops/credential/review')).json()
+    rotated = await client.put('/v1/proxmox/hosts/workshops/credential', json={
+        'expected_revision': review['revision'], 'token_ref': 'workshops@pve!scoped=ROTATED-PRIVATE-TOKEN'})
+    assert rotated.status_code == 200, rotated.text
+    item, = (await client.get('/v1/environments')).json()['items']
+    assert item['id'] == ident and not item['ready_for_planning']
+    assert item['workshop_profile'] == created.json()['workshop_profile']
+    reviewed = (await client.post(f'/v1/environments/{ident}/review')).json()
+    accepted = await client.post(f'/v1/environments/{ident}/revalidate', json={'review_revision': reviewed['revision']})
+    assert accepted.status_code == 200 and accepted.json()['ready_for_planning']
+    assert accepted.json()['workshop_profile'] == created.json()['workshop_profile']
+    assert accepted.json()['infrastructure_qualified'] is False
