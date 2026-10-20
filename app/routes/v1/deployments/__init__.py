@@ -12,6 +12,7 @@ from app.routes.v1.deployments.timings import router as timings_router
 from app.routes.v1.deployments.runtime import router as runtime_router
 from app.routes.v1.deployments.snapshot_sets import router as snapshot_sets_router
 from app.routes.v1.deployments.workshop import router as workshop_router
+from app.routes.v1.deployments.identities import router as identities_router
 
 router = APIRouter(prefix="/deployments", tags=["v1 deployments"])
 router.include_router(crud_router)
@@ -26,3 +27,5 @@ router.include_router(timings_router)
 router.include_router(runtime_router)
 router.include_router(snapshot_sets_router)
 router.include_router(workshop_router)
+
+router.include_router(identities_router)

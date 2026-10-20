@@ -4805,6 +4805,98 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/identities": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Status",
+        "operationId": "status_v1_deployments__deployment_id__identities_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunIdentities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Apply",
+        "operationId": "apply_v1_deployments__deployment_id__identities_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunIdentities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/proxmox/hosts": {
       "get": {
         "tags": [
@@ -8262,6 +8354,33 @@
           "issues"
         ],
         "title": "BaseContextOut"
+      },
+      "Binding": {
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          },
+          "provider_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Provider Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "provider_id",
+          "subject"
+        ],
+        "title": "Binding"
       },
       "BundleResolveRequest": {
         "properties": {
@@ -11761,6 +11880,60 @@
         "title": "HostOut",
         "description": "Response shape for a registered host.\n\nDeliberately does NOT inherit from ``HostIn``: that would carry\n``token_ref`` \u2014 the live ``PVEAPIToken`` secret \u2014 into every response\n(#100). Only whether a token is stored is exposed."
       },
+      "IdentityAction": {
+        "properties": {
+          "registry_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Registry Id"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "run_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Run Revision"
+          },
+          "operation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RegisterScope"
+              },
+              {
+                "$ref": "#/components/schemas/RegisterPerson"
+              },
+              {
+                "$ref": "#/components/schemas/SetMembership"
+              },
+              {
+                "$ref": "#/components/schemas/RemoveMembership"
+              }
+            ],
+            "title": "Operation",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "membership.remove": "#/components/schemas/RemoveMembership",
+                "membership.set": "#/components/schemas/SetMembership",
+                "person.register": "#/components/schemas/RegisterPerson",
+                "scope.register": "#/components/schemas/RegisterScope"
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "registry_id",
+          "expected_revision",
+          "run_revision",
+          "operation"
+        ],
+        "title": "IdentityAction"
+      },
       "IdentityOut": {
         "properties": {
           "actor_id": {
@@ -11794,6 +11967,82 @@
           "audit_enabled"
         ],
         "title": "IdentityOut"
+      },
+      "IdentityState": {
+        "properties": {
+          "registry_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Registry Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            },
+            "type": "array",
+            "title": "People"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "source_references": {
+            "items": {
+              "$ref": "#/components/schemas/SourceReference"
+            },
+            "type": "array",
+            "title": "Source References"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/Provider"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/Binding"
+            },
+            "type": "array",
+            "title": "Bindings"
+          },
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/Membership"
+            },
+            "type": "array",
+            "title": "Memberships"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            },
+            "type": "array",
+            "title": "Jobs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "registry_id",
+          "revision",
+          "people",
+          "scopes",
+          "source_references",
+          "providers",
+          "bindings",
+          "memberships",
+          "jobs"
+        ],
+        "title": "IdentityState"
       },
       "InfrastructureGuest": {
         "properties": {
@@ -11928,6 +12177,71 @@
         ],
         "title": "InfrastructureSelection"
       },
+      "Job": {
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          },
+          "provider_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Provider Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "generation": {
+            "type": "integer",
+            "title": "Generation"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "failed",
+              "unsupported",
+              "succeeded",
+              "superseded"
+            ],
+            "title": "State"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "REMOTE_RECONCILE_FAILED",
+                  "ADAPTER_CAPABILITY_UNSUPPORTED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "provider_id",
+          "subject",
+          "id",
+          "generation",
+          "state",
+          "error_code"
+        ],
+        "title": "Job"
+      },
       "LiveNatReport": {
         "properties": {
           "available": {
@@ -12042,6 +12356,64 @@
           "uid"
         ],
         "title": "MaintenanceLockIdentity"
+      },
+      "Membership": {
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          },
+          "scope_ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Scope Ref"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "participant",
+              "facilitator",
+              "director",
+              "observer"
+            ],
+            "title": "Role"
+          },
+          "team_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Ref"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "effective": {
+            "type": "boolean",
+            "title": "Effective"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "scope_ref",
+          "role",
+          "team_ref",
+          "active",
+          "effective"
+        ],
+        "title": "Membership"
       },
       "MemoryCapacity": {
         "properties": {
@@ -13233,6 +13605,51 @@
         ],
         "title": "ParticipantAction"
       },
+      "Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "permanent"
+            ],
+            "title": "Kind"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "generation": {
+            "type": "integer",
+            "title": "Generation"
+          },
+          "reconcile_state": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "pending",
+              "partial",
+              "failed",
+              "synchronized"
+            ],
+            "title": "Reconcile State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "enabled",
+          "generation",
+          "reconcile_state"
+        ],
+        "title": "Person"
+      },
       "PreflightRequest": {
         "properties": {
           "scope": {
@@ -13622,6 +14039,126 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ProjectPatch"
+      },
+      "Provider": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "oidc",
+              "vpn",
+              "application",
+              "local"
+            ],
+            "title": "Kind"
+          },
+          "authority": {
+            "type": "string",
+            "title": "Authority"
+          },
+          "instance_ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Instance Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "authority",
+          "instance_ref"
+        ],
+        "title": "Provider"
+      },
+      "RegisterPerson": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "person.register",
+            "title": "Type"
+          },
+          "record_ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Record Ref"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "permanent"
+            ],
+            "title": "Kind"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^person-[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "record_ref",
+          "kind"
+        ],
+        "title": "RegisterPerson"
+      },
+      "RegisterScope": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "scope.register",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "RegisterScope"
+      },
+      "RemoveMembership": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "membership.remove",
+            "title": "Type"
+          },
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "person_id"
+        ],
+        "title": "RemoveMembership"
       },
       "Reply_ProxmoxVmsVMID_VmSetCpu": {
         "properties": {
@@ -14051,6 +14588,41 @@
         ],
         "title": "RollbackRequest"
       },
+      "RunIdentities": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "teams": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Teams"
+          },
+          "run_revision": {
+            "type": "string",
+            "title": "Run Revision"
+          },
+          "state": {
+            "$ref": "#/components/schemas/IdentityState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "expires_at",
+          "teams",
+          "run_revision",
+          "state"
+        ],
+        "title": "RunIdentities"
+      },
       "RuntimeCapabilities": {
         "properties": {
           "version": {
@@ -14263,6 +14835,40 @@
           "kind"
         ],
         "title": "ScenarioFirewall"
+      },
+      "Scope": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Ref"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "participant_limit_per_team": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Participant Limit Per Team"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "expires_at"
+        ],
+        "title": "Scope"
       },
       "SdnNetwork": {
         "properties": {
@@ -14827,6 +15433,52 @@
           "deployer_address"
         ],
         "title": "Seat"
+      },
+      "SetMembership": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "membership.set",
+            "title": "Type"
+          },
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "participant",
+              "facilitator",
+              "director",
+              "observer"
+            ],
+            "title": "Role"
+          },
+          "team_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Ref"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "person_id",
+          "role"
+        ],
+        "title": "SetMembership"
       },
       "SnapshotCreate": {
         "properties": {
@@ -16111,6 +16763,36 @@
           "created_at"
         ],
         "title": "SourceOut"
+      },
+      "SourceReference": {
+        "properties": {
+          "scope_ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Scope Ref"
+          },
+          "record_ref": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Record Ref"
+          },
+          "person_id": {
+            "type": "string",
+            "pattern": "^person-[a-f0-9]{32}$",
+            "title": "Person Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope_ref",
+          "record_ref",
+          "person_id"
+        ],
+        "title": "SourceReference"
       },
       "SourceRefreshResult": {
         "properties": {
