@@ -57,6 +57,12 @@ async def run_preflight(deployment_id: str,
             error="not_found", code="NOT_FOUND", status=404,
             message=f"Deployment {deployment_id} not found",
         )
+    return await evaluate_preflight(session, dep, payload)
+
+
+async def evaluate_preflight(session, dep, payload=None):
+    """Evaluate a saved deployment or its server-derived transient seat view."""
+    deployment_id = dep.id
     host = (await session.execute(
         select(ProxmoxHost).where(ProxmoxHost.id == dep.target_host_id))).scalar_one_or_none()
     report = PreflightReport()

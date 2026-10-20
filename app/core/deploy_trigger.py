@@ -93,9 +93,12 @@ async def start_attempt(session: AsyncSession, *, attempt: Attempt,
         dep = await session.get(Deployment, attempt.deployment_id)
         validate_concrete_scope(dep, attempt.scope)
         from app.core.deployment_admission import assert_deployment_admitted
+        from app.core import legacy_workshop_operations as legacy_workshop
         root = Path(os.getenv("RANGE42_WORKSPACE_ROOT", str(settings.workspace_root)))
         with ProvisioningLock(root / ".locks") as lock:
             await assert_deployment_admitted(session, dep.id)
+            if legacy_workshop.is_legacy(dep):
+                await legacy_workshop.parameters(session, dep, attempt.operation, scope=attempt.scope)
             await _start_attempt(session, attempt=attempt, runner=runner, provisioning_fd=lock.fd)
     except Exception as exc:
         await session.rollback()
@@ -154,6 +157,11 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 raise PreflightBlockedError(message=issue)
             from app.core.native_execution import prepare_native_run
             native = scenario.native
+            from app.core.native_ownership_guard import assert_native_scope_free
+            await assert_native_scope_free(session, dep.id, scenario.vmids)
+            from app.core import legacy_workshop_operations as legacy_workshop
+            if legacy_workshop.is_legacy(dep):
+                native = {**native, 'parameters': await legacy_workshop.parameters(session, dep, attempt.operation, scope=attempt.scope)}
             if plan := native.get('workshop_plan'):
                 from app.core.workshop_models import WorkshopRun
                 from app.core.workshop_preflight import workshop_checks

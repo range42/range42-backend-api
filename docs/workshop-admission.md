@@ -94,3 +94,62 @@ scans passed, including actual committed/lost replies, alias refusal, concurrent
 administrator proof and mobile keyboard focus. One other synthetic run reserved
 an unstarted attempt with auto-start disabled; no runner, provider, VPN or VM
 operation ran. All fixture services were stopped after acceptance.
+
+## Importing original native ownership
+
+The existing fixed workshop predates `DeploymentAllocation`. An administrator can
+review and import its original generations from **Deployment Overview → Existing
+workshop ownership**. This is a compatibility handoff for existing resources;
+new catalog runs continue to use the normal allocator and native plan.
+
+Pause participant management and drain accepted queue work first. The backend
+then obtains original receipt, VM generation, source commit, target and network
+evidence through the restricted controller. Verified HTTPS independently checks
+the actual API certificate, generated node certificate and both current and
+configured guest attachments. Names or current VM tags alone cannot establish
+ownership. The browser supplies neither VM IDs, generation records nor paths.
+The public import schema accepts bounded native assignments; the controller's
+private adapter owns the installed workshop's fixed scope and receipt policy.
+
+Administrator-only endpoints, all with `Cache-Control: no-store`:
+
+- `GET /v1/deployments/{id}/allocations/import`: retained local handoff status.
+- `POST /v1/deployments/{id}/allocations/import/review`, body `{}`: fresh review.
+- `POST /v1/deployments/{id}/allocations/import`, body
+  `{"review_revision":"<server review revision>"}`: save or explicitly finish
+  that same original handoff.
+
+SQLite retains an intent before the controller saves its protected pending
+record. The backend then commits one canonical allocation before the controller
+acknowledges its exact identity through a read-only callback. No SQL writer is
+held across that callback. Both sides retain the original import and allocation
+IDs. Missing or partial original records require recovery; they never cause a
+fallback to name-based ownership. A lost reply leaves `pending_controller` or
+`claim_saved` visible. Overview reads that status without replaying the write;
+**Finish ownership handoff** deliberately resumes the same retained intent.
+Neither side resumes its queue automatically. The controller's ownership RPCs
+have a total 110-second deadline, below the trusted transport's 120-second limit.
+
+After acknowledgement, legacy seat work runs on the canonical parent through
+`POST /v1/deployments/{id}/workshop/legacy/participants/{username}/preflight`
+and `/actions`. Preflight accepts only `action`; actions also require a durable
+`dispatch_id` and exact `confirm_username` for reset or teardown. The backend
+derives the seat and pinned native parameter override from imported ownership,
+without changing the parent record. A dispatch journal and its attempt commit in
+one serialized transaction: repeating a queue job returns its original attempt,
+including failed, cancelled or uncertain results, without restarting it. The
+controller stops creating overlapping per-seat deployments. Old unscoped fixed
+workshop attempts are refused, and native dispatch rejects VM IDs owned by a
+different canonical deployment. New run authoring retains its original allocator.
+
+Verified canonical allocation release leaves a `released` tombstone. The old
+controller cannot use it to recreate retired guests. Migration 0015 refuses to
+erase retained handoffs or dispatch decisions on downgrade. Preserve original
+controller state, canonical claims, receipt files and the database together for
+recovery; dropping both sides is not a supported reset procedure.
+
+An ownership import does not freeze other writers, prove remote PVE task
+completion, grant a physical capacity reservation, prepare a new environment or
+lend Friday's RAM. `remote_quiescence_verified` and
+`capacity_borrowing_allowed` remain false. Legacy controller admission and
+managed VM write admission remain separate, explicit decisions.

@@ -63,7 +63,8 @@ async def agent_request(value):
                 raise ValueError()
             writer.write(json.dumps(value).encode() + b'\n')
             await writer.drain()
-            raw = await asyncio.wait_for(reader.readline(), 30)
+            timeout = 120 if value.get('action') in {'ownership', 'ownership-begin', 'ownership-commit'} else 30
+            raw = await asyncio.wait_for(reader.readline(), timeout)
             if len(raw) > 2 * 1024 * 1024:
                 raise ValueError()
             return agent_result(json.loads(raw))
@@ -87,7 +88,8 @@ async def ssh_agent_request(config, value):
             '-o', 'StrictHostKeyChecking=yes', 'workshop-controller', stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         try:
-            raw, _ = await asyncio.wait_for(process.communicate(json.dumps(value).encode() + b'\n'), 30)
+            timeout = 120 if value.get('action') in {'ownership', 'ownership-begin', 'ownership-commit'} else 30
+            raw, _ = await asyncio.wait_for(process.communicate(json.dumps(value).encode() + b'\n'), timeout)
         except TimeoutError:
             process.kill()
             await process.wait()

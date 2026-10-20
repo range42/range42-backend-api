@@ -16,6 +16,9 @@ from app.routes.v1.deployments.identities import router as identities_router
 
 from app.routes.v1.deployments.write_admission import router as write_admission_router
 
+from app.routes.v1.deployments.workshop_ownership import router as workshop_ownership_router
+from app.routes.v1.deployments.legacy_workshop import router as legacy_workshop_router
+
 router = APIRouter(prefix="/deployments", tags=["v1 deployments"])
 router.include_router(crud_router)
 router.include_router(allocations_router)
@@ -33,3 +36,6 @@ router.include_router(workshop_router)
 router.include_router(identities_router)
 
 router.include_router(write_admission_router)
+
+router.include_router(workshop_ownership_router)
+router.include_router(legacy_workshop_router)
