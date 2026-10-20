@@ -61,6 +61,15 @@ def test_capacity_upgrade_preserves_credentials_and_downgrade_retains_uncertain_
                 "2" * 64,
             ),
         )
+    with sqlite3.connect(database) as db:
+        assert 'native_receipt_json' in {row[1] for row in db.execute('PRAGMA table_info(capacity_holds)')}
+        db.execute('UPDATE capacity_holds SET native_receipt_json=?', ('retained-synthetic-receipt',))
+    refused_receipt = migrate('downgrade', '0017_capacity_retirement')
+    assert refused_receipt.returncode != 0 and 'Native capacity receipts exist' in refused_receipt.stderr
+    with sqlite3.connect(database) as db:
+        assert db.execute('SELECT native_receipt_json FROM capacity_holds').fetchone()[0] == 'retained-synthetic-receipt'
+        assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+        db.execute('UPDATE capacity_holds SET native_receipt_json=NULL')
     refused = migrate("downgrade", "0015_workshop_ownership")
     assert refused.returncode != 0 and "Capacity commitments exist" in refused.stderr
     with sqlite3.connect(database) as db:

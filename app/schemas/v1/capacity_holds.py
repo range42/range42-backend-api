@@ -53,7 +53,9 @@ class CapacityHoldOut(StrictObservation):
     created_at: str
     requirements: list[HeldGuest]
     reservation_recorded: Literal[True]
-    root_accepted: Literal[False]
+    root_accepted: bool
+    native_acceptance_available: bool = False
+    native_reconciliation_available: bool = False
     native_request_may_have_been_sent: bool = False
     unused_retirement_review_available: bool = False
     retired_by: str | None = None

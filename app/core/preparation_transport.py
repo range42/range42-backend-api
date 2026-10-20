@@ -124,11 +124,23 @@ def agent_configuration(host_id, node_name):
         raise unavailable() from None
 
 
-async def read_agent(config, *, action="inspect", maximum=LIMIT, timeout=15):
+async def read_agent(config, *, action="inspect", maximum=LIMIT, timeout=15, request=None):
     if (action, maximum, timeout) not in [
         ("inspect", LIMIT, 15),
         ("capacity", 4194304, 110),
+        ('capacity-admit', LIMIT, 110),
+        ('capacity-status', LIMIT, 15),
     ]:
+        raise unavailable()
+    payload = {'action': action}
+    if action in {'capacity-admit', 'capacity-status'}:
+        if not isinstance(request, dict):
+            raise unavailable()
+        payload['request'] = request
+    elif request is not None:
+        raise unavailable()
+    raw_request = json.dumps(payload).encode() + b'\n'
+    if len(raw_request) > 65536:
         raise unavailable()
     process = None
     try:
@@ -149,7 +161,7 @@ async def read_agent(config, *, action="inspect", maximum=LIMIT, timeout=15):
             stderr=asyncio.subprocess.DEVNULL,
         )
         async with asyncio.timeout(timeout):
-            process.stdin.write(json.dumps({"action": action}).encode() + b"\n")
+            process.stdin.write(raw_request)
             await process.stdin.drain()
             process.stdin.close()
             raw = b""

@@ -6,13 +6,15 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import capacity_ledger, db
+from app.core import capacity_ledger, db, native_capacity
 from app.core.capacity_models import CapacityHold
 from app.core.errors import Range42Error
 from app.core.models import Deployment, ProxmoxHost
 from app.core.physical_capacity import inspect_capacity
 from app.core.physical_nodes import target_revision
-from app.core.preparation_transport import agent_configuration, verify_api_peer
+from app.core.physical_nodes import NodeAttestation
+from app.core.physical_node_models import PhysicalNodeBinding
+from app.core.preparation_transport import agent_configuration, verify_api_peer, read_agent
 from app.routes.v1.deployments.attempts import _session
 from app.schemas.v1.capacity_holds import (
     CapacityHoldStatus,
@@ -45,6 +47,10 @@ async def status(session, deployment_id):
     held = None
     if row:
         record = capacity_ledger.commitment(row)
+        root_accepted = native_capacity.root_accepted(row)
+        binding = await session.get(PhysicalNodeBinding, dep.target_host_id)
+        native_enrolled = bool(binding and NodeAttestation.model_validate_json(binding.observation_json).supported_operations
+                               == ['inspect', 'capacity', 'capacity-admit', 'capacity-status'])
         timestamp = (
             row.created_at
             if row.created_at.tzinfo
@@ -61,7 +67,9 @@ async def status(session, deployment_id):
             "created_at": timestamp.isoformat(),
             "requirements": [guest.model_dump() for guest in record.guests],
             "reservation_recorded": True,
-            "root_accepted": False,
+            "root_accepted": root_accepted,
+            "native_acceptance_available": native_enrolled and row.status == 'pending_root' and row.native_request_id is None and not root_accepted,
+            "native_reconciliation_available": native_enrolled and row.status == 'pending_root' and row.native_request_id is not None and not root_accepted,
             "native_request_may_have_been_sent": row.native_request_id is not None or row.status in {'active', 'releasing'},
             "unused_retirement_review_available": row.status == 'pending_root' and row.native_request_id is None,
             "retired_by": row.retired_by,
@@ -153,5 +161,57 @@ async def retire_unused_capacity(deployment_id: str, payload: ReserveCapacity, r
     reviewed = await observe(deployment_id)
     await capacity_ledger.retire_unused(db.get_session_factory(), reviewed,
         actor=request.state.principal.actor_id, expected_revision=payload.review_revision)
+    async with db.get_session_factory()() as session:
+        return await status(session, deployment_id)
+
+
+async def native_configuration(deployment_id, reviewed):
+    if reviewed.observed.node.supported_operations != ['inspect', 'capacity', 'capacity-admit', 'capacity-status']:
+        raise capacity_ledger.refused('CAPACITY_NATIVE_NOT_ENROLLED',
+            'This original physical-node inspector has no native acceptance enrollment. Review the explicit node capability before requesting acceptance.')
+    async with db.get_session_factory()() as session:
+        dep = await deployment(session, deployment_id)
+        host = await session.get(ProxmoxHost, dep.target_host_id)
+        if host is None:
+            raise capacity_ledger.refused()
+        selected = agent_configuration(host.id, host.node_name)
+        if selected.revision != reviewed.agent_revision:
+            raise capacity_ledger.refused()
+        return selected
+
+
+@router.post('/{deployment_id}/capacity/native', response_model=CapacityHoldStatus)
+async def accept_native_capacity(deployment_id: str, payload: ReserveCapacity, request: Request, response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    reviewed = await observe(deployment_id)
+    selected = await native_configuration(deployment_id, reviewed)
+    row = await capacity_ledger.journal_native_request(db.get_session_factory(), reviewed,
+        actor=request.state.principal.actor_id, expected_revision=payload.review_revision)
+    original = native_capacity.request_for(row, selected.installation_id)
+    proof = await read_agent(selected, action='capacity-admit', request=original, timeout=110)
+    await native_capacity.record_acceptance(db.get_session_factory(), reviewed, original, proof)
+    async with db.get_session_factory()() as session:
+        return await status(session, deployment_id)
+
+
+@router.post('/{deployment_id}/capacity/native/reconcile', response_model=CapacityHoldStatus)
+async def reconcile_native_capacity(deployment_id: str, payload: ReviewCapacity, response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    reviewed = await observe(deployment_id)
+    selected = await native_configuration(deployment_id, reviewed)
+    async with db.get_session_factory()() as session:
+        row, _, _, _, _, _ = await capacity_ledger.current_lifecycle_hold(session, reviewed)
+        original = native_capacity.request_for(row, selected.installation_id)
+    proof = await read_agent(selected, action='capacity-status', request=original)
+    # An absent record cannot prove that an older in-flight RPC will not commit.
+    # Keep the original request and its full commitment; never auto-reissue it.
+    try:
+        parsed = native_capacity.NativeReceipt.model_validate(proof)
+    except (ValueError, TypeError):
+        raise capacity_ledger.refused('CAPACITY_NATIVE_RECEIPT_MISMATCH', 'The native status reply could not be verified. Preserve the original commitment.') from None
+    if parsed.status != 'accepted':
+        raise capacity_ledger.refused('CAPACITY_NATIVE_OUTCOME_UNRESOLVED',
+            'No original acceptance is recorded on the physical node. The request remains retained; verify native quiescence before retry or retirement.')
+    await native_capacity.record_acceptance(db.get_session_factory(), reviewed, original, proof)
     async with db.get_session_factory()() as session:
         return await status(session, deployment_id)
