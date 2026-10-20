@@ -49,7 +49,7 @@ No runtime is installed or enabled by setting this environment variable alone.
 Unconfigured/unavailable installations return503 rather than inventing success.
 Backend/UI release qualification, canonical service account/forced-command
 installation, provider ownership verification and active revocation are separate
-acceptance requirements. The live Friday cohort is unaffected by these routes.
+acceptance requirements. Existing cohort integrations are unaffected by these routes.
 
 The real dispatcher wire test can be enabled with
 `RANGE42_IDENTITY_RUNTIME_SOURCE=/path/to/range42-exercise-platform`. It exercises
