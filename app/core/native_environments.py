@@ -8,6 +8,7 @@ from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
+import re
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -85,8 +86,11 @@ async def review(session, selection):
     return await asyncio.to_thread(review_selection, selection, host, base)
 
 
-async def registered_contexts(session):
-    rows = list(await session.scalars(select(NativeEnvironment).order_by(NativeEnvironment.created_at, NativeEnvironment.id)))
+async def registered_contexts(session, *, identity=None):
+    query = select(NativeEnvironment).order_by(NativeEnvironment.created_at, NativeEnvironment.id)
+    if identity is not None:
+        query = query.where(NativeEnvironment.id == identity)
+    rows = list(await session.scalars(query))
     if not rows:
         return []
     bases = {item.id: item for item in await asyncio.to_thread(_contexts)}
@@ -113,5 +117,10 @@ async def registered_contexts(session):
 
 
 async def resolve_registered_context(session, identity, host):
-    contexts = await registered_contexts(session)
+    # Existing native contexts keep their file-registry contract. Looking up a
+    # generated environment must not make every legacy attempt depend on all
+    # stored provisioning profiles or repeatedly hash unrelated runtime files.
+    if not re.fullmatch(r'env-[a-f0-9]{24}', identity):
+        return await asyncio.to_thread(resolve_context, identity, host)
+    contexts = await registered_contexts(session, identity=identity)
     return await asyncio.to_thread(resolve_context, identity, host, registered=contexts)
