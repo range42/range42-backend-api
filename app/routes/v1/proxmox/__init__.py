@@ -10,6 +10,7 @@ from app.routes.v1.proxmox.storage import router as storage_router
 from app.routes.v1.proxmox.vms import router as vms_router
 from app.routes.v1.proxmox.vm_config import router as vm_config_router
 from app.routes.v1.proxmox.vm_hardware import router as vm_hardware_router
+from app.routes.v1.proxmox.physical_nodes import router as physical_nodes_router
 
 router = APIRouter(prefix="/proxmox", tags=["v1 proxmox"])
 router.include_router(hosts_router)
@@ -23,3 +24,4 @@ router.include_router(capacity_router)
 
 router.include_router(sdn_router)
 router.include_router(runtime_capabilities_router)
+router.include_router(physical_nodes_router)

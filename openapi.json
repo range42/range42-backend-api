@@ -6864,6 +6864,150 @@
         }
       }
     },
+    "/v1/proxmox/hosts/{host_id}/physical-node": {
+      "get": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Status",
+        "operationId": "status_v1_proxmox_hosts__host_id__physical_node_get",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhysicalNodeStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Register",
+        "operationId": "register_v1_proxmox_hosts__host_id__physical_node_post",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePhysicalNode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhysicalNodeBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxmox/hosts/{host_id}/physical-node/review": {
+      "post": {
+        "tags": [
+          "v1 proxmox"
+        ],
+        "summary": "Review",
+        "operationId": "review_v1_proxmox_hosts__host_id__physical_node_review_post",
+        "parameters": [
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Host Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectNode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhysicalNodeReview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/stats": {
       "get": {
         "tags": [
@@ -12578,6 +12722,12 @@
         ],
         "title": "InfrastructureSelection"
       },
+      "InspectNode": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "InspectNode"
+      },
       "Job": {
         "properties": {
           "person_id": {
@@ -14051,6 +14201,200 @@
         ],
         "title": "Person"
       },
+      "PhysicalNodeBindingOut": {
+        "properties": {
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "title": "Physical Node Id"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "hardware_binding": {
+            "type": "string",
+            "title": "Hardware Binding"
+          },
+          "api_certificate_sha256": {
+            "type": "string",
+            "title": "Api Certificate Sha256"
+          },
+          "node_certificate_sha256": {
+            "type": "string",
+            "title": "Node Certificate Sha256"
+          },
+          "boot_id": {
+            "type": "string",
+            "title": "Boot Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "title": "Recorded At"
+          },
+          "approved_by": {
+            "type": "string",
+            "title": "Approved By"
+          },
+          "binding_recorded": {
+            "type": "boolean",
+            "const": true,
+            "title": "Binding Recorded"
+          },
+          "live_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Live Verified"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          },
+          "alias_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Alias Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_host_id",
+          "physical_node_id",
+          "node_name",
+          "hardware_binding",
+          "api_certificate_sha256",
+          "node_certificate_sha256",
+          "boot_id",
+          "recorded_at",
+          "approved_by",
+          "binding_recorded",
+          "live_verified",
+          "execution_ready",
+          "infrastructure_qualified",
+          "alias_count"
+        ],
+        "title": "PhysicalNodeBindingOut"
+      },
+      "PhysicalNodeReview": {
+        "properties": {
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "title": "Physical Node Id"
+          },
+          "hardware_binding": {
+            "type": "string",
+            "title": "Hardware Binding"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "api_certificate_sha256": {
+            "type": "string",
+            "title": "Api Certificate Sha256"
+          },
+          "node_certificate_sha256": {
+            "type": "string",
+            "title": "Node Certificate Sha256"
+          },
+          "boot_id": {
+            "type": "string",
+            "title": "Boot Id"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "title": "Configuration Revision"
+          },
+          "supported_operations": {
+            "items": {
+              "type": "string",
+              "const": "inspect"
+            },
+            "type": "array",
+            "title": "Supported Operations"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "target_host_id",
+          "physical_node_id",
+          "hardware_binding",
+          "node_name",
+          "api_certificate_sha256",
+          "node_certificate_sha256",
+          "boot_id",
+          "configuration_revision",
+          "supported_operations",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "PhysicalNodeReview"
+      },
+      "PhysicalNodeStatus": {
+        "properties": {
+          "target_host_id": {
+            "type": "string",
+            "title": "Target Host Id"
+          },
+          "configuration_state": {
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "enrolled"
+            ],
+            "title": "Configuration State"
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhysicalNodeBindingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needs_review": {
+            "type": "boolean",
+            "title": "Needs Review"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_host_id",
+          "configuration_state",
+          "needs_review"
+        ],
+        "title": "PhysicalNodeStatus"
+      },
       "PreflightRequest": {
         "properties": {
           "scope": {
@@ -15216,6 +15560,21 @@
           "cards"
         ],
         "title": "RuntimeReport"
+      },
+      "SavePhysicalNode": {
+        "properties": {
+          "review_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Review Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_revision"
+        ],
+        "title": "SavePhysicalNode"
       },
       "ScenarioFirewall": {
         "properties": {

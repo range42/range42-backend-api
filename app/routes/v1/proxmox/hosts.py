@@ -184,7 +184,7 @@ async def delete_host(host_id: str, session: AsyncSession = Depends(_session)):
     except IntegrityError:
         await session.rollback()
         raise Range42Error(status=409, code="HOST_IN_USE", error="host_in_use",
-            message="This target is referenced by a deployment or provisioning environment. Preserve those bindings before removing it.") from None
+            message="This target is referenced by a deployment or provisioning environment, or has a retained physical node binding. Preserve those bindings before removing it.") from None
     return None
 
 
