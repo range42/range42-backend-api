@@ -4805,6 +4805,48 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/identities/capabilities": {
+      "get": {
+        "tags": [
+          "v1 deployments"
+        ],
+        "summary": "Capabilities",
+        "operationId": "capabilities_v1_deployments__deployment_id__identities_capabilities_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityCapabilities"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/deployments/{deployment_id}/identities": {
       "get": {
         "tags": [
@@ -8001,6 +8043,37 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/identity": {
+      "get": {
+        "tags": [
+          "v1 integrations"
+        ],
+        "summary": "Identity Capability",
+        "operationId": "identity_capability_v1_integrations_identity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityIntegrationCapabilities"
+                }
               }
             }
           },
@@ -13140,6 +13213,85 @@
         ],
         "title": "IdentityAction"
       },
+      "IdentityCapabilities": {
+        "properties": {
+          "optional": {
+            "type": "boolean",
+            "const": true,
+            "title": "Optional",
+            "default": true
+          },
+          "configuration_state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "configured",
+              "invalid_configuration"
+            ],
+            "title": "Configuration State"
+          },
+          "provider_access_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Provider Access Verified",
+            "default": false
+          },
+          "required_for_environment_deployment": {
+            "type": "boolean",
+            "const": false,
+            "title": "Required For Environment Deployment",
+            "default": false
+          },
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configuration_state",
+          "deployment_id"
+        ],
+        "title": "IdentityCapabilities"
+      },
+      "IdentityIntegrationCapabilities": {
+        "properties": {
+          "optional": {
+            "type": "boolean",
+            "const": true,
+            "title": "Optional",
+            "default": true
+          },
+          "configuration_state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "configured",
+              "invalid_configuration"
+            ],
+            "title": "Configuration State"
+          },
+          "provider_access_verified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Provider Access Verified",
+            "default": false
+          },
+          "required_for_environment_deployment": {
+            "type": "boolean",
+            "const": false,
+            "title": "Required For Environment Deployment",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configuration_state"
+        ],
+        "title": "IdentityIntegrationCapabilities"
+      },
       "IdentityOut": {
         "properties": {
           "actor_id": {
@@ -16276,6 +16428,13 @@
             },
             "type": "array",
             "title": "Teams"
+          },
+          "participants_per_environment": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Participants Per Environment",
+            "default": 1
           },
           "run_revision": {
             "type": "string",
@@ -22412,6 +22571,13 @@
             "maximum": 10.0,
             "minimum": 1.0,
             "title": "Seats"
+          },
+          "participants_per_environment": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Participants Per Environment",
+            "default": 1
           },
           "expires_at": {
             "type": "string",

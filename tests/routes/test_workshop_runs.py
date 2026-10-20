@@ -213,6 +213,28 @@ async def test_create_records_immutable_run_and_claims_without_installation_iden
 
 
 @pytest.mark.asyncio
+async def test_grouped_run_creation_and_resource_review_never_call_optional_onboarding(workshop_env, monkeypatch):
+    async def forbidden(*args, **kwargs):
+        pytest.fail('Environment planning must not call the optional onboarding dispatcher')
+    monkeypatch.setattr('app.routes.v1.deployments.identities.identity_request', forbidden)
+    monkeypatch.delenv('RANGE42_IDENTITY_SSH_CONFIG', raising=False)
+    client, _, _ = workshop_env
+    created = await create_reserved(client, creation(participants_per_environment=2))
+    assert created.status_code == 201, created.text
+    run = created.json()
+    plan = run['native']['workshop_plan']
+    assert plan['participants_per_environment'] == 2
+    assert len(plan['guests']) == 10 and plan['capacity']['memory_mib'] == 102400
+    assert plan['identity_profile'] is None and plan['access_profile'] is None
+    assert (await client.get(f"/v1/deployments/{run['id']}/allocations")).status_code == 200
+    assert (await client.get(f"/v1/deployments/{run['id']}/workshop")).status_code == 200
+    capability = await client.get(f"/v1/deployments/{run['id']}/identities/capabilities")
+    assert capability.status_code == 200
+    assert capability.json()['configuration_state'] == 'not_configured'
+    assert capability.json()['required_for_environment_deployment'] is False
+
+
+@pytest.mark.asyncio
 async def test_human_setup_preview_uses_the_same_compiler_as_execution(workshop_env):
     client, _, _ = workshop_env
     payload = creation()

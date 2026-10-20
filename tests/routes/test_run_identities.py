@@ -112,6 +112,47 @@ def test_identity_read_and_write_are_admin_only():
 
 
 @pytest.mark.asyncio
+async def test_group_membership_limit_comes_from_saved_plan_not_request(env):
+    from app.core.models import Deployment
+    client, calls, db = env
+    async with db.get_session_factory()() as session:
+        row = await session.get(Deployment, 'run-a')
+        row.native = {**row.native, 'workshop_plan': {**row.native['workshop_plan'], 'participants_per_environment': 2}}
+        await session.commit()
+    review = (await client.get('/v1/deployments/run-a/identities')).json()
+    assert review['participants_per_environment'] == 2
+    response = await client.post('/v1/deployments/run-a/identities', json={
+        'registry_id': review['state']['registry_id'], 'expected_revision': review['state']['revision'],
+        'run_revision': review['run_revision'], 'operation': {'type': 'scope.register'}})
+    assert response.status_code == 200, response.text
+    assert calls[-1]['request']['operation']['participant_limit_per_team'] == 2
+
+
+@pytest.mark.asyncio
+async def test_optional_identity_capability_does_not_contact_dispatcher_or_expose_config(env, monkeypatch, tmp_path):
+    client, calls, _ = env
+    monkeypatch.delenv('RANGE42_IDENTITY_SSH_CONFIG', raising=False)
+    response = await client.get('/v1/deployments/run-a/identities/capabilities')
+    assert response.status_code == 200, response.text
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.json() == {'deployment_id': 'run-a', 'optional': True,
+        'configuration_state': 'not_configured', 'provider_access_verified': False,
+        'required_for_environment_deployment': False}
+    config = tmp_path / 'private-integration-config'
+    config.write_text('PRIVATE-CONTENTS-NEVER-PROJECTED')
+    config.chmod(0o600)
+    monkeypatch.setenv('RANGE42_IDENTITY_SSH_CONFIG', str(config))
+    response = await client.get('/v1/deployments/run-a/identities/capabilities')
+    assert response.json()['configuration_state'] == 'configured'
+    assert response.json()['provider_access_verified'] is False
+    assert str(config) not in response.text and 'PRIVATE-CONTENTS' not in response.text
+    config.chmod(0o666)
+    response = await client.get('/v1/deployments/run-a/identities/capabilities')
+    assert response.json()['configuration_state'] == 'invalid_configuration'
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_projection_removes_unexpected_provider_secrets_and_prevents_caching(env, monkeypatch):
     client, _, _ = env
     async def runtime(value):
@@ -125,7 +166,8 @@ async def test_projection_removes_unexpected_provider_secrets_and_prevents_cachi
 
 
 @pytest.mark.asyncio
-async def test_real_platform_dispatcher_runs_scope_roster_membership_and_removal(env, tmp_path, monkeypatch):
+@pytest.mark.parametrize('group_size', [1, 2])
+async def test_real_platform_dispatcher_runs_scope_roster_membership_and_removal(env, tmp_path, monkeypatch, group_size):
     import asyncio
     import os
     import sys
@@ -133,7 +175,13 @@ async def test_real_platform_dispatcher_runs_scope_roster_membership_and_removal
     if not source:
         pytest.skip('Set RANGE42_IDENTITY_RUNTIME_SOURCE for the private runtime wire contract')
     assert (Path(source) / 'src/range42_exercise_platform/registry_dispatch.py').is_file()
-    client, _, _ = env
+    client, _, db = env
+    if group_size == 2:
+        from app.core.models import Deployment
+        async with db.get_session_factory()() as session:
+            row = await session.get(Deployment, 'run-a')
+            row.native = {**row.native, 'workshop_plan': {**row.native['workshop_plan'], 'participants_per_environment': 2}}
+            await session.commit()
     from app.core.identity_runtime import identity_request
     monkeypatch.setattr(module(), 'identity_request', identity_request)
     config = tmp_path / 'identity-ssh-config'
@@ -164,6 +212,10 @@ async def test_real_platform_dispatcher_runs_scope_roster_membership_and_removal
     assert not review['state']['jobs']
     await change({'type': 'person.register', 'record_ref': 'user02', 'kind': 'temporary'})
     other = next(row['person_id'] for row in review['state']['source_references'] if row['record_ref'] == 'user02')
+    if group_size == 2:
+        await change({'type': 'membership.set', 'person_id': other, 'role': 'participant', 'team_ref': 'user01'})
+        await change({'type': 'person.register', 'record_ref': 'user03', 'kind': 'temporary'})
+        other = next(row['person_id'] for row in review['state']['source_references'] if row['record_ref'] == 'user03')
     rejected = await client.post('/v1/deployments/run-a/identities', json={
         'registry_id': review['state']['registry_id'], 'expected_revision': review['state']['revision'],
         'run_revision': review['run_revision'], 'operation': {'type': 'membership.set', 'person_id': other, 'role': 'participant', 'team_ref': 'user01'}})
@@ -171,9 +223,30 @@ async def test_real_platform_dispatcher_runs_scope_roster_membership_and_removal
     assert rejected.json()['code'] == 'IDENTITY_SEAT_OCCUPIED'
     before = review['state']['revision']
     await change({'type': 'membership.remove', 'person_id': identity})
-    assert not review['state']['memberships'][0]['effective']
+    assert not next(row for row in review['state']['memberships'] if row['person_id'] == identity)['effective']
+    if group_size == 2:
+        assert sum(row['effective'] for row in review['state']['memberships']) == 1
     response = await client.post('/v1/deployments/run-a/identities', json={
         'registry_id': review['state']['registry_id'], 'expected_revision': before,
         'run_revision': review['run_revision'], 'operation': {'type': 'membership.set', 'person_id': identity, 'role': 'participant', 'team_ref': 'user01'}})
     assert response.status_code == 409
     assert response.json()['code'] == 'IDENTITY_REVIEW_CONFLICT'
+
+
+@pytest.mark.asyncio
+async def test_installation_integration_settings_do_not_require_a_workshop(env, monkeypatch):
+    client, calls, _ = env
+    monkeypatch.delenv('RANGE42_IDENTITY_SSH_CONFIG', raising=False)
+    response = await client.get('/v1/integrations/identity')
+    assert response.status_code == 200, response.text
+    assert response.json() == {'optional': True, 'configuration_state': 'not_configured',
+        'provider_access_verified': False, 'required_for_environment_deployment': False}
+    assert response.headers['cache-control'] == 'no-store'
+    assert calls == []
+
+
+def test_optional_integration_settings_are_admin_only():
+    from app.core.access import Principal, allowed
+    for role in ['viewer', 'operator']:
+        assert not allowed(Principal('staff', role), 'GET', '/v1/integrations/identity')
+        assert not allowed(Principal('staff', role), 'GET', '/v1/deployments/{deployment_id}/identities/capabilities')
