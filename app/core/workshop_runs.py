@@ -40,6 +40,7 @@ class WorkshopDescriptor(StrictModel):
 class WorkshopSpec(StrictModel):
     namespace: str = Field(pattern=r'^[a-z][a-z0-9-]{0,19}$')
     seats: int = Field(ge=1, le=10)
+    participants_per_environment: int = Field(default=1, ge=1, le=10)
     expires_at: str = Field(max_length=40)
     vmid_start: int = Field(ge=1000, le=999999980)
     network_pool: str = Field(max_length=18)
@@ -114,7 +115,10 @@ def compile_plan(spec: WorkshopSpec, *, run_id: str) -> dict:
                                 'run_namespace': spec.namespace,
                                 'exclusive_network': str(network),
                                 'nics': [{'index': 0, 'bridge': bridge, 'ip': guest['ip']}]})
-    return {'version': 1, 'run_id': run_id, **spec.model_dump(),
+    # Keep original one-person immutable plans identical after this upgrade.
+    group_policy = ({'participants_per_environment': spec.participants_per_environment}
+                    if spec.participants_per_environment != 1 else {})
+    return {'version': 1, 'run_id': run_id, **spec.model_dump(exclude={'participants_per_environment'}), **group_policy,
             'participants': participants, 'guests': guests, 'assignments': assignments,
             'networks': networks,
             'capacity': {'memory_mib': spec.seats * 20480, 'vcpus': spec.seats * 6,

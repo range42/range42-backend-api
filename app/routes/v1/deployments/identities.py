@@ -9,9 +9,9 @@ from pydantic import ValidationError
 
 from app.core.db import get_session_factory
 from app.core.errors import Range42Error
-from app.core.identity_runtime import identity_request, unavailable
+from app.core.identity_runtime import identity_configuration, identity_request, unavailable
 from app.core.models import Deployment
-from app.schemas.v1.identities import IdentityAction, IdentityState, RegisterScope, RunIdentities, SetMembership
+from app.schemas.v1.identities import IdentityAction, IdentityCapabilities, IdentityState, RegisterScope, RunIdentities, SetMembership
 
 router = APIRouter()
 
@@ -28,9 +28,12 @@ async def saved_run(deployment_id):
             if expiry.tzinfo is None:
                 raise ValueError()
             teams = [row['username'] for row in plan['participants']]
+            group_size = plan.get('participants_per_environment', 1)
+            if type(group_size) is not int or not 1 <= group_size <= 10:
+                raise ValueError()
             revision = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
             return {'deployment_id': deployment_id, 'expires_at': plan['expires_at'],
-                    'teams': teams, 'run_revision': revision}
+                    'teams': teams, 'participants_per_environment': group_size, 'run_revision': revision}
         except (KeyError, TypeError, ValueError):
             raise Range42Error(status=409, code='IDENTITY_RUN_PLAN_INVALID',
                 message='The saved run access plan requires operator inspection.') from None
@@ -48,7 +51,20 @@ def response(plan, value):
         state = IdentityState.model_validate(value)
     except ValidationError:
         raise unavailable() from None
+    if any(scope.ref == plan['deployment_id'] and scope.participant_limit_per_team != plan['participants_per_environment']
+           for scope in state.scopes):
+        raise Range42Error(status=409, code='IDENTITY_GROUP_POLICY_CHANGED',
+            message='The installed roster policy differs from the saved group size. Review the integration before changing memberships.')
     return JSONResponse({**plan, 'state': state.model_dump()}, headers={'Cache-Control': 'no-store', 'Pragma': 'no-cache'})
+
+
+@router.get('/{deployment_id}/identities/capabilities', response_model=IdentityCapabilities)
+async def capabilities(deployment_id: str, request: Request):
+    actor(request)
+    await saved_run(deployment_id)
+    configuration_state, _ = identity_configuration()
+    value = IdentityCapabilities(deployment_id=deployment_id, configuration_state=configuration_state)
+    return JSONResponse(value.model_dump(), headers={'Cache-Control': 'no-store', 'Pragma': 'no-cache'})
 
 
 @router.get('/{deployment_id}/identities', response_model=RunIdentities)
@@ -78,7 +94,7 @@ async def apply(deployment_id: str, payload: IdentityAction, request: Request):
             raise Range42Error(status=409, code='IDENTITY_RUN_EXPIRED',
                 message='This run has expired. Create a new run to grant new access.')
         operation['expires_at'] = plan['expires_at']
-        operation['participant_limit_per_team'] = 1
+        operation['participant_limit_per_team'] = plan['participants_per_environment']
     operation['scope_ref'] = deployment_id
     value = await identity_request({'version': 1, 'action': 'apply', 'actor': name, 'request': {
         'version': 1, 'registry_id': payload.registry_id, 'expected_revision': payload.expected_revision, 'operation': operation}})
