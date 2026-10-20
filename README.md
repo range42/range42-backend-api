@@ -34,6 +34,8 @@ For native installation, use the existing
 with matching backend/core/playbooks revisions and a preprovisioned native
 workspace. See [native scenarios](docs/native-scenarios.md). The container does
 not mount an operator's whole SSH home or invent deployment credentials.
+Administrators can [review a retained gateway and future port capacity](docs/gateway-foundations.md)
+before preparing participant networks; registration remains separate from qualification.
 
 ### Option 2 -- start.sh
 

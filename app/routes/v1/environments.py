@@ -5,11 +5,12 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import func, select, text
 
 from app.core.native_contexts import _api_binding, _contexts
 from app.core.native_environment_models import NativeEnvironment
+from app.core.native_environment_infrastructure import GatewayFoundation, gateway_capacity, gateway_outside_run
 from app.core.native_environments import EnvironmentSelection, refused, registered_contexts, review, review_inputs, selection_for
 from app.core.models import ProxmoxHost
 from app.routes.v1.native import _session
@@ -18,12 +19,22 @@ from app.core.workshop_profiles import InfrastructureGuest, WorkshopProfileView
 router = APIRouter(prefix='/environments', tags=['v1 native environments'])
 
 
+class GatewayNicCapacity(BaseModel):
+    limit: Literal[32]
+    occupied: int
+    additional_required: int
+    available: int
+    remaining_after_preparation: int
+
+
 class EnvironmentReviewOut(BaseModel):
     revision: str
     label: str
     base_context_id: str
     target_host_id: str
     workshop_profile: WorkshopProfileView
+    gateway_foundation: GatewayFoundation | None = None
+    gateway_nic_capacity: GatewayNicCapacity | None = None
     ready_for_planning: Literal[True]
     infrastructure_qualified: Literal[False]
     requirements: list[str]
@@ -36,6 +47,8 @@ class EnvironmentOut(BaseModel):
     target_host_id: str
     target_node: str
     workshop_profile: WorkshopProfileView
+    gateway_foundation: GatewayFoundation | None = None
+    gateway_nic_capacity: GatewayNicCapacity | None = None
     ready_for_planning: bool
     infrastructure_qualified: Literal[False]
     issues: list[str]
@@ -60,6 +73,22 @@ class EnvironmentPage(BaseModel):
 
 class InfrastructureSelection(EnvironmentSelection):
     vmids: list[Annotated[int, Field(ge=100, le=999999999)]] = Field(min_length=1, max_length=32)
+
+
+class FoundationSelection(EnvironmentSelection):
+    vmid: int = Field(strict=True, ge=100, le=999999999)
+
+    @model_validator(mode='after')
+    def separate_gateway(self):
+        if not gateway_outside_run(self.vmid, self.workshop_profile):
+            raise ValueError('The retained gateway must be separate from participant guests and source templates')
+        return self
+
+
+class FoundationOut(BaseModel):
+    gateway_foundation: GatewayFoundation
+    nic_capacity: GatewayNicCapacity
+    infrastructure_qualified: Literal[False]
 
 
 class InfrastructureOut(BaseModel):
@@ -95,9 +124,12 @@ async def unchanged_target(session, row):
 
 
 def public_record(row, *, ready=False, issues=None):
+    selected = selection_for(row)
     return {'id': row.id, 'label': row.label, 'base_context_id': row.base_context_id,
         'target_host_id': row.target_host_id, 'target_node': row.target_node,
-        'workshop_profile': selection_for(row).workshop_profile.public(),
+        'workshop_profile': selected.workshop_profile.public(),
+        'gateway_foundation': selected.gateway_foundation.model_dump() if selected.gateway_foundation else None,
+        'gateway_nic_capacity': gateway_capacity(selected.gateway_foundation, selected.workshop_profile.networks) if selected.gateway_foundation else None,
         'ready_for_planning': ready, 'infrastructure_qualified': False,
         'issues': issues or [], 'created_at': row.created_at, 'approved_by': row.approved_by}
 
@@ -112,6 +144,14 @@ async def listing(session=Depends(_session)):
         {'id': base.id, 'label': base.label, 'target_node': base.target_node,
          'target_api_url': base.target_api_url, 'ready': not base.issues(),
          'issues': base.issues()} for base in bases if base.target_api_url and base.target_node]}
+
+
+@router.post('/foundation/review', response_model=FoundationOut)
+async def foundation(payload: FoundationSelection, session=Depends(_session)):
+    from app.core.native_environment_infrastructure import observe_foundation
+    selection = EnvironmentSelection.model_validate(payload.model_dump(exclude={'vmid'}))
+    _, host = await review_inputs(session, selection)
+    return await observe_foundation(host, payload.vmid, payload.workshop_profile.networks)
 
 
 @router.post('/infrastructure/review', response_model=InfrastructureOut)
@@ -134,13 +174,28 @@ async def create(payload: EnvironmentRegistration, request: Request, session=Dep
     current = await review(session, selection)
     if current['revision'] != payload.review_revision:
         raise refused('Environment inputs or credentials changed. Review the current configuration before saving.')
+    # Live reads happen before the writer lock. Serialize the final local
+    # review and insert so repeated/lost responses retain the same environment.
+    await session.rollback()
+    await session.execute(text('BEGIN IMMEDIATE'))
+    fresh, _ = await review_inputs(session, selection)
+    if fresh['revision'] != payload.review_revision:
+        raise refused('Environment inputs changed during registration. Review the current configuration before saving.')
+    existing = await session.scalar(select(NativeEnvironment).where(
+        NativeEnvironment.review_revision == payload.review_revision).order_by(
+        NativeEnvironment.created_at, NativeEnvironment.id).limit(1))
+    if existing:
+        await session.commit()
+        return public_record(existing, ready=True)
     if await session.scalar(select(func.count()).select_from(NativeEnvironment)) >= 256:
         raise refused('The native environment registry is full.')
     host = await session.get(ProxmoxHost, payload.target_host_id)
     row = NativeEnvironment(id='env-' + uuid.uuid4().hex[:24], label=payload.label,
         base_context_id=payload.base_context_id, target_host_id=payload.target_host_id,
         target_node=host.node_name, target_api_url=host.api_url,
-        profile_json=payload.workshop_profile.model_dump_json(), review_revision=payload.review_revision,
+        profile_json=payload.workshop_profile.model_dump_json(),
+        foundation_json=payload.gateway_foundation.model_dump_json() if payload.gateway_foundation else None,
+        review_revision=payload.review_revision,
         approved_by=request.state.principal.actor_id)
     session.add(row)
     await session.commit()

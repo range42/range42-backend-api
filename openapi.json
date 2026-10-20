@@ -7513,6 +7513,47 @@
         }
       }
     },
+    "/v1/environments/foundation/review": {
+      "post": {
+        "tags": [
+          "v1 native environments"
+        ],
+        "summary": "Foundation",
+        "operationId": "foundation_v1_environments_foundation_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoundationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/infrastructure/review": {
       "post": {
         "tags": [
@@ -9115,6 +9156,26 @@
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfileView"
           },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gateway_nic_capacity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayNicCapacity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "ready_for_planning": {
             "type": "boolean",
             "title": "Ready For Planning"
@@ -9208,6 +9269,16 @@
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfile"
           },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review_revision": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
@@ -9245,6 +9316,26 @@
           },
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfileView"
+          },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gateway_nic_capacity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayNicCapacity"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "ready_for_planning": {
             "type": "boolean",
@@ -9298,6 +9389,16 @@
           },
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfile"
+          },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -11395,6 +11496,170 @@
         ],
         "title": "FirewallSwitchesReport"
       },
+      "FoundationOut": {
+        "properties": {
+          "gateway_foundation": {
+            "$ref": "#/components/schemas/GatewayFoundation"
+          },
+          "nic_capacity": {
+            "$ref": "#/components/schemas/GatewayNicCapacity"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gateway_foundation",
+          "nic_capacity",
+          "infrastructure_qualified"
+        ],
+        "title": "FoundationOut"
+      },
+      "FoundationSelection": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\r\\n\\x00-\\x1f]+$",
+            "title": "Label"
+          },
+          "base_context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Base Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Target Host Id"
+          },
+          "workshop_profile": {
+            "$ref": "#/components/schemas/WorkshopProfile"
+          },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vmid": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vmid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "base_context_id",
+          "target_host_id",
+          "workshop_profile",
+          "vmid"
+        ],
+        "title": "FoundationSelection"
+      },
+      "GatewayFoundation": {
+        "properties": {
+          "vmid": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 100.0,
+            "title": "Vmid"
+          },
+          "node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Node"
+          },
+          "vmgenid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+            "title": "Vmgenid"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Owner"
+          },
+          "nics": {
+            "items": {
+              "$ref": "#/components/schemas/InfrastructureNic"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Nics"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "configuration_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vmid",
+          "node",
+          "vmgenid",
+          "owner",
+          "nics",
+          "name",
+          "configuration_revision"
+        ],
+        "title": "GatewayFoundation"
+      },
+      "GatewayNicCapacity": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "const": 32,
+            "title": "Limit"
+          },
+          "occupied": {
+            "type": "integer",
+            "title": "Occupied"
+          },
+          "additional_required": {
+            "type": "integer",
+            "title": "Additional Required"
+          },
+          "available": {
+            "type": "integer",
+            "title": "Available"
+          },
+          "remaining_after_preparation": {
+            "type": "integer",
+            "title": "Remaining After Preparation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "limit",
+          "occupied",
+          "additional_required",
+          "available",
+          "remaining_after_preparation"
+        ],
+        "title": "GatewayNicCapacity"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -12153,6 +12418,16 @@
           },
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfile"
+          },
+          "gateway_foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayFoundation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "vmids": {
             "items": {
