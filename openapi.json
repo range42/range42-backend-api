@@ -7030,6 +7030,78 @@
         }
       }
     },
+    "/v1/admin/workshop/admission": {
+      "get": {
+        "tags": [
+          "v1 admin",
+          "v1 workshop administration"
+        ],
+        "summary": "Admission",
+        "operationId": "admission_v1_admin_workshop_admission_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopAdmission"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1 admin",
+          "v1 workshop administration"
+        ],
+        "summary": "Change Admission",
+        "operationId": "change_admission_v1_admin_workshop_admission_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmissionChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopAdmission"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/workshop/actions": {
       "post": {
         "tags": [
@@ -7733,6 +7805,60 @@
   },
   "components": {
     "schemas": {
+      "AdmissionChange": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "exclusiveMaximum": 9007199254740992.0,
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Request Id"
+          },
+          "pause_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Id"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "expected_revision",
+          "request_id"
+        ],
+        "title": "AdmissionChange"
+      },
       "AllocatedNic": {
         "properties": {
           "index": {
@@ -20715,6 +20841,61 @@
         ],
         "title": "WorkshopAction"
       },
+      "WorkshopAdmission": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "legacy_controller_queue",
+            "title": "Scope"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "draining",
+              "paused"
+            ],
+            "title": "State"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMaximum": 9007199254740992.0,
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "pause_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Id"
+          },
+          "queued_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Queued Count"
+          },
+          "running_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Running Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "state",
+          "revision",
+          "queued_count",
+          "running_count"
+        ],
+        "title": "WorkshopAdmission"
+      },
       "WorkshopNetwork": {
         "properties": {
           "bridge": {
@@ -21060,6 +21241,16 @@
               }
             ],
             "title": "Cohort Seats"
+          },
+          "admission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopAdmission"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

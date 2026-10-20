@@ -24,6 +24,22 @@ router = APIRouter(prefix='/workshop', tags=['v1 workshop administration'])
 USERNAME = r'^user(?:0[1-9]|10)$'
 
 
+def agent_result(value):
+    if not isinstance(value, dict) or type(value.get('ok')) is not bool:
+        raise ValueError()
+    if value['ok'] is True and isinstance(value.get('result'), dict):
+        return value['result']
+    messages = {
+        'WORKSHOP_PAUSED': (423, 'Workshop controller operations are paused. Refresh admission before making changes.'),
+        'WORKSHOP_ADMISSION_CHANGED': (409, 'Admission changed. Refresh and review the current pause before retrying.'),
+        'WORKSHOP_DRAINING': (409, 'Accepted workshop operations are still draining. Wait for them to finish before resuming.'),
+    }
+    if value.get('code') in messages:
+        status, message = messages[value['code']]
+        raise Range42Error(status=status, code=value['code'], message=message)
+    raise ValueError()
+
+
 def unavailable():
     return Range42Error(status=503, error='workshop_unavailable', code='WORKSHOP_UNAVAILABLE',
                         message='The workshop management worker is unavailable. Contact the platform administrator.')
@@ -50,10 +66,7 @@ async def agent_request(value):
             raw = await asyncio.wait_for(reader.readline(), 30)
             if len(raw) > 2 * 1024 * 1024:
                 raise ValueError()
-            result = json.loads(raw)
-            if not result.get('ok'):
-                raise ValueError()
-            return result['result']
+            return agent_result(json.loads(raw))
         finally:
             writer.close()
             await writer.wait_closed()
@@ -71,7 +84,7 @@ async def ssh_agent_request(config, value):
             raise ValueError()
         process = await asyncio.create_subprocess_exec(
             'ssh', '-F', str(path), '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
-            'workshop-controller', stdin=asyncio.subprocess.PIPE,
+            '-o', 'StrictHostKeyChecking=yes', 'workshop-controller', stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         try:
             raw, _ = await asyncio.wait_for(process.communicate(json.dumps(value).encode() + b'\n'), 30)
@@ -79,12 +92,9 @@ async def ssh_agent_request(config, value):
             process.kill()
             await process.wait()
             raise
-        if process.returncode or len(raw) > 2 * 1024 * 1024:
+        if process.returncode not in {0, 1} or len(raw) > 2 * 1024 * 1024:
             raise ValueError()
-        result = json.loads(raw)
-        if not result.get('ok'):
-            raise ValueError()
-        return result['result']
+        return agent_result(json.loads(raw))
     except (TimeoutError, OSError, ValueError, KeyError):
         raise unavailable() from None
 
@@ -122,6 +132,33 @@ class Operation(BaseModel):
     finished_at: str | None = None
 
 
+class WorkshopAdmission(BaseModel):
+    scope: Literal['legacy_controller_queue']
+    state: Literal['open', 'draining', 'paused']
+    revision: int = Field(ge=0, lt=2**53)
+    pause_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+    queued_count: int = Field(ge=0)
+    running_count: int = Field(ge=0)
+
+
+class AdmissionChange(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    action: Literal['pause', 'resume']
+    expected_revision: int = Field(ge=0, lt=2**53)
+    request_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+    pause_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+    confirmation: str | None = None
+
+    @model_validator(mode='after')
+    def reviewed_change(self):
+        if self.action == 'resume':
+            if self.pause_id is None or self.confirmation != 'RESUME':
+                raise ValueError('Review this pause and type RESUME before reopening workshop operations')
+        elif self.pause_id is not None or self.confirmation is not None:
+            raise ValueError('A pause uses only the current revision and a unique request ID')
+        return self
+
+
 class WorkshopStatus(BaseModel):
     id: str
     expires_at: str
@@ -130,6 +167,7 @@ class WorkshopStatus(BaseModel):
     configuration_revision: str = ''
     cohort_deployment_id: str | None = None
     cohort_seats: int | None = None
+    admission: WorkshopAdmission | None = None
 
 
 class WorkshopAction(BaseModel):
@@ -162,8 +200,21 @@ class WorkshopAction(BaseModel):
 
 
 @router.get('', response_model=WorkshopStatus)
-async def status():
+async def status(response: Response):
+    response.headers['Cache-Control'] = 'no-store'
     return await agent_request({'action': 'status'})
+
+
+@router.get('/admission', response_model=WorkshopAdmission)
+async def admission(response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    return await agent_request({'action': 'admission'})
+
+
+@router.post('/admission', response_model=WorkshopAdmission)
+async def change_admission(request: AdmissionChange, response: Response):
+    response.headers['Cache-Control'] = 'no-store'
+    return await agent_request(request.model_dump(exclude={'confirmation'}, exclude_none=True))
 
 
 @router.post('/actions', response_model=Operation, status_code=202)
