@@ -165,6 +165,13 @@ access profile keeps participant readiness false. The initial reusable recipe
 still requires qualified templates and prepared bridges. Their automated
 preparation and live end-to-end qualification remain separate acceptance work.
 
+Source templates may have one validated bootstrap NIC, or no NIC and no IP
+configuration. The matching native recipe records a sealed clone’s empty network
+before configuration and uses the installed controller to create its final
+isolated interface before first boot. Configure recovery accepts that empty
+network only for the original stopped, incomplete generation; current and
+pending interfaces and IP configuration must remain unchanged.
+
 Recovery requires the original clone receipt for every existing VM. During reset
 or retirement, an allocation without a receipt may be skipped only after fresh
 cluster-wide absence proof. This never adopts a live guest or invents a clone

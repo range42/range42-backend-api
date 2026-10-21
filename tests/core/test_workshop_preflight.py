@@ -9,7 +9,7 @@ from tests.core.test_workshop_runs import specification
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('fault', [None, 'bridge', 'shared_bridge', 'template', 'wrong_disks', 'passthrough', 'missing_nic', 'malformed_nic', 'api_template_list', 'api_template_text', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
+@pytest.mark.parametrize('fault', [None, 'sealed', 'extra_nic', 'bridge', 'shared_bridge', 'template', 'wrong_disks', 'passthrough', 'missing_nic', 'malformed_nic', 'api_template_list', 'api_template_text', 'capacity', 'committed_memory', 'permissions', 'occupied', 'api'])
 async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(fault):
     from app.core.workshop_runs import WorkshopSpec, compile_plan
     from app.core.workshop_preflight import workshop_checks
@@ -54,8 +54,12 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
                 result['scsi0'] = f'ceph-control:base-{template}-disk-0,size=24G'
             if fault == 'passthrough':
                 result['hostpci0'] = '0000:01:00.0'
-            if fault == 'missing_nic':
+            if fault in ('missing_nic', 'sealed'):
                 result.pop('net0')
+            if fault == 'missing_nic':
+                result['ipconfig0'] = 'ip=192.0.2.2/24,gw=192.0.2.1'
+            if fault == 'extra_nic':
+                result['net1'] = 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr422'
             elif fault == 'malformed_nic':
                 result['net0'] = 'virtio=not-a-mac,bridge=vmbr422'
             if fault == 'api_template_list':
@@ -68,7 +72,7 @@ async def test_workshop_readiness_observes_real_target_inputs_and_fails_closed(f
     host = SimpleNamespace(api_url='https://pve.example.test:8006', node_name='node-a', token_ref='test-private')
     async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
         checks = await workshop_checks(plan, host, scope='full', client=client)
-    if fault:
+    if fault not in (None, 'sealed'):
         assert any(check.result == 'block' for check in checks)
     else:
         assert not any(check.result == 'block' for check in checks)
@@ -145,3 +149,41 @@ async def test_only_exact_approved_infrastructure_may_share_a_participant_bridge
         else:
             await _network_attachments(client, host, rows, plan['guests'], {}, profile)
             assert views == [0, 1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fault', [None, 'running', 'complete', 'unrecorded', 'extra_nic', 'pending_ip', 'generation'])
+async def test_recorded_sealed_clone_can_resume_without_adopting_network_changes(fault):
+    from app.core.workshop_preflight import _network_attachments
+    from app.core.workshop_runs import WorkshopSpec, compile_plan
+    plan = compile_plan(WorkshopSpec.model_validate(specification(seats=1)), run_id='a' * 16)
+    guest = plan['guests'][0]
+    generation = '12345678-1234-1234-1234-123456789abc'
+    proof = {'vmid': guest['vm_id'], 'owner': guest['owner'], 'vmgenid': generation,
+             'bootstrap_network': {'net0': None, 'ipconfig0': None}}
+    if fault == 'complete':
+        proof['bootstrap_complete'] = True
+    if fault == 'unrecorded':
+        proof.pop('bootstrap_network')
+    seen = []
+    def endpoint(request):
+        current = int(request.url.params['current'])
+        seen.append(current)
+        config = {'description': guest['owner'], 'vmgenid': generation}
+        if fault == 'extra_nic':
+            config['net1'] = 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr500'
+        if fault == 'pending_ip' and current == 0:
+            config['ipconfig0'] = 'ip=192.0.2.2/24'
+        if fault == 'generation':
+            config['vmgenid'] = 'abcdefab-1234-1234-1234-123456789abc'
+        return httpx.Response(200, json={'data': config})
+    host = SimpleNamespace(api_url='https://pve.example.test:8006', node_name='node-a', token_ref='synthetic')
+    rows = [{'vmid': guest['vm_id'], 'node': 'node-a', 'type': 'qemu',
+             'status': 'running' if fault == 'running' else 'stopped'}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
+        if fault:
+            with pytest.raises(ValueError):
+                await _network_attachments(client, host, rows, plan['guests'], {guest['vm_id']: proof}, None)
+        else:
+            await _network_attachments(client, host, rows, plan['guests'], {guest['vm_id']: proof}, None)
+            assert seen == [0, 1]
