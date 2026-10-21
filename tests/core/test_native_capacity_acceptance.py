@@ -253,3 +253,44 @@ async def test_fixed_native_transport_never_accepts_arbitrary_actions_or_command
             await transport.read_agent(
                 selected, action=action, request=copy.deepcopy(payload)
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('phase', ['materialized', 'retired'])
+async def test_native_status_retains_original_request_after_owned_lifecycle_changes(ledger, phase):
+    from app.core.capacity_models import CapacityHold
+    from app.core.capacity_accounting import MaterializationReceipt
+    from app.core.errors import Range42Error
+
+    mod, factory = ledger
+    original, fresh = await reserve_first(mod, factory)
+    pending = await mod.journal_native_request(
+        factory, fresh, actor='director', expected_revision=original.approval_revision)
+    native = service()
+    request = native.request_for(pending, fresh.observed.node.installation_id)
+    await native.record_acceptance(factory, fresh, request, receipt(request, fresh.observed))
+    async with factory() as session:
+        row = await session.get(CapacityHold, original.id)
+        held = mod.commitment(row)
+        held.guests[0].materialization = MaterializationReceipt(
+            vmgenid='12345678-1234-1234-1234-123456789abc', configuration_revision='a'*64,
+            receipt_sha256='b'*64, volumes=[])
+        if phase == 'retired':
+            held.phase = 'retired'
+            row.status = 'retired'
+        row.record_json = held.model_dump_json()
+        row.revision += 1
+        row.record_digest = mod.record_digest(row)
+        await session.commit()
+    # Reopen a real SQLite session, as when reconciling after a restart/lost reply.
+    async with factory() as session:
+        row = await session.get(CapacityHold, original.id)
+        assert native.request_for(row, fresh.observed.node.installation_id) == request
+        assert native.root_accepted(row)
+        # Normalizing lifecycle-only fields must not hide changed resource demand.
+        changed = mod.commitment(row)
+        changed.guests[0].memory_mib += 1
+        row.record_json = changed.model_dump_json()
+        row.record_digest = mod.record_digest(row)
+        with pytest.raises(Range42Error):
+            native.root_accepted(row)
