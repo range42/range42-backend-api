@@ -10893,6 +10893,16 @@
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfileView"
           },
+          "runtime_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuntimeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "gateway_foundation": {
             "anyOf": [
               {
@@ -11016,6 +11026,11 @@
               }
             ]
           },
+          "reuse_runtime": {
+            "type": "boolean",
+            "title": "Reuse Runtime",
+            "default": false
+          },
           "review_revision": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
@@ -11053,6 +11068,16 @@
           },
           "workshop_profile": {
             "$ref": "#/components/schemas/WorkshopProfileView"
+          },
+          "runtime_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuntimeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gateway_foundation": {
             "anyOf": [
@@ -11136,6 +11161,11 @@
                 "type": "null"
               }
             ]
+          },
+          "reuse_runtime": {
+            "type": "boolean",
+            "title": "Reuse Runtime",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -13287,6 +13317,11 @@
               }
             ]
           },
+          "reuse_runtime": {
+            "type": "boolean",
+            "title": "Reuse Runtime",
+            "default": false
+          },
           "vmid": {
             "type": "integer",
             "maximum": 999999999.0,
@@ -14510,6 +14545,11 @@
                 "type": "null"
               }
             ]
+          },
+          "reuse_runtime": {
+            "type": "boolean",
+            "title": "Reuse Runtime",
+            "default": false
           },
           "vmids": {
             "items": {
@@ -17969,6 +18009,45 @@
           "cards"
         ],
         "title": "RuntimeReport"
+      },
+      "RuntimeTarget": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version"
+          },
+          "physical_node_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Physical Node Id"
+          },
+          "hardware_binding": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Hardware Binding"
+          },
+          "node_name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$",
+            "title": "Node Name"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Installation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "physical_node_id",
+          "hardware_binding",
+          "node_name",
+          "installation_id"
+        ],
+        "title": "RuntimeTarget"
       },
       "SaveOwnership": {
         "properties": {

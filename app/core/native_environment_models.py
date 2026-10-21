@@ -15,6 +15,7 @@ class NativeEnvironment(Base):
     target_api_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     profile_json: Mapped[str] = mapped_column(Text, nullable=False)
     foundation_json: Mapped[str | None] = mapped_column(Text)
+    runtime_target_json: Mapped[str | None] = mapped_column(Text)
     review_revision: Mapped[str] = mapped_column(String(64), nullable=False)
     approved_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
