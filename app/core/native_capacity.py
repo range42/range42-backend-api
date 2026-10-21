@@ -41,6 +41,14 @@ def request_for(row, installation_id):
             "CAPACITY_NATIVE_REQUEST_REQUIRED",
             "Journal the original native request before dispatch.",
         )
+    # The wire request is the original held demand. Later generation/volume
+    # evidence and retirement are separate lifecycle facts, never a replacement
+    # for the request the physical node already accepted. Keep all resource and
+    # binding fields intact so a changed demand still fails its receipt digest.
+    original = ledger.commitment(row).model_dump()
+    original['phase'] = 'held'
+    for guest in original['guests']:
+        guest['materialization'] = None
     return {
         "protocol": "range42-native-capacity-request-v1",
         "request_id": row.native_request_id,
@@ -51,7 +59,7 @@ def request_for(row, installation_id):
         "approval_revision": row.approval_revision,
         "approved_by": row.approved_by,
         "requested_by": row.native_request_actor,
-        "commitment": ledger.commitment(row).model_dump(),
+        "commitment": original,
     }
 
 

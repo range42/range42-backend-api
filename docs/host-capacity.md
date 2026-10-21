@@ -157,6 +157,13 @@ admission. Missing, malformed, mismatched or absent replies retain the entire
 commitment and journal. A retained accepted receipt is historical evidence, not
 current live health. No timeout, expiry or failed attempt releases it.
 
+The status request always reconstructs the original held demand: its phase stays
+`held` and each guest’s `materialization` stays null. Generation/volume evidence
+and retirement are separate lifecycle facts. They do not change the request that
+Root accepted. Resource amounts, identities, actors and binding revisions remain
+unchanged and are still checked against the original receipt digest. This does
+not enable materialization, retirement or execution.
+
 Migration0018 preserves older record digests when the receipt is null and refuses
 downgrade while any native receipt remains. Back up the API database together
 with the physical node's complete original identity/capacity state. Do not erase
