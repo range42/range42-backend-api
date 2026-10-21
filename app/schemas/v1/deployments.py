@@ -17,11 +17,14 @@ class NativeDeployment(BaseModel):
     parameters: dict = Field(default_factory=dict, max_length=64)
     workshop: WorkshopSpec | None = None
     foundation: FoundationSpec | None = None
+    prepare_environment_networks: StrictBool = False
 
     @model_validator(mode='after')
     def distinct_workflow(self):
         if self.foundation is not None and self.workshop is not None:
             raise ValueError('Reusable preparation and participant runs have separate ownership')
+        if self.prepare_environment_networks and self.foundation is None:
+            raise ValueError('Optional environment network preparation requires its reusable foundation')
         return self
 
     @model_serializer(mode='wrap')
@@ -29,6 +32,8 @@ class NativeDeployment(BaseModel):
         value = handler(self)
         if self.foundation is None:
             value.pop('foundation', None)
+        if not self.prepare_environment_networks:
+            value.pop('prepare_environment_networks', None)
         return value
 
     @field_validator("path")

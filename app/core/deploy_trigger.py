@@ -143,6 +143,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     workshop_credentials = {}
     foundation_request = None
     foundation_configuration = None
+    environment_network_bundle = None
     if dep.project_sha:
         scenario = await prepare_project_scenario(
             session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
@@ -173,6 +174,9 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             if foundation:
                 from app.core.foundation_execution import dispatch_inputs
                 foundation_request, foundation_configuration = await dispatch_inputs(get_session_factory(), dep.id)
+                if native.get('prepare_environment_networks'):
+                    from app.core.environment_network_execution import dispatch_inputs as network_inputs
+                    environment_network_bundle, _ = await network_inputs(get_session_factory(), dep.id)
             from app.core.native_ownership_guard import assert_native_scope_free
             await assert_native_scope_free(session, dep.id, scenario.vmids)
             from app.core import legacy_workshop_operations as legacy_workshop
@@ -205,7 +209,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 workshop_seat=(attempt.operation or {}).get('seat', 0), workshop_state_dir=ws / 'workshop-receipts',
                 foundation_request=foundation_request,
                 foundation_agent_revision=foundation_configuration.revision if foundation_configuration else '',
-                foundation_target_host_id=dep.target_host_id if foundation else '')
+                foundation_target_host_id=dep.target_host_id if foundation else '',
+                environment_network_bundle=environment_network_bundle)
             playbook_path = scenario.playbook
         elif attempt.scope == "runtime":
             from app.core.runtime_runner import prepare_runtime_run
@@ -447,6 +452,11 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                     proof = await reconcile(get_session_factory(), deployment_id)
                     if proof.status != 'complete':
                         runtime_result = {'partial': True, 'error_code': 'FOUNDATION_PREPARATION_UNRESOLVED'}
+                    if environment_network_bundle is not None:
+                        from app.core.environment_network_execution import reconcile as reconcile_networks
+                        network_proof = await reconcile_networks(get_session_factory(), deployment_id)
+                        if network_proof.status != 'ready':
+                            runtime_result = {'partial': True, 'error_code': 'ENVIRONMENT_NETWORK_UNRESOLVED'}
                 except Range42Error:
                     runtime_result = {'unknown': True, 'error_code': 'FOUNDATION_RECONCILIATION_REQUIRED'}
             terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, warning_code=stream_error, **runtime_result)

@@ -60,6 +60,50 @@ context discovery remains available through the existing `/v1/contexts` route.
 | `POST /v1/environments/{id}/review` | Review the current inputs of an existing immutable version. |
 | `POST /v1/environments/{id}/revalidate` | Accept the reviewed credential/runtime revision while preserving target placement and bounds. |
 
+## Optional environment bridge preparation
+
+The normal catalog foundation scenario can prepare its registered environment's
+bridges in the same native attempt as its two reusable template copies. Select
+**Also prepare the environment's isolated bridges and gateway management network**
+in Deploy. The native request adds `prepare_environment_networks: true`; omitted
+or false preserves the template-only workflow and its serialized legacy shape.
+This option requires a registered environment with a managed gateway network.
+
+Reserve and physically accept the foundation's original capacity first. In
+Overview, retain the template preparation request, then review and retain the
+bridge request. Run the existing full deployment action. It prepares templates,
+then invokes the separate bounded network module, and independently reconciles
+both services before reporting completion. It creates no parallel allocator,
+queue, participant credentials or identity-provider dependency.
+
+| Method and path | Behavior |
+| --- | --- |
+| `GET /v1/deployments/{id}/foundation/networks` | Read retained environment network intent, readiness and any current local blocking issue. |
+| `POST /v1/deployments/{id}/foundation/networks/review` | Recompile the exact environment-owned plan, independently observe the optional module, and durably retain the original request. Empty body only; no native network mutation. |
+| `POST /v1/deployments/{id}/foundation/networks/reconcile` | Read original node status and retain its independently verified receipt. Empty body only; no native network mutation. |
+
+All three use the existing administrator policy and return `Cache-Control:
+no-store`. Reviewing requires the original accepted foundation request, selected
+target, physical identity, approved environment profile and current separate
+network service. Core stores its journal in the original `NativeEnvironment`
+row; the original capacity request and physical/template service revision stay
+unchanged. Migration `0021_environment_networks` adds one nullable column and
+refuses a downgrade that would discard populated ownership.
+
+Installations enroll the optional `range42_environment_network_agent` role
+separately. Its protected backend registry is selected by
+`RANGE42_ENVIRONMENT_NETWORK_AGENTS_FILE`, using the existing v2 per-target
+registry shape and a dedicated `range42-env-network-*` SSH alias/configuration.
+Do not modify the original physical/template SSH configuration when adding it.
+Each alias uses strict host-key verification and the separately restricted
+no-argument root dispatcher; no browser request can select a command or path.
+The module's own policy revision and transport revision gate only its stage.
+
+Bridge readiness does not qualify participant execution. Each run still owns
+its own gateway and participant guests, and requires gateway configuration,
+scoped temporary egress, original generation evidence, capacity acceptance and
+isolation checks. Participant onboarding remains optional and separate.
+
 `EnvironmentSelection` contains `label`, `base_context_id`, `target_host_id` and
 `workshop_profile`. The version1 profile has `id`, `vmid_ranges`, `networks`
 (`bridge`, `subnet`, `gateway`), `proxmox_template`, `deployer_template`, `storage`

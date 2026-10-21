@@ -105,6 +105,9 @@ async def prepare_project_scenario(
         context = await resolve_registered_context(session, native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
         from app.core.workshop_foundations import resolve_native_foundation, foundation_topology
         foundation = resolve_native_foundation(native, descriptor, context, run_id=deployment.id or '')
+        if native.get('prepare_environment_networks'):
+            from app.core.environment_networks import compile_plan as compile_network_plan
+            compile_network_plan(context)
         if foundation:
             descriptor['declared_vmids'] = [row['vm_id'] for row in foundation['assignments']]
             descriptor['topology'] = {**descriptor['topology'], **foundation_topology(foundation),

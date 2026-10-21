@@ -8634,6 +8634,155 @@
         }
       }
     },
+    "/v1/deployments/{deployment_id}/foundation/networks": {
+      "get": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Get Networks",
+        "operationId": "get_networks_v1_deployments__deployment_id__foundation_networks_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/foundation/networks/review": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Review Networks",
+        "operationId": "review_networks_v1_deployments__deployment_id__foundation_networks_review_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/foundation/networks/reconcile": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Reconcile Networks",
+        "operationId": "reconcile_networks_v1_deployments__deployment_id__foundation_networks_reconcile_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/platform/components/preview": {
       "post": {
         "tags": [
@@ -15532,6 +15681,11 @@
                 "type": "null"
               }
             ]
+          },
+          "prepare_environment_networks": {
+            "type": "boolean",
+            "title": "Prepare Environment Networks",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -15579,6 +15733,84 @@
           "proxmox_node"
         ],
         "title": "NativeNatRule"
+      },
+      "NetworkStatus": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "requested": {
+            "type": "boolean",
+            "title": "Requested"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "request_recorded": {
+            "type": "boolean",
+            "title": "Request Recorded"
+          },
+          "preparation_available": {
+            "type": "boolean",
+            "title": "Preparation Available"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt"
+          },
+          "issue": {
+            "type": "string",
+            "title": "Issue"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "requested",
+          "environment_id",
+          "request_recorded",
+          "preparation_available",
+          "plan",
+          "receipt",
+          "issue"
+        ],
+        "title": "NetworkStatus"
       },
       "Nic": {
         "properties": {
