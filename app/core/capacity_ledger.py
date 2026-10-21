@@ -500,6 +500,8 @@ async def assert_execution_accepted(session, deployment_id):
     if deployment and deployment.native and deployment.native.get('foundation_plan'):
         from app.core.foundation_execution import assert_dispatch
         await assert_dispatch(session, row)
+        from app.core.environment_network_execution import assert_dispatch as assert_network_dispatch
+        await assert_network_dispatch(session, deployment_id)
         return
     # A database phase is not a native execution attestation. Keep this gate
     # closed until the original root plan receipt and bounded executor are

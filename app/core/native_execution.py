@@ -42,7 +42,8 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
                        repository_root: Path | None = None, workshop_plan: dict | None = None,
                        workshop_credentials: dict | None = None, workshop_seat: int = 0,
                        workshop_state_dir: Path | None = None, foundation_request: dict | None = None,
-                       foundation_agent_revision: str = '', foundation_target_host_id: str = '') -> NativeRun:
+                       foundation_agent_revision: str = '', foundation_target_host_id: str = '',
+                       environment_network_bundle: dict | None = None) -> NativeRun:
     if scope not in descriptor["actions"]:
         raise invalid("This saved scenario does not declare that lifecycle action", "NATIVE_ACTION_UNAVAILABLE")
     from app.core.native_contexts import execution_issue
@@ -54,6 +55,12 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
             or not re.fullmatch(r'[0-9a-f]{64}', foundation_agent_revision)
             or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', foundation_target_host_id)):
         raise invalid('The original foundation request must match this selected target and preparation action.', 'FOUNDATION_ORIGINAL_CHANGED')
+    if environment_network_bundle is not None and (not foundation_request
+            or environment_network_bundle.get('request', {}).get('foundation_request') != foundation_request
+            or environment_network_bundle['request'].get('plan', {}).get('environment_id') != context.id
+            or environment_network_bundle['request']['plan'].get('node') != context.target_node
+            or not re.fullmatch(r'[0-9a-f]{64}', environment_network_bundle.get('transport_revision', ''))):
+        raise invalid('Optional environment networks must retain the same original foundation and target.', 'ENVIRONMENT_NETWORK_ORIGINAL_CHANGED')
     values = native_variables(descriptor, features, parameters)
     if context.target_api_url:
         values.update(proxmox_api_host=urlsplit(context.target_api_url).netloc,
@@ -95,7 +102,9 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     if foundation_request:
         request_path = view / 'foundation-request.json'
-        _write(request_path, json.dumps(foundation_request, allow_nan=False))
+        payload = {'protocol': 'range42-foundation-attempt-v1', 'foundation': foundation_request,
+            'environment_networks': environment_network_bundle} if environment_network_bundle is not None else foundation_request
+        _write(request_path, json.dumps(payload, allow_nan=False))
         values.update(range42_foundation_request_file=str(request_path),
                       range42_foundation_agent_revision=foundation_agent_revision,
                       range42_foundation_target_host_id=foundation_target_host_id,

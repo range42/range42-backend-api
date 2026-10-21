@@ -93,6 +93,23 @@ async def test_foundation_creation_without_the_reviewed_lease_is_refused(foundat
 
 
 @pytest.mark.asyncio
+async def test_optional_bridges_require_registered_environment_before_consuming_template_lease(foundation_env):
+    from app.core.allocation_models import AllocationReservation, DeploymentAllocation
+    client, db, _ = foundation_env
+    reserved = await client.post('/v1/projects/p/native-scenario/foundation/reservations',
+        json={**preview_request(), 'project_key': 'foundation-owner'}, headers=HEADERS)
+    payload = deployment_request()
+    payload['native']['prepare_environment_networks'] = True
+    response = await client.post('/v1/deployments/', json={**payload,
+        'allocation_reservation_id': reserved.json()['reservation_id']}, headers=HEADERS)
+    assert response.status_code == 409, response.text
+    assert response.json()['code'] == 'ENVIRONMENT_NETWORK_REVIEW_REQUIRED'
+    async with db.get_session_factory()() as session:
+        assert len(list(await session.scalars(select(AllocationReservation)))) == 1
+        assert not list(await session.scalars(select(DeploymentAllocation)))
+
+
+@pytest.mark.asyncio
 async def test_wrong_owner_cannot_consume_foundation_reservation(foundation_env):
     from app.core.allocation_models import AllocationReservation, DeploymentAllocation
     client, db, _ = foundation_env

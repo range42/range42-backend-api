@@ -68,8 +68,13 @@ class AgentConfiguration:
 
 
 def agent_configuration(host_id, node_name):
+    return fixed_configuration(host_id, node_name,
+        registry_variable="RANGE42_PREPARATION_AGENTS_FILE", alias_prefix="range42-preparation-")
+
+
+def fixed_configuration(host_id, node_name, *, registry_variable, alias_prefix):
     try:
-        source = os.environ.get("RANGE42_PREPARATION_AGENTS_FILE")
+        source = os.environ.get(registry_variable)
         if not source:
             raise ValueError()
         raw = protected_bytes(Path(source))
@@ -112,7 +117,7 @@ def agent_configuration(host_id, node_name):
                     r"[A-Za-z0-9][A-Za-z0-9.-]{0,127}", row["node_name"]
                 )
                 or not re.fullmatch(
-                    r"range42-preparation-[A-Za-z0-9][A-Za-z0-9_-]{0,63}",
+                    re.escape(alias_prefix) + r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}",
                     row["ssh_alias"],
                 )
             ):
@@ -166,6 +171,10 @@ async def read_agent(
         payload["request"] = request
     elif request is not None:
         raise unavailable()
+    return await read_fixed_service(config, payload, maximum=maximum, timeout=timeout)
+
+
+async def read_fixed_service(config, payload, *, maximum, timeout):
     raw_request = json.dumps(payload).encode() + b"\n"
     if len(raw_request) > 65536:
         raise unavailable()

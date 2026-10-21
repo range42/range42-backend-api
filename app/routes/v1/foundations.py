@@ -149,3 +149,61 @@ async def reconcile_foundation(deployment_id: str, payload: FoundationReview, re
     await foundation_execution.reconcile(db.get_session_factory(), deployment_id)
     async with db.get_session_factory()() as selected:
         return await foundation_status(deployment_id, selected)
+
+
+class NetworkStatus(StrictObservation):
+    deployment_id: str
+    requested: bool
+    environment_id: str | None
+    request_recorded: bool
+    preparation_available: bool
+    plan: dict | None
+    receipt: dict | None
+    issue: str
+    execution_ready: Literal[False] = False
+
+
+async def network_status(deployment_id, selected):
+    from app.core import environment_network_execution as networking
+    dep = await selected.get(Deployment, deployment_id)
+    if dep is None or not dep.native or not dep.native.get('foundation_plan'):
+        raise Range42Error(status=404, code='FOUNDATION_NOT_FOUND', message='This deployment does not own a reusable foundation.')
+    requested = dep.native.get('prepare_environment_networks') is True
+    value = {'deployment_id': deployment_id, 'requested': requested,
+        'environment_id': dep.native['context_id'] if requested else None,
+        'request_recorded': False, 'preparation_available': False, 'plan': None, 'receipt': None,
+        'issue': '' if not requested else 'Review and retain the original bridge request before starting this foundation.'}
+    if requested:
+        from app.core.native_environment_models import NativeEnvironment
+        environment = await selected.get(NativeEnvironment, dep.native['context_id'])
+        value['request_recorded'] = environment is not None and environment.network_preparation_json is not None
+        try:
+            *_, bundle = await networking.original(selected, deployment_id)
+            value.update(preparation_available=True, plan=bundle['request']['plan'], receipt=bundle['receipt'], issue='')
+        except Range42Error as error:
+            value['issue'] = error.message
+    return value
+
+
+@router.get('/deployments/{deployment_id}/foundation/networks', response_model=NetworkStatus)
+async def get_networks(deployment_id: str, response: Response, selected=Depends(session)):
+    response.headers['Cache-Control'] = 'no-store'
+    return await network_status(deployment_id, selected)
+
+
+@router.post('/deployments/{deployment_id}/foundation/networks/review', response_model=NetworkStatus)
+async def review_networks(deployment_id: str, payload: FoundationReview, response: Response):
+    from app.core import environment_network_execution as networking
+    response.headers['Cache-Control'] = 'no-store'
+    await networking.journal(db.get_session_factory(), deployment_id)
+    async with db.get_session_factory()() as selected:
+        return await network_status(deployment_id, selected)
+
+
+@router.post('/deployments/{deployment_id}/foundation/networks/reconcile', response_model=NetworkStatus)
+async def reconcile_networks(deployment_id: str, payload: FoundationReview, response: Response):
+    from app.core import environment_network_execution as networking
+    response.headers['Cache-Control'] = 'no-store'
+    await networking.reconcile(db.get_session_factory(), deployment_id)
+    async with db.get_session_factory()() as selected:
+        return await network_status(deployment_id, selected)

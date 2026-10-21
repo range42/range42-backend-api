@@ -102,6 +102,11 @@ async def evaluate_preflight(session, dep, payload=None):
                     if scope != 'full':
                         raise Range42Error(status=409, code='FOUNDATION_ACTION_UNAVAILABLE', message='This bounded preparation supports its original full action only.')
                     await dispatch_inputs(get_session_factory(), dep.id)
+                    if scenario.native.get('prepare_environment_networks'):
+                        from app.core.environment_network_execution import dispatch_inputs as network_inputs
+                        await network_inputs(get_session_factory(), dep.id)
+                        report.checks.append(PreflightCheck(check='native_environment_networks', result='pass',
+                            detail='The original registered bridge plan and separate bounded network module match. Preparation rechecks host ownership before applying its guard and bridges.'))
                     report.checks.append(PreflightCheck(check='native_foundation', result='pass',
                         detail='Original foundation capacity and bounded node capability verified. The node rechecks approved sources and copied generations before each write.'))
                 if plan := scenario.native.get('workshop_plan'):
