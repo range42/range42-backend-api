@@ -11,7 +11,7 @@ from sqlalchemy import func, select, text
 from app.core.native_contexts import _api_binding, _contexts
 from app.core.native_environment_models import NativeEnvironment
 from app.core.native_environment_infrastructure import GatewayFoundation, gateway_capacity, gateway_outside_run
-from app.core.native_environments import EnvironmentSelection, refused, registered_contexts, review, review_inputs, selection_for
+from app.core.native_environments import EnvironmentSelection, RuntimeTarget, refused, registered_contexts, review, review_inputs, selection_for, runtime_target_proof, require_original_runtime_target
 from app.core.models import ProxmoxHost
 from app.routes.v1.native import _session
 from app.core.workshop_profiles import InfrastructureGuest, WorkshopProfileView
@@ -33,6 +33,7 @@ class EnvironmentReviewOut(BaseModel):
     base_context_id: str
     target_host_id: str
     workshop_profile: WorkshopProfileView
+    runtime_target: RuntimeTarget | None = None
     gateway_foundation: GatewayFoundation | None = None
     gateway_nic_capacity: GatewayNicCapacity | None = None
     ready_for_planning: Literal[True]
@@ -47,6 +48,7 @@ class EnvironmentOut(BaseModel):
     target_host_id: str
     target_node: str
     workshop_profile: WorkshopProfileView
+    runtime_target: RuntimeTarget | None = None
     gateway_foundation: GatewayFoundation | None = None
     gateway_nic_capacity: GatewayNicCapacity | None = None
     ready_for_planning: bool
@@ -121,6 +123,7 @@ async def unchanged_target(session, row):
         valid = False
     if not valid:
         raise refused('This environment’s node or HTTPS API endpoint changed. Create a separately reviewed environment version.')
+    require_original_runtime_target(row, await runtime_target_proof(session, selection_for(row), host))
 
 
 def public_record(row, *, ready=False, issues=None):
@@ -128,6 +131,7 @@ def public_record(row, *, ready=False, issues=None):
     return {'id': row.id, 'label': row.label, 'base_context_id': row.base_context_id,
         'target_host_id': row.target_host_id, 'target_node': row.target_node,
         'workshop_profile': selected.workshop_profile.public(),
+        'runtime_target': RuntimeTarget.model_validate_json(row.runtime_target_json).model_dump() if row.runtime_target_json else None,
         'gateway_foundation': selected.gateway_foundation.model_dump() if selected.gateway_foundation else None,
         'gateway_nic_capacity': gateway_capacity(selected.gateway_foundation, selected.workshop_profile.networks) if selected.gateway_foundation else None,
         'ready_for_planning': ready, 'infrastructure_qualified': False,
@@ -195,6 +199,7 @@ async def create(payload: EnvironmentRegistration, request: Request, session=Dep
         target_node=host.node_name, target_api_url=host.api_url,
         profile_json=payload.workshop_profile.model_dump_json(),
         foundation_json=payload.gateway_foundation.model_dump_json() if payload.gateway_foundation else None,
+        runtime_target_json=RuntimeTarget.model_validate(fresh['runtime_target']).model_dump_json() if fresh['runtime_target'] else None,
         review_revision=payload.review_revision,
         approved_by=request.state.principal.actor_id)
     session.add(row)

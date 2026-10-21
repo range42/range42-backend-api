@@ -149,6 +149,10 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
         "DEPLOYER_CLI__DST_SSH_KEYS_STUDENT_DEST_DIR": str(keys / "student_keys"),
         **context.inventory_variables, "ansible_python_interpreter": sys.executable,
     }
+    if context.target_api_url:
+        # A reused runtime supplies code and keys, never its earlier target.
+        prepare_vars.update(INFRASTRUCTURE_PROXMOX_ADDRESS=context.address,
+            INFRASTRUCTURE_PROXMOX_API_AUTHORITY=urlsplit(context.target_api_url).netloc)
     if workshop_plan:
         prepare_vars['range42_workshop_plan'] = workshop_plan
         prepare_vars['range42_workshop_known_hosts'] = str(context.workspace / 'ssh_keys/known_hosts')

@@ -587,3 +587,34 @@ def test_native_devkit_inventory_query_keeps_json_and_registered_node_binding(
     assert not contacted.exists(), (
         "Native API operations must use the configured, TLS-verified Ansible controller"
     )
+
+
+
+def test_bound_native_inventory_cannot_inherit_the_runtime_templates_old_target(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from pathlib import Path
+    import shutil
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+
+    workspace, _, host = context(tmp_path, monkeypatch)
+    original = (workspace / 'inventory/inventory_default.yml').read_bytes()
+    selected = replace(resolve_context('lab-demo', host), address='192.0.2.20',
+        target_api_url='https://192.0.2.20:8443', target_node='node-b', node_name='node-b',
+        inventory_variables={'INFRASTRUCTURE_PROXMOX_ADDRESS': '192.0.2.10',
+            'INFRASTRUCTURE_PROXMOX_API_AUTHORITY': '192.0.2.10:8006'})
+    repo = tmp_path / 'repo'
+    base = scenario(repo)
+    (base / 'templates/ansible-inventory.j2').write_text(
+        'all:\n  vars:\n    target: {{ INFRASTRUCTURE_PROXMOX_ADDRESS }}\n    api: {{ INFRASTRUCTURE_PROXMOX_API_AUTHORITY }}\n')
+    run = prepare_native_run(repo, inspect_native_scenario(repo, 'training/exercise-a'), selected,
+        scope='full', features={}, parameters={}, artifact_dir=tmp_path / 'attempt')
+    rendered = subprocess.run([shutil.which('ansible-playbook'), '-i', 'localhost,', '-c', 'local',
+        str(run.context_dir / 'prepare.yml'), '--extra-vars', '@'+str(run.context_dir / 'prepare-vars.json')],
+        capture_output=True, text=True, timeout=20)
+    assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+    inventory = Path(run.context_dir / 'inventory/inventory_default.yml').read_text()
+    assert '192.0.2.20' in inventory and '192.0.2.20:8443' in inventory
+    assert '192.0.2.10' not in inventory
+    assert (workspace / 'inventory/inventory_default.yml').read_bytes() == original

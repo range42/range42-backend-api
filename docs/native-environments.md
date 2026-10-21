@@ -20,8 +20,9 @@ migration. This does not qualify physical infrastructure.
 
 The browser
 selects that runtime by ID; it cannot submit filesystem paths or shell commands.
-A dedicated target credential may have a different registered host ID but must
-identify the same node and HTTPS endpoint. Native workshop execution uses that
+By default, a dedicated target credential may have a different registered host
+ID but must identify the same node and HTTPS endpoint. An explicit reviewed
+runtime reuse option, described below, supports another retained physical node. Native workshop execution uses that
 selected credential, including when an older workspace vault contains another
 Proxmox identity. The original context and its files remain unchanged.
 
@@ -140,3 +141,41 @@ This increment does not create bridges, clone or configure a gateway, qualify
 routing/isolation, or enable managed execution. Template preparation, native
 materialization and verified retirement remain required before a real run.
 Keycloak, Headscale and participant onboarding remain independent integrations.
+
+
+## Reuse the installed runtime for another reviewed node
+
+Settings offers **Use this installed runtime for the selected reviewed node**.
+It defaults to off. Enable it only when reusing the installation's native code
+and keys for a separately registered target. The backend requires that target's
+previously reviewed physical identity, unchanged target credential/API/node and
+matching protected agent configuration. It reads the existing enrollment; it
+does not initialize an agent, execute SSH, or infer a fresh hardware observation.
+Inspect and record the selected physical node first when this evidence is absent
+or stale.
+
+Review includes the selected physical-node ID and name. Save retains its physical
+identity, hardware binding, node and installation ID in that immutable environment
+version. Changed configuration invalidates planning until reviewed again; changed
+physical identity cannot be accepted by ordinary revalidation. A replacement
+credential requires the physical-node review and then unchanged-scope environment
+revalidation. The original context, registry, workspace and source files remain
+unchanged.
+
+The environment resolves to its selected target while reusing the original
+runtime's code and protected credential/key locations. Native execution already
+renders an attempt-private repository and inventory. The selected API credential
+supersedes any earlier Proxmox credential in the workspace vault, and a bound
+target's API authority/address now take precedence over old inventory defaults.
+The context's original target remains authoritative for existing deployments.
+
+The request adds strict boolean `reuse_runtime: true`; omitted/false retains the
+original same-target review digest and behavior. Responses include optional
+`runtime_target` with credential-free retained identity. Migration0019 adds the
+nullable `runtime_target_json` column, preserves older review stamps and refuses
+downgrade while these pins exist.
+
+This option enables bounded workshop planning only. It leaves `execution_ready`
+and `infrastructure_qualified` false. Source-template preparation, gateway/network
+isolation, materialization and retirement still need their native qualification.
+It does not copy an installer or introduce an identity/VPN provider dependency.
