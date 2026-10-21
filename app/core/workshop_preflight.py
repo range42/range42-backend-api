@@ -46,7 +46,15 @@ async def _network_attachments(client, host, rows, selected, proofs, profile):
             if vmid in owned:
                 proof, guest = proofs.get(vmid, {}), owned[vmid]
                 if (kind != 'qemu' or config.get('description') != guest['owner']
-                        or config.get('vmgenid') != proof.get('vmgenid') or set(nics) != {'net0'}):
+                        or config.get('vmgenid') != proof.get('vmgenid')):
+                    raise ValueError('Owned guest network generation differs')
+                if not nics:
+                    if (row.get('status') != 'stopped' or proof.get('bootstrap_complete', False)
+                            or proof.get('bootstrap_network') != {'net0': None, 'ipconfig0': None}
+                            or any(re.fullmatch(r'ipconfig[0-9]+', key) for key in config)):
+                        raise ValueError('Sealed guest differs from its recorded disconnected clone')
+                    continue
+                if set(nics) != {'net0'}:
                     raise ValueError('Owned guest network generation differs')
                 final = bool(re.search(r'(?:^|,)bridge=' + re.escape(guest['bridge']) + r'(?:,|$)', nics['net0']))
                 baseline = proof.get('bootstrap_network', {})
@@ -87,6 +95,8 @@ def _template_network(config):
     if not isinstance(config, dict):
         return False
     nics = {key for key in config if re.fullmatch(r'net[0-9]+', key)}
+    if not nics:
+        return not any(re.fullmatch(r'ipconfig[0-9]+', key) for key in config)
     value = config.get('net0')
     return (nics == {'net0'} and isinstance(value, str)
         and bool(re.match(r'^[A-Za-z][A-Za-z0-9_-]*=(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}(?:,|$)', value))
@@ -172,7 +182,7 @@ async def workshop_checks(plan: dict, host, *, scope: str, receipt_root: Path | 
                 and not config.get('lock') and str(config.get('agent', '')).split(',')[0] in {'1', 'enabled=1'}
                 for config in templates.values())
             template_ok = template_ok and nested.get('cpu') == 'host' and bool(re.search(r'(?:^|,)size=128G(?:,|$)', nested.get('scsi1', '')))
-            result('templates', bool(template_ok), 'Both source templates must be unlocked cloud-init templates with one bridged NIC and an enabled guest agent; nested Proxmox requires host CPU and its separate 128 GiB lab disk.')
+            result('templates', bool(template_ok), 'Both source templates must be unlocked cloud-init templates with an enabled guest agent and either one validated bridged NIC or no NIC/IP configuration; nested Proxmox requires host CPU and its separate 128 GiB lab disk.')
             bridges = await list_proxmox_data(client, host, node + '/network')
             by_name = {row['iface']: row for row in bridges if isinstance(row.get('iface'), str)}
             expected = {vm['bridge'] for vm in selected}
