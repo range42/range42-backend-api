@@ -22,6 +22,7 @@ class AllocationNetwork(StrictModel):
     bridge: Bridge
     subnet: str = Field(max_length=18)
     gateway: str | None = Field(default=None, max_length=15)
+    gateway_node_id: Key | None = None
     reserved_ips: list[str] = Field(default_factory=list, max_length=256)
 
     @model_validator(mode="after")
@@ -86,6 +87,12 @@ class AllocationRequest(StrictModel):
                     raise ValueError("Each NIC must reference a declared network")
                 if nic.ip is not None:
                     ipaddress.IPv4Address(nic.ip)
+        for network in self.networks:
+            if network.gateway_node_id is not None:
+                owner = next((vm for vm in self.vms if vm.node_id == network.gateway_node_id), None)
+                matches = [nic for nic in owner.nics if nic.network_id == network.network_id] if owner else []
+                if not network.gateway or len(matches) != 1 or matches[0].ip != network.gateway:
+                    raise ValueError('A gateway owner must name exactly one explicit NIC with the declared gateway address')
         return self
 
 

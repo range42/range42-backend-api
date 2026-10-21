@@ -25,7 +25,7 @@ from app.core.physical_nodes import (
     registry_revision,
     target_revision,
 )
-from app.core.workshop_runs import WorkshopSpec, compile_plan, validate_activation
+from app.core.workshop_runs import WorkshopSpec, compile_plan, resource_guests, validate_activation
 
 # A locally terminal runner can still have an uncertain native outcome.
 CAPACITY_SETTLED_ATTEMPT_STATES = tuple(state for state in TERMINAL_ATTEMPT_STATES if state not in {'unknown', 'partial'})
@@ -178,7 +178,7 @@ async def demand(session, deployment_id, observed, agent_revision):
                             }
                         ],
                     }
-                    for guest in plan["guests"]
+                    for guest in resource_guests(plan)
                 ],
             }
         )

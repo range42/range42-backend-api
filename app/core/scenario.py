@@ -94,12 +94,11 @@ async def prepare_project_scenario(
         if scope not in descriptor["actions"]:
             raise invalid("This saved scenario does not declare that action", "NATIVE_ACTION_UNAVAILABLE")
         native_variables(descriptor, native.get("features", {}), native.get("parameters", {}))
-        from app.core.workshop_runs import resolve_native_workshop
+        from app.core.workshop_runs import resolve_native_workshop, workshop_topology
         plan = resolve_native_workshop(native, descriptor, run_id=deployment.id or '')
         if plan:
             descriptor['declared_vmids'] = [vm['vm_id'] for vm in plan['assignments']]
-            descriptor['topology'] = {**descriptor['topology'], 'vms': plan['guests'],
-                'networks': plan['networks'], 'reservations': {'status': 'checked',
+            descriptor['topology'] = {**descriptor['topology'], **workshop_topology(plan), 'reservations': {'status': 'checked',
                     'issues': ['Workshop assignments are checked against the backend allocation ledger; live availability is checked before execution.']}}
             native = {**native, 'workshop_plan': plan}
         from app.core.native_environments import resolve_registered_context

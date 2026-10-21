@@ -133,8 +133,7 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
             unavailable_ips.update((nic["bridge"], nic["ip"]) for nic in vm["nics"])
     for network in payload.networks:
         unavailable_ips.update((network.bridge, ip) for ip in network.reserved_ips)
-        if network.gateway:
-            unavailable_ips.add((network.bridge, network.gateway))
+    gateway_addresses = {(network.bridge, network.gateway) for network in payload.networks if network.gateway}
 
     # Reserve manual and retained values before automatic allocation, so request
     # ordering cannot let an automatic choice consume a later manual assignment.
@@ -164,7 +163,9 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
                 if address not in subnet or address in (subnet.network_address, subnet.broadcast_address):
                     raise _error("INVALID", f"Address {fixed_ip} is not usable in subnet {network.subnet}.")
                 pair = (network.bridge, fixed_ip)
-                if pair in unavailable_ips or pair in claimed_ips:
+                owns_gateway = network.gateway_node_id == vm.node_id and fixed_ip == network.gateway
+                if (pair in unavailable_ips or pair in claimed_ips
+                        or (pair in gateway_addresses and not owns_gateway)):
                     raise _error("OCCUPIED", f"Address {fixed_ip} on {network.bridge} is configured, reserved, or a gateway.")
                 fixed_ips[(vm.node_id, nic.index)] = fixed_ip
                 claimed_ips.add(pair)
@@ -189,7 +190,9 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
                 for index, candidate in enumerate(subnet.hosts()):
                     if index >= 4096:
                         break
-                    if (network.bridge, str(candidate)) not in unavailable_ips and (network.bridge, str(candidate)) not in claimed_ips:
+                    if ((network.bridge, str(candidate)) not in unavailable_ips
+                            and (network.bridge, str(candidate)) not in gateway_addresses
+                            and (network.bridge, str(candidate)) not in claimed_ips):
                         address = str(candidate)
                         break
                 if address is None:

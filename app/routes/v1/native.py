@@ -13,7 +13,7 @@ from app.core.models import ProxmoxHost
 from app.core.native_contexts import available_contexts
 from app.core.native_scenarios import inside, inspect_native_scenario
 from app.core.scenario import checkout_project_repository, checkout_native_component
-from app.core.workshop_runs import WorkshopSpec, resolve_native_workshop, validate_activation
+from app.core.workshop_runs import WorkshopSpec, resolve_native_workshop, validate_activation, workshop_topology
 
 router = APIRouter(tags=["v1 native scenarios"])
 
@@ -69,8 +69,19 @@ async def preview_workshop(project_id: str, request: WorkshopPreview, session: A
             'subnet': net['subnet'], 'gateway': net['gateway']} for net in plan['networks']],
         'vms': [{'node_id': f"{guest['username']}-{guest['role']}", 'vm_id': guest['vm_id'],
             'nics': [{'index': 0, 'network_id': guest['bridge'], 'ip': guest['ip']}]} for guest in plan['guests']]}
+    if gateway := plan.get('managed_gateway'):
+        gateway_node = 'managed-gateway'
+        for network in allocation['networks']:
+            network['gateway_node_id'] = gateway_node
+        management = {'network_id': gateway['management_bridge'], 'bridge': gateway['management_bridge'],
+                      'subnet': gateway['management_subnet'], 'gateway': gateway['management_gateway']}
+        allocation['networks'].append(management)
+        allocation['vms'].append({'node_id': gateway_node, 'vm_id': gateway['vm_id'],
+            'nics': [{'index': nic['index'], 'network_id': nic['bridge'], 'ip': nic['ip']}
+                     for nic in gateway['nics']]})
+        identities = [vm['vm_id'] for vm in allocation['vms']]
+        allocation.update(vmid_start=min(identities), vmid_end=max(identities))
     return {'preview_only': True, 'resources_reserved': False, 'assignments': plan['assignments'],
             'allocation_request': allocation,
-            'capacity': plan['capacity'], 'topology': {**descriptor['topology'], 'vms': plan['guests'],
-                'networks': plan['networks'], 'warnings': ['Preview only. Creating a deployment records exclusive resource claims; preflight checks the selected target.'],
+            'capacity': plan['capacity'], 'topology': {**descriptor['topology'], **workshop_topology(plan), 'warnings': ['Preview only. Creating a deployment records exclusive resource claims; preflight checks the selected target.'],
                 'reservations': {'status': 'missing', 'issues': ['These assignments are not reserved until the deployment is created.']}}}

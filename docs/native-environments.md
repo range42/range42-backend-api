@@ -105,3 +105,38 @@ credential-only operation. Entered replacements are cleared after submission,
 cancel, component disposal or backend change and are never saved in browser
 settings. A local input typo can be corrected without obtaining a new review;
 a failed submitted replacement requires a new review before retrying.
+
+## Optional gateway owned by each run
+
+An approved profile may include `managed_gateway` with `management_bridge` and
+`management_subnet`. The subnet is a separate aligned RFC1918 /29; its first
+usable address belongs to the physical node. This mode is mutually exclusive
+with a retained shared gateway or infrastructure NIC exceptions.
+
+Settings → Connections offers **Prepare one managed gateway per run**. Saving
+this policy authorizes planning only. Deploy adds a gateway VM ID and management
+address to the ordinary workshop form. The default gateway ID follows the
+participant pairs; the operator chooses an unused management address from the
+remaining five hosts. The backend validates exact profile bounds and reserves
+all resources with the existing allocation service. A conflicting VM ID or IP
+still blocks the reservation.
+
+The compiled plan retains `participants` and `guests` as the original participant
+mapping. Its optional `managed_gateway` is a separate owned VM, with one management
+NIC and one gateway NIC per group network. `assignments` contains all of them in
+one `DeploymentAllocation`. Capacity charges the gateway's 4 GiB RAM, two vCPUs
+and 32 GiB disk alongside the participants. Five groups of two therefore reserve
+11 VMs, 104 GiB RAM, 32 vCPUs and 992 GiB virtual disk. Preview and saved native
+scenario preparation use the same topology projection, including every gateway
+interface. Old plans without the option retain their original serialized shape.
+
+The existing allocation request accepts an optional `gateway_node_id` for a
+network. It must identify one explicit VM NIC at that network's declared gateway
+address. This lets that VM reserve the gateway IP without weakening observed
+occupancy, other reservations, reserved IPs or deployment ownership checks.
+Automatic allocation continues to skip gateway addresses.
+
+This increment does not create bridges, clone or configure a gateway, qualify
+routing/isolation, or enable managed execution. Template preparation, native
+materialization and verified retirement remain required before a real run.
+Keycloak, Headscale and participant onboarding remain independent integrations.

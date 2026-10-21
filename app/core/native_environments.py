@@ -32,6 +32,8 @@ class EnvironmentSelection(BaseModel):
 
     @model_validator(mode='after')
     def retained_gateway_scope(self):
+        if self.gateway_foundation and self.workshop_profile.managed_gateway:
+            raise ValueError('Choose one managed gateway per run or a retained shared gateway')
         if self.gateway_foundation and not gateway_outside_run(self.gateway_foundation.vmid, self.workshop_profile):
             raise ValueError('The retained gateway must be separate from participant guests and source templates')
         return self
