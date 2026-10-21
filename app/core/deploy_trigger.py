@@ -141,6 +141,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
     runtime_run = None
     native_run = None
     workshop_credentials = {}
+    foundation_request = None
+    foundation_configuration = None
     if dep.project_sha:
         scenario = await prepare_project_scenario(
             session, dep, dest=artifact_dir / "checkout", scope=attempt.scope,
@@ -150,15 +152,27 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         overrides = json.loads(target_host.protected_vmids_override_json) if (
             target_host and target_host.protected_vmids_override_json
         ) else None
-        vmid_check = check_vmids(scenario.vmids, host_overrides=overrides)
+        foundation = scenario.native and scenario.native.get('foundation_plan')
+        if foundation:
+            from app.core.workshop_foundations import FoundationSpec, allocation_check, allocation_authority
+            spec = FoundationSpec.model_validate(scenario.native['foundation'])
+            vmid_check = allocation_check(spec, scenario.context, target_host, run_id=dep.id, vmids=scenario.vmids)
+            await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
+                create=False, checked_host=target_host, declared_assignments=foundation['assignments'],
+                template_authority=allocation_authority(spec, scenario.context, target_host, run_id=dep.id))
+        else:
+            vmid_check = check_vmids(scenario.vmids, host_overrides=overrides)
         if vmid_check.result == "block":
             raise PreflightBlockedError(message=vmid_check.detail)
         if scenario.native:
             from app.core.native_contexts import execution_issue
-            if issue := execution_issue(scenario.context, attempt.scope):
+            if not foundation and (issue := execution_issue(scenario.context, attempt.scope)):
                 raise PreflightBlockedError(message=issue)
             from app.core.native_execution import prepare_native_run
             native = scenario.native
+            if foundation:
+                from app.core.foundation_execution import dispatch_inputs
+                foundation_request, foundation_configuration = await dispatch_inputs(get_session_factory(), dep.id)
             from app.core.native_ownership_guard import assert_native_scope_free
             await assert_native_scope_free(session, dep.id, scenario.vmids)
             from app.core import legacy_workshop_operations as legacy_workshop
@@ -178,7 +192,7 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 if workshop is None:
                     raise PreflightBlockedError(message='The original private participant material is unavailable. Preserve the run and restore its protected state before recovery.')
                 workshop_credentials = json.loads(workshop.credentials)
-            if native.get("component_id"):
+            if native.get("component_id") and not foundation:
                 from app.core.native_scenarios import check_native_allocations
                 allocation_checks = await check_native_allocations(native["descriptor"]["topology"], target_host)
                 blocked = next((check for check in allocation_checks if check.result == "block"), None)
@@ -188,7 +202,10 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
                 scope=attempt.scope, features=native.get("features", {}), parameters=native.get("parameters", {}),
                 artifact_dir=artifact_dir, repository_root=artifact_dir / "checkout",
                 workshop_plan=native.get('workshop_plan'), workshop_credentials=workshop_credentials,
-                workshop_seat=(attempt.operation or {}).get('seat', 0), workshop_state_dir=ws / 'workshop-receipts')
+                workshop_seat=(attempt.operation or {}).get('seat', 0), workshop_state_dir=ws / 'workshop-receipts',
+                foundation_request=foundation_request,
+                foundation_agent_revision=foundation_configuration.revision if foundation_configuration else '',
+                foundation_target_host_id=dep.target_host_id if foundation else '')
             playbook_path = scenario.playbook
         elif attempt.scope == "runtime":
             from app.core.runtime_runner import prepare_runtime_run
@@ -424,6 +441,14 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             if runtime_run is not None:
                 from app.core.runtime_completion import observe_runtime_completion
                 runtime_result = await observe_runtime_completion(attempt_id, writer)
+            if foundation_request is not None:
+                from app.core.foundation_execution import reconcile
+                try:
+                    proof = await reconcile(get_session_factory(), deployment_id)
+                    if proof.status != 'complete':
+                        runtime_result = {'partial': True, 'error_code': 'FOUNDATION_PREPARATION_UNRESOLVED'}
+                except Range42Error:
+                    runtime_result = {'unknown': True, 'error_code': 'FOUNDATION_RECONCILIATION_REQUIRED'}
             terminal_state = await finish_attempt(attempt_id=attempt_id, rc=rc, warning_code=stream_error, **runtime_result)
             cursor = writer.append({"event_type": "attempt_end",
                                     "payload": {"terminal_state": terminal_state, "rc": rc}},

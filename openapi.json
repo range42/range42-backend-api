@@ -8370,6 +8370,270 @@
         }
       }
     },
+    "/v1/projects/{project_id}/native-scenario/foundation/preview": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Preview Foundation",
+        "operationId": "preview_foundation_v1_projects__project_id__native_scenario_foundation_preview_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationPreview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/native-scenario/foundation/reservations": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Reserve Foundation",
+        "operationId": "reserve_foundation_v1_projects__project_id__native_scenario_foundation_reservations_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "x-range42-reservation-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 128,
+              "title": "X-Range42-Reservation-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationReservation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationLease"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/foundation": {
+      "get": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Get Foundation",
+        "operationId": "get_foundation_v1_deployments__deployment_id__foundation_get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoundationStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/foundation/review": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Review Foundation",
+        "operationId": "review_foundation_v1_deployments__deployment_id__foundation_review_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoundationStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deployments/{deployment_id}/foundation/reconcile": {
+      "post": {
+        "tags": [
+          "v1 native scenarios",
+          "v1 native foundations"
+        ],
+        "summary": "Reconcile Foundation",
+        "operationId": "reconcile_foundation_v1_deployments__deployment_id__foundation_reconcile_post",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoundationStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/platform/components/preview": {
       "post": {
         "tags": [
@@ -9082,7 +9346,7 @@
             },
             "type": "array",
             "maxItems": 32,
-            "minItems": 1,
+            "minItems": 0,
             "title": "Networks"
           },
           "vms": {
@@ -9132,7 +9396,7 @@
             },
             "type": "array",
             "maxItems": 32,
-            "minItems": 1,
+            "minItems": 0,
             "title": "Nics"
           }
         },
@@ -13285,6 +13549,196 @@
         ],
         "title": "FoundationOut"
       },
+      "FoundationPreview": {
+        "properties": {
+          "sha": {
+            "type": "string",
+            "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
+            "title": "Sha"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
+          "context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target Host Id"
+          },
+          "foundation": {
+            "$ref": "#/components/schemas/FoundationSpec"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sha",
+          "path",
+          "context_id",
+          "target_host_id",
+          "foundation"
+        ],
+        "title": "FoundationPreview"
+      },
+      "FoundationReceipt": {
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "range42-foundation-receipt-v1",
+            "title": "Protocol"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Request Id"
+          },
+          "request_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Digest"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "absent",
+              "preparing",
+              "uncertain",
+              "complete"
+            ],
+            "title": "Status"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeAttestation"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateProgress"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Templates"
+          },
+          "foundation_ready": {
+            "type": "boolean",
+            "title": "Foundation Ready"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready"
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "protocol",
+          "request_id",
+          "request_digest",
+          "status",
+          "node",
+          "templates",
+          "foundation_ready",
+          "execution_ready",
+          "infrastructure_qualified"
+        ],
+        "title": "FoundationReceipt"
+      },
+      "FoundationReservation": {
+        "properties": {
+          "sha": {
+            "type": "string",
+            "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
+            "title": "Sha"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
+          "context_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Context Id"
+          },
+          "target_host_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target Host Id"
+          },
+          "foundation": {
+            "$ref": "#/components/schemas/FoundationSpec"
+          },
+          "project_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Project Key"
+          },
+          "lease_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 300.0,
+            "title": "Lease Seconds",
+            "default": 3600
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sha",
+          "path",
+          "context_id",
+          "target_host_id",
+          "foundation",
+          "project_key"
+        ],
+        "title": "FoundationReservation"
+      },
+      "FoundationReview": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FoundationReview"
+      },
       "FoundationSelection": {
         "properties": {
           "label": {
@@ -13339,6 +13793,93 @@
           "vmid"
         ],
         "title": "FoundationSelection"
+      },
+      "FoundationSpec": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,19}$",
+            "title": "Namespace"
+          },
+          "source_node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Source Node"
+          },
+          "proxmox_source": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 1000.0,
+            "title": "Proxmox Source"
+          },
+          "deployer_source": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 1000.0,
+            "title": "Deployer Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "source_node",
+          "proxmox_source",
+          "deployer_source"
+        ],
+        "title": "FoundationSpec"
+      },
+      "FoundationStatus": {
+        "properties": {
+          "deployment_id": {
+            "type": "string",
+            "title": "Deployment Id"
+          },
+          "request_recorded": {
+            "type": "boolean",
+            "title": "Request Recorded"
+          },
+          "preparation_available": {
+            "type": "boolean",
+            "title": "Preparation Available"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FoundationReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "issue": {
+            "type": "string",
+            "title": "Issue"
+          },
+          "execution_ready": {
+            "type": "boolean",
+            "const": false,
+            "title": "Execution Ready",
+            "default": false
+          },
+          "infrastructure_qualified": {
+            "type": "boolean",
+            "const": false,
+            "title": "Infrastructure Qualified",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deployment_id",
+          "request_recorded",
+          "preparation_available",
+          "receipt",
+          "issue"
+        ],
+        "title": "FoundationStatus"
       },
       "GatewayFoundation": {
         "properties": {
@@ -14981,6 +15522,16 @@
                 "type": "null"
               }
             ]
+          },
+          "foundation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FoundationSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -15262,11 +15813,14 @@
                 "inspect",
                 "capacity",
                 "capacity-admit",
-                "capacity-status"
+                "capacity-status",
+                "foundation-profile",
+                "foundation-prepare",
+                "foundation-status"
               ]
             },
             "type": "array",
-            "maxItems": 4,
+            "maxItems": 7,
             "minItems": 1,
             "title": "Supported Operations"
           },
@@ -16632,7 +17186,10 @@
                 "inspect",
                 "capacity",
                 "capacity-admit",
-                "capacity-status"
+                "capacity-status",
+                "foundation-profile",
+                "foundation-prepare",
+                "foundation-status"
               ]
             },
             "type": "array",
@@ -21107,6 +21664,72 @@
           "confirm_codename"
         ],
         "title": "TeardownRequest"
+      },
+      "TemplateProgress": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 1000.0,
+            "title": "Vm Id"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "clone_intent",
+              "cloning",
+              "cloned",
+              "seal_intent",
+              "sealed",
+              "template_intent",
+              "templating",
+              "complete"
+            ],
+            "title": "Phase"
+          },
+          "vmgenid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vmgenid"
+          },
+          "configuration_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration Revision"
+          },
+          "volumes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Volumes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vm_id",
+          "phase",
+          "vmgenid",
+          "configuration_revision",
+          "volumes"
+        ],
+        "title": "TemplateProgress"
       },
       "TimingsResponse": {
         "properties": {

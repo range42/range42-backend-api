@@ -85,3 +85,7 @@ async def preview_workshop(project_id: str, request: WorkshopPreview, session: A
             'allocation_request': allocation,
             'capacity': plan['capacity'], 'topology': {**descriptor['topology'], **workshop_topology(plan), 'warnings': ['Preview only. Creating a deployment records exclusive resource claims; preflight checks the selected target.'],
                 'reservations': {'status': 'missing', 'issues': ['These assignments are not reserved until the deployment is created.']}}}
+
+
+from app.routes.v1.foundations import router as foundations_router  # noqa: E402
+router.include_router(foundations_router)

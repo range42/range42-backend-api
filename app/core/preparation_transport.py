@@ -154,10 +154,13 @@ async def read_agent(
         ("capacity", 4194304, 110),
         ("capacity-admit", LIMIT, 110),
         ("capacity-status", LIMIT, 15),
+        ("foundation-profile", LIMIT, 15),
+        ("foundation-prepare", LIMIT, 110),
+        ("foundation-status", LIMIT, 110),
     ]:
         raise unavailable()
     payload = {"action": action}
-    if action in {"capacity-admit", "capacity-status"}:
+    if action in {"capacity-admit", "capacity-status", "foundation-prepare", "foundation-status"}:
         if not isinstance(request, dict):
             raise unavailable()
         payload["request"] = request

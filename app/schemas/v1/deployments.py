@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator, model_serializer
 from app.core.workshop_runs import WorkshopSpec
+from app.core.workshop_foundations import FoundationSpec
 
 
 class NativeDeployment(BaseModel):
@@ -15,6 +16,20 @@ class NativeDeployment(BaseModel):
     features: dict[str, StrictBool] = Field(default_factory=dict, max_length=128)
     parameters: dict = Field(default_factory=dict, max_length=64)
     workshop: WorkshopSpec | None = None
+    foundation: FoundationSpec | None = None
+
+    @model_validator(mode='after')
+    def distinct_workflow(self):
+        if self.foundation is not None and self.workshop is not None:
+            raise ValueError('Reusable preparation and participant runs have separate ownership')
+        return self
+
+    @model_serializer(mode='wrap')
+    def retain_legacy_shape(self, handler):
+        value = handler(self)
+        if self.foundation is None:
+            value.pop('foundation', None)
+        return value
 
     @field_validator("path")
     @classmethod
@@ -42,7 +57,7 @@ class DeploymentCreate(BaseModel):
         if self.native and self.team_count != 1:
             raise ValueError("Native deployment uses the saved scenario topology; team_count must be 1")
         if self.native and (not self.project_sha or not re.fullmatch(r"[a-fA-F0-9]{40}|[a-fA-F0-9]{64}", self.project_sha)
-                            or (self.allocation_reservation_id and not self.native.workshop) or self.secrets):
+                            or (self.allocation_reservation_id and not (self.native.workshop or self.native.foundation)) or self.secrets):
             raise ValueError("Native deployment requires a saved commit and uses the selected context's credentials and allocations")
         return self
 

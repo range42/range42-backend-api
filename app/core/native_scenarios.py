@@ -147,6 +147,16 @@ def inspect_native_scenario(root: Path, path: str) -> dict:
             result['workshop'] = WorkshopDescriptor.model_validate_json(workshop_file.read_text()).model_dump()
         except (ValueError, TypeError, OSError):
             raise invalid('Invalid manifest/workshop.json') from None
+    preparation_file = base / 'manifest/preparation.json'
+    if preparation_file.exists() or preparation_file.is_symlink():
+        from app.core.workshop_foundations import FoundationDescriptor
+        try:
+            preparation_file = inside(base, 'manifest/preparation.json', file=True)
+            if preparation_file.stat().st_size > 8192 or result.get('workshop') or result.get('platform'):
+                raise ValueError()
+            result['preparation'] = FoundationDescriptor.model_validate_json(preparation_file.read_text()).model_dump()
+        except (ValueError, TypeError, OSError):
+            raise invalid('Invalid manifest/preparation.json') from None
     return result
 
 

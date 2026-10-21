@@ -47,7 +47,7 @@ class AllocationNic(StrictModel):
 class AllocationVm(StrictModel):
     node_id: Key
     vm_id: Vmid | None = None
-    nics: list[AllocationNic] = Field(min_length=1, max_length=32)
+    nics: list[AllocationNic] = Field(min_length=0, max_length=32)
 
     @model_validator(mode="after")
     def contiguous_nics(self):
@@ -64,7 +64,7 @@ class AllocationRequest(StrictModel):
     lease_seconds: int = Field(default=3600, ge=300, le=86400)
     vmid_start: Vmid = 2000
     vmid_end: Vmid = 8999
-    networks: list[AllocationNetwork] = Field(min_length=1, max_length=32)
+    networks: list[AllocationNetwork] = Field(min_length=0, max_length=32)
     vms: list[AllocationVm] = Field(min_length=1, max_length=64)
 
     @model_validator(mode="after")

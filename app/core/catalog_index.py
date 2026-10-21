@@ -146,13 +146,20 @@ def _scenario(base: Path, root: Path, *, topology: bool = False) -> dict | None:
             document['workshop'] = WorkshopDescriptor.model_validate(_document(workshop_file, root)).model_dump()
         except ValueError:
             document['workshop_error'] = 'Invalid manifest/workshop.json; correct the workshop capability before deployment.'
+    preparation_file = base / 'manifest/preparation.json'
+    if preparation_file.exists() or preparation_file.is_symlink():
+        from app.core.workshop_foundations import FoundationDescriptor
+        try:
+            document['preparation'] = FoundationDescriptor.model_validate(_document(preparation_file, root)).model_dump()
+        except ValueError:
+            document['preparation_error'] = 'Invalid manifest/preparation.json; correct the preparation capability before deployment.'
     if topology:
         from app.core.native_topology import scenario_topology
         try:
             document["topology"] = scenario_topology(root, base, manifest)
         except (ValueError, TypeError, RecursionError):
             return None
-    return _entry(base, root, kind="scenario", name=document.get('workshop', {}).get('title', base.name),
+    return _entry(base, root, kind="scenario", name=document.get('preparation', document.get('workshop', {})).get('title', base.name),
                   description=manifest.get("description"), document=document)
 
 

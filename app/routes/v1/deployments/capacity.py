@@ -49,8 +49,7 @@ async def status(session, deployment_id):
         record = capacity_ledger.commitment(row)
         root_accepted = native_capacity.root_accepted(row)
         binding = await session.get(PhysicalNodeBinding, dep.target_host_id)
-        native_enrolled = bool(binding and NodeAttestation.model_validate_json(binding.observation_json).supported_operations
-                               == ['inspect', 'capacity', 'capacity-admit', 'capacity-status'])
+        native_enrolled = bool(binding and 'capacity-admit' in NodeAttestation.model_validate_json(binding.observation_json).supported_operations)
         timestamp = (
             row.created_at
             if row.created_at.tzinfo
@@ -78,7 +77,7 @@ async def status(session, deployment_id):
         }
     return {
         "deployment_id": dep.id,
-        "applicable": bool(held or dep.native and dep.native.get("workshop_plan")),
+        "applicable": bool(held or dep.native and (dep.native.get("workshop_plan") or dep.native.get('foundation_plan'))),
         "hold": held,
         "live_verified": False,
         "execution_ready": False,
@@ -166,7 +165,7 @@ async def retire_unused_capacity(deployment_id: str, payload: ReserveCapacity, r
 
 
 async def native_configuration(deployment_id, reviewed):
-    if reviewed.observed.node.supported_operations != ['inspect', 'capacity', 'capacity-admit', 'capacity-status']:
+    if 'capacity-admit' not in reviewed.observed.node.supported_operations:
         raise capacity_ledger.refused('CAPACITY_NATIVE_NOT_ENROLLED',
             'This original physical-node inspector has no native acceptance enrollment. Review the explicit node capability before requesting acceptance.')
     async with db.get_session_factory()() as session:

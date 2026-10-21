@@ -85,12 +85,25 @@ async def evaluate_preflight(session, dep, payload=None):
             overrides = json.loads(host.protected_vmids_override_json) if (
                 host and host.protected_vmids_override_json
             ) else None
-            report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
+            foundation = scenario.native and scenario.native.get('foundation_plan')
+            if foundation:
+                from app.core.workshop_foundations import FoundationSpec, allocation_check
+                report.checks.append(allocation_check(FoundationSpec.model_validate(scenario.native['foundation']),
+                    scenario.context, host, run_id=dep.id, vmids=scenario.vmids))
+            else:
+                report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
             if scenario.native:
                 from app.core.native_contexts import execution_issue
-                if issue := execution_issue(scenario.context, scope):
+                if not foundation and (issue := execution_issue(scenario.context, scope)):
                     report.checks.append(PreflightCheck(check='native_environment_qualification', result='block',
                         code='WORKSHOP_INFRASTRUCTURE_UNQUALIFIED', detail=issue))
+                if foundation:
+                    from app.core.foundation_execution import dispatch_inputs
+                    if scope != 'full':
+                        raise Range42Error(status=409, code='FOUNDATION_ACTION_UNAVAILABLE', message='This bounded preparation supports its original full action only.')
+                    await dispatch_inputs(get_session_factory(), dep.id)
+                    report.checks.append(PreflightCheck(check='native_foundation', result='pass',
+                        detail='Original foundation capacity and bounded node capability verified. The node rechecks approved sources and copied generations before each write.'))
                 if plan := scenario.native.get('workshop_plan'):
                     from app.core.workshop_preflight import workshop_checks
                     from app.core.deployment_allocations import ensure_for_attempt
@@ -102,12 +115,13 @@ async def evaluate_preflight(session, dep, payload=None):
                 if reservations["status"] in {"conflict", "invalid"}:
                     report.checks.append(PreflightCheck(check="native_reservations", result="warn",
                         detail="Cleanup is allowed despite reservation registry issues. " + " ".join(reservations["issues"])))
-                if scenario.native.get("component_id"):
+                if scenario.native.get("component_id") and not foundation:
                     from app.core.native_scenarios import check_native_allocations
                     report.checks.extend(await check_native_allocations(scenario.native["descriptor"]["topology"], host))
                 report.checks.append(PreflightCheck(check="native_context", result="pass",
                     detail=f"Existing Range42 context: {scenario.context.label}"))
-                report.checks.append(PreflightCheck(check="native_workflow", result="warn",
+                if not foundation:
+                    report.checks.append(PreflightCheck(check="native_workflow", result="warn",
                     detail="This executes the complete saved native workflow, including its template, network and custom stages. "
                            "Declared VM IDs are not a complete list of affected resources. Generated-scenario capacity and ownership checks do not apply."))
             else:

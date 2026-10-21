@@ -114,6 +114,7 @@ async def create_deployment(payload: DeploymentCreate,
     assignments = None
     checked_target = None
     native = None
+    foundation_authority = None
     deployment_id = uuid.uuid4().hex[:16]
     if payload.native:
         candidate = Deployment(id=deployment_id, project_id=payload.project_id, project_sha=payload.project_sha,
@@ -122,6 +123,16 @@ async def create_deployment(payload: DeploymentCreate,
         with TemporaryDirectory(prefix="r42-native-create-") as directory:
             scenario = await prepare_project_scenario(session, candidate, dest=Path(directory) / "checkout")
             native = scenario.native
+            if foundation := native.get('foundation_plan'):
+                from app.core.workshop_foundations import allocation_authority, FoundationSpec
+                if not payload.allocation_reservation_id:
+                    raise Range42Error(code='FOUNDATION_RESERVATION_REQUIRED', status=409,
+                        message='Review and reserve the reusable template copies before creating their foundation deployment.')
+                assignments = foundation['assignments']
+                host = await session.get(ProxmoxHost, payload.target_host_id)
+                foundation_authority = allocation_authority(FoundationSpec.model_validate(native['foundation']),
+                    scenario.context, host, run_id=deployment_id)
+                checked_target = (host.api_url, host.node_name, host.protected_vmids_override_json)
             if plan := native.get('workshop_plan'):
                 from app.core.workshop_runs import validate_activation
                 validate_activation(plan)
@@ -213,7 +224,7 @@ async def create_deployment(payload: DeploymentCreate,
             raise Range42Error(code="ALLOCATION_TARGET_CHANGED", status=409,
                                message="The target changed while validating the saved allocation; review it and retry.")
         await bind(session, row, host, assignments, reservation_id=payload.allocation_reservation_id,
-                   token=x_range42_reservation_token)
+                   token=x_range42_reservation_token, template_authority=foundation_authority)
     if native and (plan := native.get('workshop_plan')):
         from app.core.workshop_models import WorkshopRun
         from app.core.workshop_runs import create_credentials
