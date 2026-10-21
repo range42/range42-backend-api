@@ -7,14 +7,14 @@ Identity-provider subjects and network device grants are separate bindings.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from ipaddress import IPv4Network
+from ipaddress import IPv4Address, IPv4Network
 import re
 import secrets
 import subprocess
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.core.errors import Range42Error
 
@@ -37,6 +37,32 @@ class WorkshopDescriptor(StrictModel):
         return self
 
 
+class GatewayManagement(StrictModel):
+    management_bridge: str = Field(pattern=r'^vmbr[1-9][0-9]{2,10}$')
+    management_subnet: str = Field(max_length=18)
+
+    @model_validator(mode='after')
+    def private_management(self):
+        network = IPv4Network(self.management_subnet, strict=True)
+        if network.prefixlen != 29 or not any(network.subnet_of(IPv4Network(pool))
+                for pool in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
+            raise ValueError('Gateway management requires a separate private /29')
+        return self
+
+
+class ManagedGateway(GatewayManagement):
+    vm_id: int = Field(ge=1000, le=999999999)
+    management_ip: str = Field(max_length=15)
+
+    @model_validator(mode='after')
+    def allocated_address(self):
+        network = IPv4Network(self.management_subnet)
+        address = IPv4Address(self.management_ip)
+        if address not in network or address in (network[0], network[1], network[-1]):
+            raise ValueError('Reserve the first management host for the physical node')
+        return self
+
+
 class WorkshopSpec(StrictModel):
     namespace: str = Field(pattern=r'^[a-z][a-z0-9-]{0,19}$')
     seats: int = Field(ge=1, le=10)
@@ -50,6 +76,14 @@ class WorkshopSpec(StrictModel):
     storage: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_.-]{0,63}$')
     identity_profile: str | None = Field(default=None, pattern=r'^[a-z][a-z0-9-]{0,63}$')
     access_profile: str | None = Field(default=None, pattern=r'^[a-z][a-z0-9-]{0,63}$')
+    managed_gateway: ManagedGateway | None = None
+
+    @model_serializer(mode='wrap')
+    def compatible_serialization(self, handler):
+        value = handler(self)
+        if self.managed_gateway is None:
+            value.pop('managed_gateway', None)
+        return value
 
     @model_validator(mode='after')
     def coherent(self):
@@ -66,6 +100,11 @@ class WorkshopSpec(StrictModel):
         if self.proxmox_template == self.deployer_template or any(
                 template in targets for template in (self.proxmox_template, self.deployer_template)):
             raise ValueError('Templates must be distinct and outside the participant VMID allocation')
+        if gateway := self.managed_gateway:
+            if (gateway.vm_id in targets or gateway.vm_id in (self.proxmox_template, self.deployer_template)
+                    or IPv4Network(gateway.management_subnet).overlaps(pool)
+                    or gateway.management_bridge in {f'vmbr{self.bridge_start + i}' for i in range(self.seats)}):
+                raise ValueError('Gateway resources must be separate from participants and source templates')
         return self
 
 
@@ -118,16 +157,52 @@ def compile_plan(spec: WorkshopSpec, *, run_id: str) -> dict:
     # Keep original one-person immutable plans identical after this upgrade.
     group_policy = ({'participants_per_environment': spec.participants_per_environment}
                     if spec.participants_per_environment != 1 else {})
-    return {'version': 1, 'run_id': run_id, **spec.model_dump(exclude={'participants_per_environment'}), **group_policy,
+    gateway_policy = {}
+    if selected := spec.managed_gateway:
+        management = IPv4Network(selected.management_subnet)
+        gateway = {**selected.model_dump(), 'vm_name': f'{spec.namespace}-gateway',
+                   'template': spec.deployer_template, 'storage': spec.storage,
+                   'cores': 2, 'memory_mib': 4096, 'disk_gib': 32,
+                   'owner': f'range42-workshop:{run_id}:gateway',
+                   'alias': f'r42.{spec.namespace}.gateway',
+                   'management_gateway': str(management[1]),
+                   'nics': [{'index': 0, 'bridge': selected.management_bridge,
+                             'ip': selected.management_ip, 'prefix': management.prefixlen},
+                            *[{'index': i + 1, 'bridge': network['vnet'],
+                               'ip': network['gateway'], 'prefix': 28}
+                              for i, network in enumerate(networks)]]}
+        assignments.append({'vm_id': selected.vm_id, 'vm_name': gateway['vm_name'],
+                            'run_namespace': spec.namespace,
+                            'nics': [{key: nic[key] for key in ('index', 'bridge', 'ip')}
+                                     for nic in gateway['nics']]})
+        gateway_policy = {'managed_gateway': gateway}
+    return {'version': 1, 'run_id': run_id, **spec.model_dump(exclude={'participants_per_environment', 'managed_gateway'}), **group_policy, **gateway_policy,
             'participants': participants, 'guests': guests, 'assignments': assignments,
             'networks': networks,
-            'capacity': {'memory_mib': spec.seats * 20480, 'vcpus': spec.seats * 6,
-                         'disk_gib': spec.seats * 192}}
+            'capacity': {'memory_mib': spec.seats * 20480 + (4096 if gateway_policy else 0),
+                         'vcpus': spec.seats * 6 + (2 if gateway_policy else 0),
+                         'disk_gib': spec.seats * 192 + (32 if gateway_policy else 0)}}
 
 
 def validate_activation(plan: dict, *, now: datetime | None = None):
     if datetime.fromisoformat(plan['expires_at']) <= (now or datetime.now(timezone.utc)):
         raise Range42Error(status=409, code='WORKSHOP_EXPIRED', message='This workshop has expired; retire its resources or create a new run.')
+
+
+def resource_guests(plan: dict) -> list[dict]:
+    """All canonical VM commitments; participants retain their two-VM mapping."""
+    return [*plan['guests'], *([plan['managed_gateway']] if plan.get('managed_gateway') else [])]
+
+
+def workshop_topology(plan: dict) -> dict:
+    """Project previews and saved native actions share the same owned topology."""
+    vms, networks = list(plan['guests']), list(plan['networks'])
+    if gateway := plan.get('managed_gateway'):
+        vms.append({**gateway, 'role': 'gateway',
+                    'bridge': gateway['management_bridge'], 'ip': gateway['management_ip']})
+        networks.append({'vnet': gateway['management_bridge'], 'subnet': gateway['management_subnet'],
+                         'gateway': gateway['management_gateway'], 'mode': 'existing_bridge'})
+    return {'vms': vms, 'networks': networks}
 
 
 def create_credentials(plan: dict) -> dict:

@@ -8964,6 +8964,20 @@
             ],
             "title": "Gateway"
           },
+          "gateway_node_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Node Id"
+          },
           "reserved_ips": {
             "items": {
               "type": "string"
@@ -13349,6 +13363,27 @@
         ],
         "title": "GatewayFoundation"
       },
+      "GatewayManagement": {
+        "properties": {
+          "management_bridge": {
+            "type": "string",
+            "pattern": "^vmbr[1-9][0-9]{2,10}$",
+            "title": "Management Bridge"
+          },
+          "management_subnet": {
+            "type": "string",
+            "maxLength": 18,
+            "title": "Management Subnet"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "management_bridge",
+          "management_subnet"
+        ],
+        "title": "GatewayManagement"
+      },
       "GatewayNicCapacity": {
         "properties": {
           "limit": {
@@ -14690,6 +14725,40 @@
           "uid"
         ],
         "title": "MaintenanceLockIdentity"
+      },
+      "ManagedGateway": {
+        "properties": {
+          "management_bridge": {
+            "type": "string",
+            "pattern": "^vmbr[1-9][0-9]{2,10}$",
+            "title": "Management Bridge"
+          },
+          "management_subnet": {
+            "type": "string",
+            "maxLength": 18,
+            "title": "Management Subnet"
+          },
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 1000.0,
+            "title": "Vm Id"
+          },
+          "management_ip": {
+            "type": "string",
+            "maxLength": 15,
+            "title": "Management Ip"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "management_bridge",
+          "management_subnet",
+          "vm_id",
+          "management_ip"
+        ],
+        "title": "ManagedGateway"
       },
       "MaterializationReceipt": {
         "properties": {
@@ -23825,6 +23894,16 @@
             "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
             "title": "Storage"
           },
+          "managed_gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayManagement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "infrastructure_guests": {
             "items": {
               "$ref": "#/components/schemas/InfrastructureGuest"
@@ -23897,6 +23976,16 @@
             "type": "string",
             "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
             "title": "Storage"
+          },
+          "managed_gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayManagement"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -23994,6 +24083,16 @@
               }
             ],
             "title": "Access Profile"
+          },
+          "managed_gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagedGateway"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

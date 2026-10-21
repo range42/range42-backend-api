@@ -1,10 +1,10 @@
 """Operator-approved provisioning bounds, separate from browser run inputs."""
 from ipaddress import IPv4Address, IPv4Network
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from app.core.errors import Range42Error
-from app.core.workshop_runs import StrictModel
+from app.core.workshop_runs import GatewayManagement, StrictModel
 
 
 class WorkshopNetwork(StrictModel):
@@ -49,6 +49,14 @@ class WorkshopProfileView(StrictModel):
     proxmox_template: int = Field(ge=100, le=999999999)
     deployer_template: int = Field(ge=100, le=999999999)
     storage: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_.-]{0,63}$')
+    managed_gateway: GatewayManagement | None = None
+
+    @model_serializer(mode='wrap')
+    def compatible_serialization(self, handler):
+        value = handler(self)
+        if self.managed_gateway is None:
+            value.pop('managed_gateway', None)
+        return value
 
 
 class WorkshopProfile(WorkshopProfileView):
@@ -71,6 +79,11 @@ class WorkshopProfile(WorkshopProfileView):
             raise ValueError('Templates and infrastructure must be separate from run guest ranges')
         if any(nic.bridge not in bridges for guest in self.infrastructure_guests for nic in guest.nics):
             raise ValueError('Infrastructure exceptions must name an approved participant bridge')
+        if gateway := self.managed_gateway:
+            management = IPv4Network(gateway.management_subnet)
+            if (self.infrastructure_guests or gateway.management_bridge in bridges
+                    or any(management.overlaps(subnet) for subnet in subnets)):
+                raise ValueError('Gateway management must be separate from participant networks')
         return self
 
     def public(self):
@@ -91,4 +104,16 @@ def require_workshop_profile(context, plan: dict):
     if not valid:
         raise Range42Error(status=409, code='WORKSHOP_PROVISIONING_SCOPE',
             message='Choose VM IDs, participant networks, source templates and storage within this environment’s approved workshop profile.')
+    if profile.managed_gateway and not plan.get('managed_gateway'):
+        raise Range42Error(status=409, code='WORKSHOP_GATEWAY_REQUIRED',
+            message='This environment requires one managed gateway per run. Review the run with its approved gateway resources.')
+    if gateway := plan.get('managed_gateway'):
+        if profile.managed_gateway is None:
+            raise Range42Error(status=409, code='WORKSHOP_GATEWAY_PROFILE_REQUIRED',
+                message='This environment has no approved managed gateway capability. Select an explicitly prepared profile before requesting one.')
+        if (not any(start <= gateway['vm_id'] <= end for start, end in profile.vmid_ranges)
+                or any(gateway.get(field) != getattr(profile.managed_gateway, field)
+                       for field in ('management_bridge', 'management_subnet'))):
+            raise Range42Error(status=409, code='WORKSHOP_PROVISIONING_SCOPE',
+                message='Choose a gateway VM ID and management network within this environment’s approved profile.')
     return profile
