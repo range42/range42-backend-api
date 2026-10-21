@@ -13,9 +13,8 @@ from pathlib import Path
 
 from sqlalchemy import select, text
 
-from app.core.allocation import _is_protected
 from app.core.allocation_models import AllocationReservation, DeploymentAllocation
-from app.core.allocation_reservations import _error, _ownership, _protected, _utc, token_digest
+from app.core.allocation_reservations import _error, _ownership, _protected, _utc, token_digest, identity_protected
 from app.core.models import Deployment, ProxmoxHost
 from app.core.scenario_manifest import validate_vm_manifest
 
@@ -73,9 +72,16 @@ def validate_binding(claim: DeploymentAllocation, deployment: Deployment, host: 
 
 
 async def bind(session, deployment: Deployment, host: ProxmoxHost, assignments: list[dict], *,
-               reservation_id: str | None = None, token: str | None = None) -> DeploymentAllocation:
+               reservation_id: str | None = None, token: str | None = None,
+               template_authority=None) -> DeploymentAllocation:
     """Caller holds the SQLite writer transaction; commit belongs to the caller."""
     now = datetime.now(timezone.utc)
+    if template_authority is not None:
+        template_authority.validate_assignments(assignments, host)
+    ids, addresses = occupied(assignments)
+    protected = _protected(host)
+    if any(identity_protected(vmid, protected, template_authority) for vmid in ids):
+        raise _error("PROTECTED", "The deployment contains a protected VM ID.")
     existing = await session.scalar(select(DeploymentAllocation).where(DeploymentAllocation.deployment_id == deployment.id))
     if existing:
         validate_binding(existing, deployment, host)
@@ -94,10 +100,6 @@ async def bind(session, deployment: Deployment, host: ProxmoxHost, assignments: 
             raise _error("TARGET_CHANGED", "The reservation target changed or predates target binding. Renew and review it before deployment.")
         if mapping(lease.assignments) != mapping(assignments):
             raise _error("MAPPING_CHANGED", "The pinned scenario's VM IDs and NIC assignments differ from the reviewed reservation. Save the current mapping first.")
-    ids, addresses = occupied(assignments)
-    protected = _protected(host)
-    if any(_is_protected(vmid, protected) for vmid in ids):
-        raise _error("PROTECTED", "The deployment contains a protected VM ID.")
     claims = list((await session.scalars(select(DeploymentAllocation))).all())
     leases = list((await session.scalars(select(AllocationReservation).where(AllocationReservation.expires_at > now))).all())
     for other in [*claims, *leases]:
@@ -128,7 +130,8 @@ async def bind(session, deployment: Deployment, host: ProxmoxHost, assignments: 
 
 
 async def ensure_for_attempt(factory, deployment: Deployment, directory: Path, *, create: bool,
-                             checked_host: ProxmoxHost, declared_assignments: list[dict] | None = None):
+                             checked_host: ProxmoxHost, declared_assignments: list[dict] | None = None,
+                             template_authority=None):
     """The launch gate claims manual/older deployments and verifies existing ones."""
     assignments = declared_assignments if declared_assignments is not None else manifest_assignments(directory)
     async with factory() as session:
@@ -147,5 +150,5 @@ async def ensure_for_attempt(factory, deployment: Deployment, directory: Path, *
         if declared_assignments is not None and existing is None:
             raise _error('OWNERSHIP', 'This workshop no longer owns its resource assignments. Create a new run rather than reusing released allocations.')
         if existing or (create and assignments):
-            await bind(session, fresh, host, assignments)
+            await bind(session, fresh, host, assignments, template_authority=template_authority)
             await session.commit()

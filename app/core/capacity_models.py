@@ -37,3 +37,5 @@ class CapacityHold(Base):
     retired_by: Mapped[str | None] = mapped_column(String(128))
     retirement_approval_revision: Mapped[str | None] = mapped_column(String(64))
     native_receipt_json: Mapped[str | None] = mapped_column(Text)
+    preparation_request_json: Mapped[str | None] = mapped_column(Text)
+    preparation_receipt_json: Mapped[str | None] = mapped_column(Text)

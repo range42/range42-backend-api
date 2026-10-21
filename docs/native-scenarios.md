@@ -200,3 +200,48 @@ the normal place to use source-based devkit commands.
 The API installer compatibility bundle does not change the VM bootstrap, SDN or
 firewall primitives. Its matching complete bundle tree is recognized through the
 existing content fingerprint mechanism. All original cluster guards remain.
+
+## Optional reusable workshop foundation
+
+A catalog scenario may declare `manifest/preparation.json` with version `1`, kind
+`native-workshop-foundation` and a title. It declares no static VMIDs and cannot
+combine preparation with workshop or platform descriptors. The selected
+registered workshop environment supplies destination template IDs and storage;
+operators supply a foundation name, original source node and two source VMIDs.
+
+The normal Deploy flow reviews `/native-scenario/foundation/preview`, then
+reserves the two exact copies through `/native-scenario/foundation/reservations`
+on the project. Both use the same Core allocation tables and private reservation
+header as other scenarios. A narrow internal authority permits only the reviewed
+template IDs; general allocation and VM mutation APIs retain their protections.
+The resulting deployment contains `native.foundation` and a canonical
+`native.foundation_plan`; it creates no participant accounts or credentials.
+
+In Overview, reserve and physically accept the original capacity. Then
+`POST /v1/deployments/{id}/foundation/review` independently observes the node and
+journals the full preparation envelope on that same capacity hold. Starting the
+normal full attempt uses the existing native context and public foundation
+scenario. It rechecks the target/SSH binding and only invokes the bounded node
+module. The selected target's scoped credential overrides old context vault
+credentials. No general VM mutation is authorized by preparation acceptance.
+
+`GET /v1/deployments/{id}/foundation` returns recorded progress;
+`POST .../foundation/reconcile` reads the original node status and verifies it
+before updating the retained receipt. The backend independently performs this
+reconciliation when the native attempt ends; editable playbook output cannot
+qualify completion. A missing or uncertain original outcome keeps its request,
+allocation and full capacity commitment. A lost clone reply without a retained
+native task ID requires administrator reconciliation; automatic name-based
+adoption and template deletion are unavailable.
+
+Migration `0020_native_preparation` adds nullable request/receipt columns to the
+existing capacity hold. Old record digests remain unchanged when those columns
+are null. Downgrade refuses to discard retained preparation records. Back up the
+backend journal and the node's whole original identity/capacity/preparation state
+as a matching recovery point.
+
+The module is optional and defaults to disabled. Existing node inspection and
+capacity admission remain separate capabilities. Foundation completion qualifies
+the two reusable copies only; environment bridges, each run's gateway,
+participant installation and isolation still require independent acceptance.
+No Keycloak or Headscale setup is required by this foundation path.

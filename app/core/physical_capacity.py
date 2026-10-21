@@ -111,7 +111,7 @@ class CapacityObservation(StrictObservation):
 
     @model_validator(mode="after")
     def check_capability(self):
-        if self.node.supported_operations not in [["inspect", "capacity"], ['inspect', 'capacity', 'capacity-admit', 'capacity-status']]:
+        if 'capacity' not in self.node.supported_operations:
             raise ValueError("Resource inspection is not explicitly enabled")
         return self
 

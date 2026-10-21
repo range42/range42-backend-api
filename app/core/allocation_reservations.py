@@ -79,6 +79,8 @@ def _protected(host: ProxmoxHost) -> list[list[int]]:
 
 def _retained_nics(vm: AllocationVm, old: dict, networks: dict) -> dict[int, dict]:
     """Match authored NIC identity, with explicit disambiguation of legacy rows."""
+    if not vm.nics:
+        return {}
     previous = old.get("nics", [])
     if not previous:
         return {}
@@ -112,8 +114,16 @@ def _retained_nics(vm: AllocationVm, old: dict, networks: dict) -> dict[int, dic
     return retained
 
 
+def identity_protected(vmid, overrides, template_authority=None):
+    if template_authority and template_authority.permits_template(vmid):
+        return any(first <= vmid <= last for first, last in overrides)
+    return _is_protected(vmid, overrides)
+
+
 def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationReservation], current: AllocationReservation | None,
-          occupancy: Occupancy) -> list[dict]:
+          occupancy: Occupancy, *, template_authority=None) -> list[dict]:
+    if template_authority is not None:
+        template_authority.validate_request(payload, host)
     overrides = _protected(host)
     networks = {network.network_id: network for network in payload.networks}
     previous = {vm["node_id"]: vm for vm in current.assignments} if current else {}
@@ -145,7 +155,7 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
         old = previous.get(vm.node_id, {})
         fixed_id = vm.vm_id if vm.vm_id is not None else old.get("vm_id")
         if fixed_id is not None:
-            if _is_protected(fixed_id, overrides):
+            if identity_protected(fixed_id, overrides, template_authority):
                 raise _error("PROTECTED", f"VMID {fixed_id} is in a protected range.")
             if fixed_id in unavailable_ids or fixed_id in claimed_ids:
                 raise _error("OCCUPIED", f"VMID {fixed_id} is occupied or already reserved. Choose another ID.")
@@ -206,8 +216,14 @@ def _plan(payload: AllocationRequest, host: ProxmoxHost, rows: list[AllocationRe
 
 
 async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, payload: AllocationRequest,
-                  token: str, client: httpx.AsyncClient, *, reserved: Occupancy | None = None) -> AllocationLease:
+                  token: str, client: httpx.AsyncClient, *, reserved: Occupancy | None = None,
+                  template_authority=None) -> AllocationLease:
     token_hash = token_digest(token)
+    if template_authority is not None:
+        from app.core.workshop_foundations import FoundationAllocationAuthority
+        if not isinstance(template_authority, FoundationAllocationAuthority):
+            raise _error('INVALID', 'Foundation allocation requires server-derived template authority.')
+        template_authority.validate_request(payload, host)
     # Reject a wrong owner before any expensive inventory audit.
     async with factory() as session:
         current = await session.scalar(select(AllocationReservation).where(AllocationReservation.project_key == payload.project_key))
@@ -241,7 +257,8 @@ async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, 
                     if fresh_host is None or (fresh_host.api_url, fresh_host.node_name, fresh_host.protected_vmids_override_json) != (host.api_url, host.node_name, host.protected_vmids_override_json):
                         raise _error("INVALID", "The target host registration changed during allocation; retry against its current configuration.")
                     claims = list((await session.scalars(select(DeploymentAllocation))).all())
-                    assignments = _plan(payload, host, [*rows, *claims], current, occupancy)
+                    assignments = _plan(payload, fresh_host, [*rows, *claims], current, occupancy,
+                                        template_authority=template_authority)
                     pending = sorted({vm["vm_id"] for vm in assignments} - checked_free)
                     if not pending:
                         row = current or AllocationReservation(id=uuid.uuid4().hex, project_key=payload.project_key,

@@ -14,7 +14,10 @@ from app.core.errors import Range42Error
 from app.core.models import ProxmoxHost
 from app.core.physical_node_models import PhysicalNode, PhysicalNodeBinding
 
-NodeOperation = Literal['inspect', 'capacity', 'capacity-admit', 'capacity-status']
+NodeOperation = Literal['inspect', 'capacity', 'capacity-admit', 'capacity-status',
+                        'foundation-profile', 'foundation-prepare', 'foundation-status']
+CAPACITY_OPERATIONS = ['inspect', 'capacity', 'capacity-admit', 'capacity-status']
+FOUNDATION_OPERATIONS = [*CAPACITY_OPERATIONS, 'foundation-profile', 'foundation-prepare', 'foundation-status']
 
 
 class NodeAttestation(BaseModel):
@@ -31,7 +34,7 @@ class NodeAttestation(BaseModel):
         pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     )
     supported_operations: list[NodeOperation] = Field(
-        min_length=1, max_length=4
+        min_length=1, max_length=7
     )
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]
@@ -39,7 +42,7 @@ class NodeAttestation(BaseModel):
     @field_validator("supported_operations")
     @classmethod
     def bounded_operations(cls, value):
-        if value not in [["inspect"], ["inspect", "capacity"], ['inspect', 'capacity', 'capacity-admit', 'capacity-status']]:
+        if value not in [["inspect"], ["inspect", "capacity"], CAPACITY_OPERATIONS, FOUNDATION_OPERATIONS]:
             raise ValueError("Unsupported physical-node capabilities")
         return value
 

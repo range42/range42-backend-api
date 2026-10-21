@@ -25,10 +25,19 @@ from app.core.physical_nodes import (
     registry_revision,
     target_revision,
 )
-from app.core.workshop_runs import WorkshopSpec, compile_plan, resource_guests, validate_activation
+from app.core.workshop_runs import WorkshopSpec, compile_plan, resource_guests as workshop_resource_guests, validate_activation as validate_workshop_activation
 
 # A locally terminal runner can still have an uncertain native outcome.
 CAPACITY_SETTLED_ATTEMPT_STATES = tuple(state for state in TERMINAL_ATTEMPT_STATES if state not in {'unknown', 'partial'})
+
+
+def resource_guests(plan):
+    return plan['templates'] if plan.get('kind') == 'native-workshop-foundation' else workshop_resource_guests(plan)
+
+
+def validate_activation(plan):
+    if plan.get('kind') != 'native-workshop-foundation':
+        validate_workshop_activation(plan)
 
 
 def refused(
@@ -58,6 +67,8 @@ def record_digest(row):
             row.revision,
         ] + (['native-lifecycle-v1', *lifecycle] if any(value is not None for value in lifecycle) else [])
         + (['native-receipt-v1', row.native_receipt_json] if row.native_receipt_json is not None else [])
+        + (['native-preparation-v1', row.preparation_request_json, row.preparation_receipt_json]
+           if row.preparation_request_json is not None or row.preparation_receipt_json is not None else [])
     )
 
 
@@ -67,6 +78,7 @@ def commitment(row):
         if (
             row.status not in {"pending_root", "active", "releasing", "retired"}
             or (row.native_request_id is None) != (row.native_request_actor is None)
+            or (row.preparation_receipt_json is not None and row.preparation_request_json is None)
             or (row.native_request_id is not None and not re.fullmatch(r'[a-f0-9]{32}', row.native_request_id))
             or (row.retired_by is None) != (row.retirement_approval_revision is None)
             or (row.retired_by is not None and row.status != 'retired')
@@ -123,10 +135,20 @@ async def demand(session, deployment_id, observed, agent_revision):
     physical_registry = await registry_revision(session)
     try:
         approved = NodeAttestation.model_validate_json(binding.observation_json)
-        spec = WorkshopSpec.model_validate(dep.native["workshop"])
-        plan = compile_plan(spec, run_id=dep.id)
+        if dep.native.get('foundation_plan'):
+            from app.core.workshop_foundations import FoundationSpec, compile_foundation
+            from app.core.native_environments import resolve_registered_context
+            if dep.native.get('workshop') or dep.native.get('workshop_plan'):
+                raise ValueError('Foundation and run ownership cannot be combined')
+            context = await resolve_registered_context(session, dep.native['context_id'], host)
+            plan = compile_foundation(FoundationSpec.model_validate(dep.native['foundation']), context, run_id=dep.id)
+            retained_plan = dep.native['foundation_plan']
+        else:
+            spec = WorkshopSpec.model_validate(dep.native["workshop"])
+            plan = compile_plan(spec, run_id=dep.id)
+            retained_plan = dep.native['workshop_plan']
         if (
-            plan != dep.native["workshop_plan"]
+            plan != retained_plan
             or claim.assignments != plan["assignments"]
             or (claim.host_id, claim.api_url, claim.node_name, claim.project_sha)
             != (host.id, host.api_url, host.node_name, dep.project_sha)
@@ -174,7 +196,7 @@ async def demand(session, deployment_id, observed, agent_revision):
                                 "cluster_id": backing.cluster_id,
                                 "namespace": backing.namespace,
                                 "replicas": backing.replicas,
-                                "logical_bytes": guest["disk_gib"] * 2**30,
+                                "logical_bytes": guest.get('logical_bytes', guest["disk_gib"] * 2**30),
                             }
                         ],
                     }
@@ -474,6 +496,11 @@ async def assert_execution_accepted(session, deployment_id):
             "CAPACITY_RETIRED",
             "This capacity intent was retired. Create a new run instead of reviving released commitments.",
         )
+    deployment = await session.get(Deployment, deployment_id, populate_existing=True)
+    if deployment and deployment.native and deployment.native.get('foundation_plan'):
+        from app.core.foundation_execution import assert_dispatch
+        await assert_dispatch(session, row)
+        return
     # A database phase is not a native execution attestation. Keep this gate
     # closed until the original root plan receipt and bounded executor are
     # implemented and independently qualified. Browser fields cannot open it.
@@ -509,7 +536,7 @@ async def assert_dispatch_accepted(session, deployment_id):
         row is not None
         or isinstance(native, dict)
         and any(
-            native.get(field) is not None for field in ["workshop_plan", "workshop"]
+            native.get(field) is not None for field in ["workshop_plan", "workshop", "foundation_plan", "foundation"]
         )
     ):
         await assert_execution_accepted(session, deployment_id)
@@ -536,6 +563,10 @@ async def assert_vm_capacity_accepted(session, vmid):
             "This guest has ambiguous retained capacity ownership. Preserve both records and reconcile the original allocation.",
         )
     if owners:
+        deployment = await session.get(Deployment, owners[0].deployment_id, populate_existing=True)
+        if deployment and deployment.native and deployment.native.get('foundation_plan'):
+            raise refused('FOUNDATION_BOUNDED_OPERATION_REQUIRED',
+                'Prepared template copies accept only their original bounded preparation action. General VM changes remain blocked.')
         await assert_execution_accepted(session, owners[0].deployment_id)
         return
     if any(record.phase == "held" for record in records):

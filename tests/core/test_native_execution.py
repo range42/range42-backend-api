@@ -618,3 +618,32 @@ def test_bound_native_inventory_cannot_inherit_the_runtime_templates_old_target(
     assert '192.0.2.20' in inventory and '192.0.2.20:8443' in inventory
     assert '192.0.2.10' not in inventory
     assert (workspace / 'inventory/inventory_default.yml').read_bytes() == original
+
+
+def test_foundation_preparation_uses_a_private_attempt_request_and_selected_target(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from app.core.native_contexts import resolve_context
+    from app.core.native_execution import prepare_native_run
+    from app.core.native_scenarios import inspect_native_scenario
+    ws, _, host = context(tmp_path, monkeypatch)
+    repo = tmp_path/'repository'
+    base = scenario(repo)
+    (base/'manifest/scenario_vms.json').write_text(json.dumps({'vms': []}))
+    (base/'manifest/preparation.json').write_text(json.dumps({'version': 1, 'kind': 'native-workshop-foundation', 'title': 'Templates'}))
+    selected = replace(resolve_context('lab-demo', host), purpose='workshop', execution_ready=False,
+        target_api_url='https://new-target.test:8006', target_node='new-node', node_name='new-node',
+        provisioning_credential='audit@pve!inspect=selected-secret')
+    original = {'protocol': 'range42-foundation-request-v1', 'plan': {'kind': 'native-workshop-foundation',
+        'environment_id': selected.id, 'target_node': 'new-node'}, 'capacity_request': {'request_id': 'a'*32}}
+    run = prepare_native_run(repo, inspect_native_scenario(repo, 'training/exercise-a'), selected,
+        scope='full', features={}, parameters={}, artifact_dir=tmp_path/'attempt',
+        foundation_request=original, foundation_agent_revision='f'*64, foundation_target_host_id='h')
+    values = json.loads(run.variables_file.read_text())
+    request_path = run.context_dir/'foundation-request.json'
+    assert json.loads(request_path.read_text()) == original
+    assert request_path.stat().st_mode & 0o777 == 0o600
+    assert values['range42_foundation_request_file'] == str(request_path)
+    assert values['range42_foundation_agent_revision'] == 'f'*64
+    assert values['range42_foundation_target_host_id'] == 'h'
+    assert values['proxmox_api_token_secret'] == 'selected-secret'
+    assert (ws/'scenario').resolve() != run.context_dir/'scenario'

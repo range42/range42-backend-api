@@ -103,7 +103,14 @@ async def prepare_project_scenario(
             native = {**native, 'workshop_plan': plan}
         from app.core.native_environments import resolve_registered_context
         context = await resolve_registered_context(session, native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
-        if context.purpose == 'workshop' and not plan:
+        from app.core.workshop_foundations import resolve_native_foundation, foundation_topology
+        foundation = resolve_native_foundation(native, descriptor, context, run_id=deployment.id or '')
+        if foundation:
+            descriptor['declared_vmids'] = [row['vm_id'] for row in foundation['assignments']]
+            descriptor['topology'] = {**descriptor['topology'], **foundation_topology(foundation),
+                'reservations': {'status': 'checked', 'issues': ['Reusable template copies are owned by this foundation deployment in the existing allocation ledger.']}}
+            native = {**native, 'foundation_plan': foundation}
+        if context.purpose == 'workshop' and not plan and not foundation:
             raise Range42Error(status=409, code='NATIVE_ENVIRONMENT_PURPOSE',
                 message='This registered environment is bounded to typed workshop runs. Choose its workshop scenario or an ordinary native context for another workflow.')
         if plan:

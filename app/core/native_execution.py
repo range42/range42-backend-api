@@ -41,17 +41,24 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
                        scope: str, features: dict, parameters: dict, artifact_dir: Path,
                        repository_root: Path | None = None, workshop_plan: dict | None = None,
                        workshop_credentials: dict | None = None, workshop_seat: int = 0,
-                       workshop_state_dir: Path | None = None) -> NativeRun:
+                       workshop_state_dir: Path | None = None, foundation_request: dict | None = None,
+                       foundation_agent_revision: str = '', foundation_target_host_id: str = '') -> NativeRun:
     if scope not in descriptor["actions"]:
         raise invalid("This saved scenario does not declare that lifecycle action", "NATIVE_ACTION_UNAVAILABLE")
     from app.core.native_contexts import execution_issue
-    if issue := execution_issue(context, scope):
+    if not foundation_request and (issue := execution_issue(context, scope)):
         raise invalid(issue, 'WORKSHOP_INFRASTRUCTURE_UNQUALIFIED')
+    if foundation_request and (not descriptor.get('preparation') or scope != 'full' or workshop_plan
+            or foundation_request.get('plan', {}).get('environment_id') != context.id
+            or foundation_request['plan'].get('target_node') != context.target_node
+            or not re.fullmatch(r'[0-9a-f]{64}', foundation_agent_revision)
+            or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', foundation_target_host_id)):
+        raise invalid('The original foundation request must match this selected target and preparation action.', 'FOUNDATION_ORIGINAL_CHANGED')
     values = native_variables(descriptor, features, parameters)
     if context.target_api_url:
         values.update(proxmox_api_host=urlsplit(context.target_api_url).netloc,
                       proxmox_node=context.target_node, proxmox_api_validate_certs=True)
-    if workshop_plan:
+    if workshop_plan or foundation_request:
         # The same registered credential used for admission must perform writes.
         # Old context vaults may contain a broader, unrelated Proxmox identity.
         try:
@@ -63,6 +70,7 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
             raise invalid('The selected workshop target requires its own valid Proxmox API credential',
                           'WORKSHOP_PROVISIONING_CREDENTIAL_REQUIRED') from None
         values.update(proxmox_api_user=user, proxmox_api_token_id=token_id, proxmox_api_token_secret=secret)
+    if workshop_plan:
         if type(workshop_seat) is not int or not 0 <= workshop_seat <= workshop_plan['seats']:
             raise invalid('Select a participant allocated to this workshop')
         values.update(range42_workshop_plan=workshop_plan,
@@ -85,6 +93,14 @@ def prepare_native_run(root: Path, descriptor: dict, context: NativeContext, *,
     scenario = execution_project / descriptor["path"]
     for directory in (artifact_dir, view, view / "inventory", view / "bin"):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if foundation_request:
+        request_path = view / 'foundation-request.json'
+        _write(request_path, json.dumps(foundation_request, allow_nan=False))
+        values.update(range42_foundation_request_file=str(request_path),
+                      range42_foundation_agent_revision=foundation_agent_revision,
+                      range42_foundation_target_host_id=foundation_target_host_id,
+                      range42_foundation_python=sys.executable,
+                      range42_foundation_runner_file=str(Path(__file__).with_name('foundation_runner.py')))
     # Preserve the complete relative layout: private scenarios may import shared
     # playbooks using ../../bundles, and scripts may write generated local files.
     # Copying also prevents those writes from changing the pinned checkout.

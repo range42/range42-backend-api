@@ -77,8 +77,7 @@ def verified_receipt(row, request, value):
             or node.physical_node_id != row.physical_node_id
             or node.hardware_binding != ledger.commitment(row).hardware_binding
             or node.configuration_revision != row.root_policy_revision
-            or node.supported_operations
-            != ["inspect", "capacity", "capacity-admit", "capacity-status"]
+            or 'capacity-admit' not in node.supported_operations
         ):
             raise ValueError()
         return receipt
