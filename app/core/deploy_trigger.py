@@ -155,8 +155,8 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
         ) else None
         foundation = scenario.native and scenario.native.get('foundation_plan')
         if foundation:
-            from app.core.workshop_foundations import FoundationSpec, allocation_check, allocation_authority
-            spec = FoundationSpec.model_validate(scenario.native['foundation'])
+            from app.core.template_preparation import parse_spec, allocation_check, allocation_authority
+            spec = parse_spec(scenario.native['foundation'])
             vmid_check = allocation_check(spec, scenario.context, target_host, run_id=dep.id, vmids=scenario.vmids)
             await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
                 create=False, checked_host=target_host, declared_assignments=foundation['assignments'],
@@ -185,11 +185,12 @@ async def _start_attempt(session: AsyncSession, *, attempt: Attempt,
             if plan := native.get('workshop_plan'):
                 from app.core.workshop_models import WorkshopRun
                 from app.core.workshop_preflight import workshop_checks
+                from app.core.workshop_profiles import installation_profile
                 await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
                     create=False, checked_host=target_host, declared_assignments=plan['assignments'])
                 seat = (attempt.operation or {}).get('seat', 0)
                 checks = await workshop_checks(plan, target_host, scope=attempt.scope,
-                    receipt_root=ws / 'workshop-receipts', seat=seat, profile=scenario.context.workshop_profile)
+                    receipt_root=ws / 'workshop-receipts', seat=seat, profile=installation_profile(scenario.context))
                 if blocked := next((check for check in checks if check.result == 'block'), None):
                     raise PreflightBlockedError(message=blocked.detail)
                 workshop = await session.get(WorkshopRun, dep.id)

@@ -14,7 +14,8 @@ from app.core.native_environment_infrastructure import GatewayFoundation, gatewa
 from app.core.native_environments import EnvironmentSelection, RuntimeTarget, refused, registered_contexts, review, review_inputs, selection_for, runtime_target_proof, require_original_runtime_target
 from app.core.models import ProxmoxHost
 from app.routes.v1.native import _session
-from app.core.workshop_profiles import InfrastructureGuest, WorkshopProfileView
+from app.core.workshop_profiles import WorkshopProfileView
+from app.core.provisioning_profiles import InfrastructureGuest, ProvisioningProfileView
 
 router = APIRouter(prefix='/environments', tags=['v1 native environments'])
 
@@ -32,7 +33,8 @@ class EnvironmentReviewOut(BaseModel):
     label: str
     base_context_id: str
     target_host_id: str
-    workshop_profile: WorkshopProfileView
+    workshop_profile: WorkshopProfileView | None = None
+    provisioning_profile: ProvisioningProfileView | None = None
     runtime_target: RuntimeTarget | None = None
     gateway_foundation: GatewayFoundation | None = None
     gateway_nic_capacity: GatewayNicCapacity | None = None
@@ -47,7 +49,8 @@ class EnvironmentOut(BaseModel):
     base_context_id: str
     target_host_id: str
     target_node: str
-    workshop_profile: WorkshopProfileView
+    workshop_profile: WorkshopProfileView | None = None
+    provisioning_profile: ProvisioningProfileView | None = None
     runtime_target: RuntimeTarget | None = None
     gateway_foundation: GatewayFoundation | None = None
     gateway_nic_capacity: GatewayNicCapacity | None = None
@@ -82,7 +85,7 @@ class FoundationSelection(EnvironmentSelection):
 
     @model_validator(mode='after')
     def separate_gateway(self):
-        if not gateway_outside_run(self.vmid, self.workshop_profile):
+        if not gateway_outside_run(self.vmid, self.resource_profile):
             raise ValueError('The retained gateway must be separate from participant guests and source templates')
         return self
 
@@ -130,10 +133,10 @@ def public_record(row, *, ready=False, issues=None):
     selected = selection_for(row)
     return {'id': row.id, 'label': row.label, 'base_context_id': row.base_context_id,
         'target_host_id': row.target_host_id, 'target_node': row.target_node,
-        'workshop_profile': selected.workshop_profile.public(),
+        **{('provisioning_profile' if selected.provisioning_profile else 'workshop_profile'):selected.resource_profile.public()},
         'runtime_target': RuntimeTarget.model_validate_json(row.runtime_target_json).model_dump() if row.runtime_target_json else None,
         'gateway_foundation': selected.gateway_foundation.model_dump() if selected.gateway_foundation else None,
-        'gateway_nic_capacity': gateway_capacity(selected.gateway_foundation, selected.workshop_profile.networks) if selected.gateway_foundation else None,
+        'gateway_nic_capacity': gateway_capacity(selected.gateway_foundation, selected.resource_profile.networks) if selected.gateway_foundation else None,
         'ready_for_planning': ready, 'infrastructure_qualified': False,
         'issues': issues or [], 'created_at': row.created_at, 'approved_by': row.approved_by}
 
@@ -155,7 +158,7 @@ async def foundation(payload: FoundationSelection, session=Depends(_session)):
     from app.core.native_environment_infrastructure import observe_foundation
     selection = EnvironmentSelection.model_validate(payload.model_dump(exclude={'vmid'}))
     _, host = await review_inputs(session, selection)
-    return await observe_foundation(host, payload.vmid, payload.workshop_profile.networks)
+    return await observe_foundation(host, payload.vmid, payload.resource_profile.networks)
 
 
 @router.post('/infrastructure/review', response_model=InfrastructureOut)
@@ -163,7 +166,7 @@ async def infrastructure(payload: InfrastructureSelection, session=Depends(_sess
     from app.core.native_environment_infrastructure import observe
     selection = EnvironmentSelection.model_validate(payload.model_dump(exclude={'vmids'}))
     _, host = await review_inputs(session, selection)
-    guests = await observe(host, payload.vmids, {network.bridge for network in payload.workshop_profile.networks})
+    guests = await observe(host, payload.vmids, {network.bridge for network in payload.resource_profile.networks})
     return {'guests': guests}
 
 
@@ -197,7 +200,7 @@ async def create(payload: EnvironmentRegistration, request: Request, session=Dep
     row = NativeEnvironment(id='env-' + uuid.uuid4().hex[:24], label=payload.label,
         base_context_id=payload.base_context_id, target_host_id=payload.target_host_id,
         target_node=host.node_name, target_api_url=host.api_url,
-        profile_json=payload.workshop_profile.model_dump_json(),
+        profile_json=payload.resource_profile.model_dump_json(),
         foundation_json=payload.gateway_foundation.model_dump_json() if payload.gateway_foundation else None,
         runtime_target_json=RuntimeTarget.model_validate(fresh['runtime_target']).model_dump_json() if fresh['runtime_target'] else None,
         review_revision=payload.review_revision,

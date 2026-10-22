@@ -124,13 +124,13 @@ async def create_deployment(payload: DeploymentCreate,
             scenario = await prepare_project_scenario(session, candidate, dest=Path(directory) / "checkout")
             native = scenario.native
             if foundation := native.get('foundation_plan'):
-                from app.core.workshop_foundations import allocation_authority, FoundationSpec
+                from app.core.template_preparation import allocation_authority, parse_spec
                 if not payload.allocation_reservation_id:
                     raise Range42Error(code='FOUNDATION_RESERVATION_REQUIRED', status=409,
                         message='Review and reserve the reusable template copies before creating their foundation deployment.')
                 assignments = foundation['assignments']
                 host = await session.get(ProxmoxHost, payload.target_host_id)
-                foundation_authority = allocation_authority(FoundationSpec.model_validate(native['foundation']),
+                foundation_authority = allocation_authority(parse_spec(native['foundation']),
                     scenario.context, host, run_id=deployment_id)
                 checked_target = (host.api_url, host.node_name, host.protected_vmids_override_json)
             if plan := native.get('workshop_plan'):

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator, model_serializer
 from app.core.workshop_runs import WorkshopSpec
-from app.core.workshop_foundations import FoundationSpec
+from app.core.template_preparation import PreparationSpec
 
 
 class NativeDeployment(BaseModel):
@@ -16,7 +16,7 @@ class NativeDeployment(BaseModel):
     features: dict[str, StrictBool] = Field(default_factory=dict, max_length=128)
     parameters: dict = Field(default_factory=dict, max_length=64)
     workshop: WorkshopSpec | None = None
-    foundation: FoundationSpec | None = None
+    foundation: PreparationSpec | None = None
     prepare_environment_networks: StrictBool = False
 
     @model_validator(mode='after')

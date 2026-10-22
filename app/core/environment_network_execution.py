@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from app.core import capacity_ledger as ledger
 from app.core.physical_capacity import Digest, StrictObservation
 from app.core.physical_nodes import NodeAttestation, digest
-from app.core.workshop_profiles import WorkshopNetwork
+from app.core.provisioning_profiles import ProvisioningNetwork
 from sqlalchemy import select, text
 
 from app.core import (
@@ -46,7 +46,7 @@ class NetworkPolicy(StrictObservation):
     version: int = Field(ge=1, le=1)
     node_name: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$")
     installation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
-    networks: list[WorkshopNetwork] = Field(min_length=1, max_length=64)
+    networks: list[ProvisioningNetwork] = Field(min_length=1, max_length=64)
     management: Management
     uplink: Uplink
     routing_table: int = Field(ge=40000, le=49999)

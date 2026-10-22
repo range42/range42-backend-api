@@ -220,7 +220,7 @@ async def reserve(factory: async_sessionmaker[AsyncSession], host: ProxmoxHost, 
                   template_authority=None) -> AllocationLease:
     token_hash = token_digest(token)
     if template_authority is not None:
-        from app.core.workshop_foundations import FoundationAllocationAuthority
+        from app.core.template_preparation import FoundationAllocationAuthority
         if not isinstance(template_authority, FoundationAllocationAuthority):
             raise _error('INVALID', 'Foundation allocation requires server-derived template authority.')
         template_authority.validate_request(payload, host)

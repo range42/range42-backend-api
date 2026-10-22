@@ -11304,7 +11304,24 @@
             "title": "Target Node"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfileView"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfileView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfileView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "runtime_target": {
             "anyOf": [
@@ -11369,7 +11386,6 @@
           "base_context_id",
           "target_host_id",
           "target_node",
-          "workshop_profile",
           "ready_for_planning",
           "infrastructure_qualified",
           "issues",
@@ -11427,7 +11443,24 @@
             "title": "Target Host Id"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfile"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gateway_foundation": {
             "anyOf": [
@@ -11456,7 +11489,6 @@
           "label",
           "base_context_id",
           "target_host_id",
-          "workshop_profile",
           "review_revision"
         ],
         "title": "EnvironmentRegistration"
@@ -11480,7 +11512,24 @@
             "title": "Target Host Id"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfileView"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfileView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfileView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "runtime_target": {
             "anyOf": [
@@ -11536,7 +11585,6 @@
           "label",
           "base_context_id",
           "target_host_id",
-          "workshop_profile",
           "ready_for_planning",
           "infrastructure_qualified",
           "requirements"
@@ -11563,7 +11611,24 @@
             "title": "Target Host Id"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfile"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gateway_foundation": {
             "anyOf": [
@@ -11586,8 +11651,7 @@
         "required": [
           "label",
           "base_context_id",
-          "target_host_id",
-          "workshop_profile"
+          "target_host_id"
         ],
         "title": "EnvironmentSelection"
       },
@@ -13735,7 +13799,20 @@
             "title": "Target Host Id"
           },
           "foundation": {
-            "$ref": "#/components/schemas/FoundationSpec"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FoundationSpec"
+              },
+              {
+                "$ref": "#/components/schemas/TemplatePreparationSpec"
+              }
+            ],
+            "title": "Foundation"
+          },
+          "prepare_environment_networks": {
+            "type": "boolean",
+            "title": "Prepare Environment Networks",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -13784,8 +13861,8 @@
               "$ref": "#/components/schemas/TemplateProgress"
             },
             "type": "array",
-            "maxItems": 2,
-            "minItems": 2,
+            "maxItems": 16,
+            "minItems": 1,
             "title": "Templates"
           },
           "foundation_ready": {
@@ -13855,7 +13932,20 @@
             "title": "Target Host Id"
           },
           "foundation": {
-            "$ref": "#/components/schemas/FoundationSpec"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FoundationSpec"
+              },
+              {
+                "$ref": "#/components/schemas/TemplatePreparationSpec"
+              }
+            ],
+            "title": "Foundation"
+          },
+          "prepare_environment_networks": {
+            "type": "boolean",
+            "title": "Prepare Environment Networks",
+            "default": false
           },
           "project_key": {
             "type": "string",
@@ -13908,7 +13998,24 @@
             "title": "Target Host Id"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfile"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gateway_foundation": {
             "anyOf": [
@@ -13938,7 +14045,6 @@
           "label",
           "base_context_id",
           "target_host_id",
-          "workshop_profile",
           "vmid"
         ],
         "title": "FoundationSelection"
@@ -15224,7 +15330,24 @@
             "title": "Target Host Id"
           },
           "workshop_profile": {
-            "$ref": "#/components/schemas/WorkshopProfile"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkshopProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provisioning_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisioningProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gateway_foundation": {
             "anyOf": [
@@ -15259,7 +15382,6 @@
           "label",
           "base_context_id",
           "target_host_id",
-          "workshop_profile",
           "vmids"
         ],
         "title": "InfrastructureSelection"
@@ -15678,9 +15800,13 @@
                 "$ref": "#/components/schemas/FoundationSpec"
               },
               {
+                "$ref": "#/components/schemas/TemplatePreparationSpec"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Foundation"
           },
           "prepare_environment_networks": {
             "type": "boolean",
@@ -18034,6 +18160,183 @@
           "instance_ref"
         ],
         "title": "Provider"
+      },
+      "ProvisioningNetwork": {
+        "properties": {
+          "bridge": {
+            "type": "string",
+            "pattern": "^vmbr[0-9]{1,11}$",
+            "title": "Bridge"
+          },
+          "subnet": {
+            "type": "string",
+            "maxLength": 18,
+            "title": "Subnet"
+          },
+          "gateway": {
+            "type": "string",
+            "maxLength": 15,
+            "title": "Gateway"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bridge",
+          "subnet",
+          "gateway"
+        ],
+        "title": "ProvisioningNetwork"
+      },
+      "ProvisioningProfile": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "title": "Id"
+          },
+          "vmid_ranges": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Vmid Ranges"
+          },
+          "storage": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+            "title": "Storage"
+          },
+          "templates": {
+            "patternProperties": {
+              "^[a-z][a-z0-9-]{0,31}$": {
+                "$ref": "#/components/schemas/TemplateCapability"
+              }
+            },
+            "type": "object",
+            "maxProperties": 16,
+            "minProperties": 1,
+            "title": "Templates"
+          },
+          "networks": {
+            "items": {
+              "$ref": "#/components/schemas/ProvisioningNetwork"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Networks"
+          },
+          "managed_gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayManagement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "infrastructure_guests": {
+            "items": {
+              "$ref": "#/components/schemas/InfrastructureGuest"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Infrastructure Guests"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "id",
+          "vmid_ranges",
+          "storage",
+          "templates"
+        ],
+        "title": "ProvisioningProfile"
+      },
+      "ProvisioningProfileView": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "title": "Id"
+          },
+          "vmid_ranges": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Vmid Ranges"
+          },
+          "storage": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+            "title": "Storage"
+          },
+          "templates": {
+            "patternProperties": {
+              "^[a-z][a-z0-9-]{0,31}$": {
+                "$ref": "#/components/schemas/TemplateCapability"
+              }
+            },
+            "type": "object",
+            "maxProperties": 16,
+            "minProperties": 1,
+            "title": "Templates"
+          },
+          "networks": {
+            "items": {
+              "$ref": "#/components/schemas/ProvisioningNetwork"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Networks"
+          },
+          "managed_gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GatewayManagement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "id",
+          "vmid_ranges",
+          "storage",
+          "templates"
+        ],
+        "title": "ProvisioningProfileView"
       },
       "RegisterPerson": {
         "properties": {
@@ -21897,6 +22200,83 @@
         ],
         "title": "TeardownRequest"
       },
+      "TemplateCapability": {
+        "properties": {
+          "vm_id": {
+            "type": "integer",
+            "maximum": 999999999.0,
+            "minimum": 1000.0,
+            "title": "Vm Id"
+          },
+          "memory_mib": {
+            "type": "integer",
+            "maximum": 4194304.0,
+            "minimum": 128.0,
+            "title": "Memory Mib"
+          },
+          "cores": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Cores"
+          },
+          "disks_gib": {
+            "items": {
+              "type": "integer",
+              "maximum": 65536.0,
+              "minimum": 1.0
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Disks Gib"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vm_id",
+          "memory_mib",
+          "cores",
+          "disks_gib"
+        ],
+        "title": "TemplateCapability"
+      },
+      "TemplatePreparationSpec": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,19}$",
+            "title": "Namespace"
+          },
+          "source_node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Source Node"
+          },
+          "sources": {
+            "patternProperties": {
+              "^[a-z][a-z0-9-]{0,31}$": {
+                "type": "integer",
+                "maximum": 999999999.0,
+                "minimum": 100.0
+              }
+            },
+            "type": "object",
+            "maxProperties": 16,
+            "minProperties": 1,
+            "title": "Sources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "source_node",
+          "sources"
+        ],
+        "title": "TemplatePreparationSpec"
+      },
       "TemplateProgress": {
         "properties": {
           "vm_id": {
@@ -24712,33 +25092,6 @@
         ],
         "title": "WorkshopAdmission"
       },
-      "WorkshopNetwork": {
-        "properties": {
-          "bridge": {
-            "type": "string",
-            "pattern": "^vmbr[0-9]{1,11}$",
-            "title": "Bridge"
-          },
-          "subnet": {
-            "type": "string",
-            "maxLength": 18,
-            "title": "Subnet"
-          },
-          "gateway": {
-            "type": "string",
-            "maxLength": 15,
-            "title": "Gateway"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "bridge",
-          "subnet",
-          "gateway"
-        ],
-        "title": "WorkshopNetwork"
-      },
       "WorkshopPreview": {
         "properties": {
           "sha": {
@@ -24804,7 +25157,7 @@
           },
           "networks": {
             "items": {
-              "$ref": "#/components/schemas/WorkshopNetwork"
+              "$ref": "#/components/schemas/ProvisioningNetwork"
             },
             "type": "array",
             "maxItems": 64,
@@ -24887,7 +25240,7 @@
           },
           "networks": {
             "items": {
-              "$ref": "#/components/schemas/WorkshopNetwork"
+              "$ref": "#/components/schemas/ProvisioningNetwork"
             },
             "type": "array",
             "maxItems": 64,

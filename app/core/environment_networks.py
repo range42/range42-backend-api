@@ -4,23 +4,24 @@ from ipaddress import IPv4Network
 import re
 
 from app.core.errors import Range42Error
+from app.core.provisioning_profiles import resource_profile
 
 
 def refused():
     return Range42Error(
         status=409,
         code="ENVIRONMENT_NETWORK_REVIEW_REQUIRED",
-        message="Select an original registered workshop environment with its approved isolated pool and managed gateway network.",
+        message="Select an original registered environment with its approved isolated pool and managed gateway network.",
     )
 
 
 def compile_plan(context):
-    profile = context.workshop_profile
+    profile = resource_profile(context)
     if (
         not re.fullmatch(r"env-[0-9a-f]{24}", context.id)
-        or context.purpose != "workshop"
         or context.registration_issue
         or profile is None
+        or not profile.networks
         or profile.managed_gateway is None
         or not context.target_node
         or not context.target_host_id

@@ -21,6 +21,7 @@ from app.core.native_environment_models import NativeEnvironment
 from app.core.native_environment_infrastructure import GatewayFoundation, gateway_capacity, gateway_outside_run
 from app.core.native_contexts import NativeContext, _api_binding, _contexts, resolve_context
 from app.core.workshop_profiles import WorkshopProfile
+from app.core.provisioning_profiles import ProvisioningProfile
 
 
 class RuntimeTarget(BaseModel):
@@ -37,22 +38,33 @@ class EnvironmentSelection(BaseModel):
     label: str = Field(min_length=1, max_length=128, pattern=r'^[^\r\n\x00-\x1f]+$')
     base_context_id: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
     target_host_id: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
-    workshop_profile: WorkshopProfile
+    workshop_profile: WorkshopProfile | None = None
+    provisioning_profile: ProvisioningProfile | None = None
     gateway_foundation: GatewayFoundation | None = None
     reuse_runtime: bool = Field(default=False, strict=True)
 
     @model_serializer(mode='wrap')
     def compatible_selection(self, handler):
         value = handler(self)
+        if self.workshop_profile is None:
+            value.pop('workshop_profile',None)
+        if self.provisioning_profile is None:
+            value.pop('provisioning_profile',None)
         if not self.reuse_runtime:
             value.pop('reuse_runtime', None)
         return value
 
+    @property
+    def resource_profile(self):
+        return self.provisioning_profile or self.workshop_profile
+
     @model_validator(mode='after')
     def retained_gateway_scope(self):
-        if self.gateway_foundation and self.workshop_profile.managed_gateway:
+        if (self.workshop_profile is None)==(self.provisioning_profile is None):
+            raise ValueError('Select exactly one provisioning profile')
+        if self.gateway_foundation and self.resource_profile.managed_gateway:
             raise ValueError('Choose one managed gateway per run or a retained shared gateway')
-        if self.gateway_foundation and not gateway_outside_run(self.gateway_foundation.vmid, self.workshop_profile):
+        if self.gateway_foundation and not gateway_outside_run(self.gateway_foundation.vmid, self.resource_profile):
             raise ValueError('The retained gateway must be separate from participant guests and source templates')
         return self
 
@@ -63,7 +75,7 @@ def refused(message):
 
 def selection_for(row):
     return EnvironmentSelection(label=row.label, base_context_id=row.base_context_id,
-        target_host_id=row.target_host_id, workshop_profile=json.loads(row.profile_json),
+        target_host_id=row.target_host_id, **{('provisioning_profile' if 'templates' in json.loads(row.profile_json) else 'workshop_profile'):json.loads(row.profile_json)},
         gateway_foundation=json.loads(row.foundation_json) if row.foundation_json else None,
         reuse_runtime=row.runtime_target_json is not None)
 
@@ -148,10 +160,10 @@ def review_selection(selection, host, base, *, target_proof=None):
         intent['runtime_target_proof'] = target_proof
     revision = hashlib.sha256(json.dumps(intent, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return {'revision': revision, 'label': selection.label, 'base_context_id': base.id,
-        'target_host_id': host.id, 'workshop_profile': selection.workshop_profile.public(),
+        'target_host_id': host.id, **{('provisioning_profile' if selection.provisioning_profile else 'workshop_profile'): selection.resource_profile.public()},
         'runtime_target': target_proof['identity'] if target_proof else None,
         'gateway_foundation': selection.gateway_foundation.model_dump() if selection.gateway_foundation else None,
-        'gateway_nic_capacity': gateway_capacity(selection.gateway_foundation, selection.workshop_profile.networks) if selection.gateway_foundation else None,
+        'gateway_nic_capacity': gateway_capacity(selection.gateway_foundation, selection.resource_profile.networks) if selection.gateway_foundation else None,
         'ready_for_planning': True, 'infrastructure_qualified': False,
         'requirements': ['Live preflight must qualify source templates, isolated bridges, guest ownership and available capacity.',
             'Laptop access, routing, DNS and browser trust require the selected installation’s access integration.']}
@@ -169,16 +181,16 @@ async def review(session, selection):
     result, host = await review_inputs(session, selection)
     if selection.gateway_foundation:
         from app.core.native_environment_infrastructure import observe_foundation
-        if selection.workshop_profile.infrastructure_guests:
+        if selection.resource_profile.infrastructure_guests:
             raise refused('Choose one infrastructure binding mode for this environment.')
-        observed = await observe_foundation(host, selection.gateway_foundation.vmid, selection.workshop_profile.networks)
+        observed = await observe_foundation(host, selection.gateway_foundation.vmid, selection.resource_profile.networks)
         if observed['gateway_foundation'] != selection.gateway_foundation:
             raise refused('The gateway changed after inspection. Inspect its current generation and ports again.')
-    if selection.workshop_profile.infrastructure_guests:
+    if selection.resource_profile.infrastructure_guests:
         from app.core.native_environment_infrastructure import canonical, observe, refused as infrastructure_refused
-        expected = selection.workshop_profile.infrastructure_guests
+        expected = selection.resource_profile.infrastructure_guests
         actual = await observe(host, [guest.vmid for guest in expected],
-            {network.bridge for network in selection.workshop_profile.networks})
+            {network.bridge for network in selection.resource_profile.networks})
         if canonical(expected) != canonical(actual):
             raise infrastructure_refused()
     return result
@@ -210,11 +222,12 @@ async def registered_contexts(session, *, identity=None):
         if base is None:
             base = NativeContext(row.base_context_id, row.label, Path('/__unavailable_native_runtime__'),
                 Path('/__unavailable_native_runtime__'), '', '', urlsplit(row.target_api_url).hostname or '')
+        selection=selection_for(row)
         result.append(replace(base, id=row.id, label=row.label,
             target_host_id=row.target_host_id, target_node=row.target_node, target_api_url=row.target_api_url,
             address=urlsplit(row.target_api_url).hostname or '', node_name=row.target_node,
-            workshop_profile=WorkshopProfile.model_validate_json(row.profile_json), registration_issue=issue,
-            purpose='workshop', execution_ready=False))
+            workshop_profile=selection.workshop_profile, provisioning_profile=selection.provisioning_profile, registration_issue=issue,
+            purpose='native' if selection.provisioning_profile else 'workshop', execution_ready=False))
     return result
 
 

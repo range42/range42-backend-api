@@ -103,7 +103,7 @@ async def prepare_project_scenario(
             native = {**native, 'workshop_plan': plan}
         from app.core.native_environments import resolve_registered_context
         context = await resolve_registered_context(session, native["context_id"], await session.get(ProxmoxHost, deployment.target_host_id))
-        from app.core.workshop_foundations import resolve_native_foundation, foundation_topology
+        from app.core.template_preparation import resolve_native_foundation, foundation_topology
         foundation = resolve_native_foundation(native, descriptor, context, run_id=deployment.id or '')
         if native.get('prepare_environment_networks'):
             from app.core.environment_networks import compile_plan as compile_network_plan

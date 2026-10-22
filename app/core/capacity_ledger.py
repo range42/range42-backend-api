@@ -32,11 +32,11 @@ CAPACITY_SETTLED_ATTEMPT_STATES = tuple(state for state in TERMINAL_ATTEMPT_STAT
 
 
 def resource_guests(plan):
-    return plan['templates'] if plan.get('kind') == 'native-workshop-foundation' else workshop_resource_guests(plan)
+    return plan['templates'] if plan.get('kind') in {'native-workshop-foundation','native-template-preparation'} else workshop_resource_guests(plan)
 
 
 def validate_activation(plan):
-    if plan.get('kind') != 'native-workshop-foundation':
+    if plan.get('kind') not in {'native-workshop-foundation','native-template-preparation'}:
         validate_workshop_activation(plan)
 
 
@@ -136,12 +136,12 @@ async def demand(session, deployment_id, observed, agent_revision):
     try:
         approved = NodeAttestation.model_validate_json(binding.observation_json)
         if dep.native.get('foundation_plan'):
-            from app.core.workshop_foundations import FoundationSpec, compile_foundation
+            from app.core.template_preparation import parse_spec, compile_foundation
             from app.core.native_environments import resolve_registered_context
             if dep.native.get('workshop') or dep.native.get('workshop_plan'):
                 raise ValueError('Foundation and run ownership cannot be combined')
             context = await resolve_registered_context(session, dep.native['context_id'], host)
-            plan = compile_foundation(FoundationSpec.model_validate(dep.native['foundation']), context, run_id=dep.id)
+            plan = compile_foundation(parse_spec(dep.native['foundation']), context, run_id=dep.id)
             retained_plan = dep.native['foundation_plan']
         else:
             spec = WorkshopSpec.model_validate(dep.native["workshop"])
