@@ -1,6 +1,6 @@
 """Canonical reusable template preparation, separate from participant runs."""
 
-from typing import Literal
+from typing import Annotated, Literal
 from dataclasses import dataclass
 import re
 
@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 
 from app.core.errors import Range42Error
 from app.core.provisioning_models import StrictModel
-from app.core.provisioning_profiles import Role, TemplateId, resource_profile
+from app.core.provisioning_profiles import Role, resource_profile
 from pydantic import TypeAdapter
 
 
@@ -107,7 +107,7 @@ def _compile_legacy(spec: FoundationSpec, context, *, run_id: str):
 class TemplatePreparationSpec(StrictModel):
     namespace: str = Field(pattern=r"^[a-z][a-z0-9-]{0,19}$")
     source_node: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
-    sources: dict[Role, TemplateId] = Field(min_length=1, max_length=16)
+    sources: dict[Role, Annotated[int, Field(ge=100, le=999999999)]] = Field(min_length=1, max_length=16)
 
 
 PreparationSpec = FoundationSpec | TemplatePreparationSpec

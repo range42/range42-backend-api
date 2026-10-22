@@ -22259,7 +22259,7 @@
               "^[a-z][a-z0-9-]{0,31}$": {
                 "type": "integer",
                 "maximum": 999999999.0,
-                "minimum": 1000.0
+                "minimum": 100.0
               }
             },
             "type": "object",

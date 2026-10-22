@@ -222,3 +222,23 @@ def test_installation_recipe_does_not_silently_replace_approved_general_hardware
         )
         is None
     )
+
+
+def test_general_preparation_can_read_an_explicitly_selected_standard_proxmox_source_id():
+    from app.core.template_preparation import TemplatePreparationSpec, compile_templates
+
+    spec = TemplatePreparationSpec.model_validate(
+        {
+            "namespace": "monitor-base",
+            "source_node": "node-a",
+            "sources": {"sensor": 100, "collector": 9201, "dashboard": 9202},
+        }
+    )
+    plan = compile_templates(spec, generic_context(), run_id="d" * 16)
+    assert (
+        next(row for row in plan["templates"] if row["role"] == "sensor")[
+            "source_vm_id"
+        ]
+        == 100
+    )
+    assert {row["vm_id"] for row in plan["assignments"]} == {9250, 9251, 9252}
