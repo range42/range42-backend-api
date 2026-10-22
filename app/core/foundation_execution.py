@@ -13,7 +13,7 @@ from app.core.capacity_models import CapacityHold
 from app.core.models import Deployment, ProxmoxHost
 from app.core.physical_node_models import PhysicalNodeBinding
 from app.core.physical_nodes import FOUNDATION_OPERATIONS, NodeAttestation, digest, registry_revision, target_revision
-from app.core.workshop_foundations import FoundationSpec, allocation_authority, compile_foundation
+from app.core.template_preparation import parse_spec, allocation_authority, compile_foundation
 from app.core.native_environments import resolve_registered_context
 from app.core.allocation_models import DeploymentAllocation
 from app.core.physical_capacity import StrictObservation, Digest
@@ -45,7 +45,7 @@ class FoundationReceipt(StrictObservation):
     request_digest: Digest
     status: Literal['absent', 'preparing', 'uncertain', 'complete']
     node: NodeAttestation
-    templates: list[TemplateProgress] = Field(min_length=2, max_length=2)
+    templates: list[TemplateProgress] = Field(min_length=1, max_length=16)
     foundation_ready: bool
     execution_ready: Literal[False]
     infrastructure_qualified: Literal[False]
@@ -94,7 +94,7 @@ def verified_receipt(request, value):
                 prefix = 'base' if progress.phase == 'complete' else 'vm'
                 expected = {f'{spec["storage"]}:{prefix}-{spec["vm_id"]}-disk-0',
                             f'{spec["storage"]}:vm-{spec["vm_id"]}-cloudinit'}
-                if spec['role'] == 'proxmox':
+                if len(spec.get('disks_gib', [32,128] if spec['role']=='proxmox' else [32])) == 2:
                     expected.add(f'{spec["storage"]}:{prefix}-{spec["vm_id"]}-disk-1')
                 if set(progress.volumes) != expected or len(progress.volumes) != len(expected):
                     raise ValueError('Original copied volumes differ')
@@ -127,7 +127,7 @@ async def original(session, row):
     try:
         approved = NodeAttestation.model_validate_json(binding.observation_json)
         context = await resolve_registered_context(session, dep.native['context_id'], host)
-        spec = FoundationSpec.model_validate(dep.native['foundation'])
+        spec = parse_spec(dep.native['foundation'])
         plan = compile_foundation(spec, context, run_id=dep.id)
         authority = allocation_authority(spec, context, host, run_id=dep.id)
         authority.validate_assignments(claim.assignments, host)

@@ -87,8 +87,8 @@ async def evaluate_preflight(session, dep, payload=None):
             ) else None
             foundation = scenario.native and scenario.native.get('foundation_plan')
             if foundation:
-                from app.core.workshop_foundations import FoundationSpec, allocation_check
-                report.checks.append(allocation_check(FoundationSpec.model_validate(scenario.native['foundation']),
+                from app.core.template_preparation import parse_spec, allocation_check
+                report.checks.append(allocation_check(parse_spec(scenario.native['foundation']),
                     scenario.context, host, run_id=dep.id, vmids=scenario.vmids))
             else:
                 report.checks.append(check_vmids(scenario.vmids, host_overrides=overrides))
@@ -111,11 +111,12 @@ async def evaluate_preflight(session, dep, payload=None):
                         detail='Original foundation capacity and bounded node capability verified. The node rechecks approved sources and copied generations before each write.'))
                 if plan := scenario.native.get('workshop_plan'):
                     from app.core.workshop_preflight import workshop_checks
+                    from app.core.workshop_profiles import installation_profile
                     from app.core.deployment_allocations import ensure_for_attempt
                     await ensure_for_attempt(get_session_factory(), dep, scenario.playbook.parent,
                         create=False, checked_host=host, declared_assignments=plan['assignments'])
                     report.checks.extend(await workshop_checks(plan, host, scope=scope,
-                        receipt_root=Path(dep.workspace_path) / 'workshop-receipts', profile=scenario.context.workshop_profile))
+                        receipt_root=Path(dep.workspace_path) / 'workshop-receipts', profile=installation_profile(scenario.context)))
                 reservations = scenario.native["descriptor"]["topology"]["reservations"]
                 if reservations["status"] in {"conflict", "invalid"}:
                     report.checks.append(PreflightCheck(check="native_reservations", result="warn",

@@ -9,7 +9,7 @@ from pydantic import Field, ValidationError, model_validator
 from app.core.errors import Range42Error
 from app.core.proxmox_read import ProxmoxReadError, read_proxmox_data
 from app.core.proxmox_tls import proxmox_verify
-from app.core.workshop_profiles import InfrastructureGuest
+from app.core.provisioning_profiles import InfrastructureGuest
 
 
 def refused():
@@ -109,7 +109,8 @@ def foundation_snapshot(config, *, vmid, node):
 
 
 def gateway_outside_run(vmid, profile):
-    return vmid not in {profile.proxmox_template, profile.deployer_template} and not any(
+    templates=({row.vm_id for row in profile.templates.values()} if hasattr(profile,'templates') else {profile.proxmox_template,profile.deployer_template})
+    return vmid not in templates and not any(
         start <= vmid <= end for start, end in profile.vmid_ranges)
 
 

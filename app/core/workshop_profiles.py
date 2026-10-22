@@ -1,44 +1,11 @@
 """Operator-approved provisioning bounds, separate from browser run inputs."""
-from ipaddress import IPv4Address, IPv4Network
+from ipaddress import IPv4Network
 
 from pydantic import Field, model_serializer, model_validator
 
 from app.core.errors import Range42Error
-from app.core.workshop_runs import GatewayManagement, StrictModel
-
-
-class WorkshopNetwork(StrictModel):
-    bridge: str = Field(pattern=r'^vmbr[0-9]{1,11}$')
-    subnet: str = Field(max_length=18)
-    gateway: str = Field(max_length=15)
-
-    @model_validator(mode='after')
-    def addresses(self):
-        network = IPv4Network(self.subnet, strict=True)
-        if network.prefixlen != 28 or IPv4Address(self.gateway) != network[1] or not any(
-                network.subnet_of(IPv4Network(pool)) for pool in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
-            raise ValueError('Approved participant networks require private /28s with their first host as gateway')
-        return self
-
-
-class InfrastructureNic(StrictModel):
-    interface: str = Field(pattern=r'^net(?:[0-9]|[12][0-9]|3[01])$')
-    bridge: str = Field(pattern=r'^vmbr[0-9]{1,11}$')
-    mac: str = Field(pattern=r'^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$')
-
-
-class InfrastructureGuest(StrictModel):
-    vmid: int = Field(ge=100, le=999999999)
-    node: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
-    vmgenid: str = Field(pattern=r'^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
-    owner: str = Field(min_length=1, max_length=256)
-    nics: list[InfrastructureNic] = Field(min_length=1, max_length=32)
-
-    @model_validator(mode='after')
-    def exact_identity(self):
-        if any(ord(char) < 32 for char in self.owner) or len({nic.interface for nic in self.nics}) != len(self.nics):
-            raise ValueError('Infrastructure identities and NICs must be exact and unique')
-        return self
+from app.core.provisioning_models import GatewayManagement, StrictModel
+from app.core.provisioning_profiles import InfrastructureGuest, InfrastructureNic, ProvisioningNetwork as WorkshopNetwork  # noqa: F401
 
 
 class WorkshopProfileView(StrictModel):
@@ -90,8 +57,24 @@ class WorkshopProfile(WorkshopProfileView):
         return self.model_dump(exclude={'infrastructure_guests'})
 
 
+def installation_profile(context):
+    """Recipe-specific view of general bounds; never rewrites a registration."""
+    if original:=getattr(context,'workshop_profile',None):
+        return original
+    profile=getattr(context,'provisioning_profile',None)
+    if profile is None or not profile.networks:
+        return None
+    expected={'proxmox':(16384,4,[32,128]),'deployer':(4096,2,[32])}
+    if any(role not in profile.templates or
+            (profile.templates[role].memory_mib,profile.templates[role].cores,profile.templates[role].disks_gib)!=hardware
+            for role,hardware in expected.items()):
+        return None
+    return WorkshopProfile.model_validate({**profile.model_dump(exclude={'templates'}),
+        'proxmox_template':profile.templates['proxmox'].vm_id,'deployer_template':profile.templates['deployer'].vm_id})
+
+
 def require_workshop_profile(context, plan: dict):
-    profile = context.workshop_profile
+    profile = installation_profile(context)
     if profile is None:
         raise Range42Error(status=409, code='WORKSHOP_PROVISIONING_PROFILE_REQUIRED',
             message='This environment has no approved workshop provisioning profile. Prepare and register a dedicated profile before creating a run.')

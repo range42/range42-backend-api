@@ -149,7 +149,7 @@ def inspect_native_scenario(root: Path, path: str) -> dict:
             raise invalid('Invalid manifest/workshop.json') from None
     preparation_file = base / 'manifest/preparation.json'
     if preparation_file.exists() or preparation_file.is_symlink():
-        from app.core.workshop_foundations import FoundationDescriptor
+        from app.core.template_preparation import FoundationDescriptor
         try:
             preparation_file = inside(base, 'manifest/preparation.json', file=True)
             if preparation_file.stat().st_size > 8192 or result.get('workshop') or result.get('platform'):

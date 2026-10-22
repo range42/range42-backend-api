@@ -59,7 +59,6 @@ def test_environment_network_plan_keeps_pool_ownership_separate_from_run_guests(
     "damage",
     [
         "static_context",
-        "foreign_purpose",
         "registration",
         "no_profile",
         "no_gateway",

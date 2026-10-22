@@ -7,20 +7,17 @@ Identity-provider subjects and network device grants are separate bindings.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from ipaddress import IPv4Address, IPv4Network
+from ipaddress import IPv4Network
 import re
 import secrets
 import subprocess
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import Field, model_serializer, model_validator
+from app.core.provisioning_models import StrictModel, GatewayManagement, ManagedGateway  # noqa: F401
 
 from app.core.errors import Range42Error
-
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra='forbid', strict=True)
 
 
 class WorkshopDescriptor(StrictModel):
@@ -34,32 +31,6 @@ class WorkshopDescriptor(StrictModel):
     def bounds(self):
         if self.min_seats > self.max_seats:
             raise ValueError('Workshop seat bounds are inconsistent')
-        return self
-
-
-class GatewayManagement(StrictModel):
-    management_bridge: str = Field(pattern=r'^vmbr[1-9][0-9]{2,10}$')
-    management_subnet: str = Field(max_length=18)
-
-    @model_validator(mode='after')
-    def private_management(self):
-        network = IPv4Network(self.management_subnet, strict=True)
-        if network.prefixlen != 29 or not any(network.subnet_of(IPv4Network(pool))
-                for pool in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
-            raise ValueError('Gateway management requires a separate private /29')
-        return self
-
-
-class ManagedGateway(GatewayManagement):
-    vm_id: int = Field(ge=1000, le=999999999)
-    management_ip: str = Field(max_length=15)
-
-    @model_validator(mode='after')
-    def allocated_address(self):
-        network = IPv4Network(self.management_subnet)
-        address = IPv4Address(self.management_ip)
-        if address not in network or address in (network[0], network[1], network[-1]):
-            raise ValueError('Reserve the first management host for the physical node')
         return self
 
 

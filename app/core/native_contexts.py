@@ -14,6 +14,7 @@ import yaml
 
 from app.core.native_scenarios import invalid
 from app.core.workshop_profiles import WorkshopProfile
+from app.core.provisioning_profiles import ProvisioningProfile
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class NativeContext:
     target_node: str = ""
     target_api_url: str = ""
     workshop_profile: WorkshopProfile | None = None
+    provisioning_profile: ProvisioningProfile | None = None
     provisioning_credential: str = field(default="", repr=False, compare=False)
 
     registration_issue: str = ""
@@ -175,13 +177,16 @@ def _contexts() -> list[NativeContext]:
             if binding[2]:
                 _api_binding(binding[2])
             profile = WorkshopProfile.model_validate(row['workshop_profile']) if row.get('workshop_profile') is not None else None
-            if profile and not all(binding):
+            general = ProvisioningProfile.model_validate(row['provisioning_profile']) if row.get('provisioning_profile') is not None else None
+            if profile and general:
+                raise ValueError('Choose one provisioning profile')
+            if (profile or general) and not all(binding):
                 raise ValueError('Workshop provisioning requires an explicit target binding')
             result.append(NativeContext(identity, row.get("label") or identity, workspace, script,
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_CODENAME"),
                 _literal_export(env, "RANGE42_INFRASTRUCTURE_LAB"),
                 _address(workspace / "inventory/inventory_default.yml"), variables,
-                target_host_id=binding[0], target_node=binding[1], target_api_url=binding[2], workshop_profile=profile))
+                target_host_id=binding[0], target_node=binding[1], target_api_url=binding[2], workshop_profile=profile, provisioning_profile=general))
         except (ValueError, TypeError, KeyError, OSError):
             raise invalid("The operator's native context registry contains an invalid entry", "NATIVE_CONTEXT_UNAVAILABLE") from None
     return result
@@ -198,7 +203,8 @@ def available_contexts(hosts: list, *, registered: list[NativeContext] | None = 
                      "scenario": context.scenario, "target_host_id": matches[0].id if len(matches) == 1 else None,
                      "ready": not issues, "issues": issues,
                      "purpose": context.purpose, "execution_ready": context.execution_ready,
-                     "workshop_profile": context.workshop_profile.public() if context.workshop_profile else None})
+                     "workshop_profile": context.workshop_profile.public() if context.workshop_profile else None,
+                     "provisioning_profile": context.provisioning_profile.public() if context.provisioning_profile else None})
     return rows
 
 
@@ -219,7 +225,7 @@ def resolve_context(identity: str, host, *, registered: list[NativeContext] | No
 
 
 def execution_issue(context, scope):
-    if (getattr(context, 'purpose', 'native') == 'workshop'
+    if ((getattr(context, 'purpose', 'native') == 'workshop' or getattr(context,'provisioning_profile',None) is not None)
             and not getattr(context, 'execution_ready', False)
             and scope not in {'teardown', 'delete_vms', 'delete_networks'}):
         return 'This environment is registered for planning. Its reusable infrastructure has not been qualified. Prepare and verify its source templates and network policy before starting guests.'

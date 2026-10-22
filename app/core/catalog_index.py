@@ -148,7 +148,7 @@ def _scenario(base: Path, root: Path, *, topology: bool = False) -> dict | None:
             document['workshop_error'] = 'Invalid manifest/workshop.json; correct the workshop capability before deployment.'
     preparation_file = base / 'manifest/preparation.json'
     if preparation_file.exists() or preparation_file.is_symlink():
-        from app.core.workshop_foundations import FoundationDescriptor
+        from app.core.template_preparation import FoundationDescriptor
         try:
             document['preparation'] = FoundationDescriptor.model_validate(_document(preparation_file, root)).model_dump()
         except ValueError:

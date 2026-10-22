@@ -201,7 +201,11 @@ The API installer compatibility bundle does not change the VM bootstrap, SDN or
 firewall primitives. Its matching complete bundle tree is recognized through the
 existing content fingerprint mechanism. All original cluster guards remain.
 
-## Optional reusable workshop foundation
+## Reusable template preparation
+
+For any native scenario, use the [shared resource profile and template-set contract](native-resource-profiles.md). The following installation recipe remains compatible with existing deployments.
+
+### Existing installation recipe
 
 A catalog scenario may declare `manifest/preparation.json` with version `1`, kind
 `native-workshop-foundation` and a title. It declares no static VMIDs and cannot

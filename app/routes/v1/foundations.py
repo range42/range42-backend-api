@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, Header, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.core import config, db
 from app.core.allocation_ledger import load_installed_reservations
@@ -13,7 +13,7 @@ from app.core.errors import Range42Error
 from app.core.models import ProxmoxHost
 from app.core.native_environments import resolve_registered_context
 from app.core.proxmox_tls import proxmox_verify
-from app.core.workshop_foundations import FoundationSpec, resolve_native_foundation, foundation_topology, allocation_authority
+from app.core.template_preparation import PreparationSpec, resolve_native_foundation, foundation_topology, allocation_authority
 from app.schemas.v1.allocation import AllocationRequest, AllocationLease
 from app.core import foundation_execution
 from app.core.capacity_models import CapacityHold
@@ -37,7 +37,8 @@ class FoundationPreview(BaseModel):
     component_id: str | None = Field(default=None, pattern=r'^[A-Za-z][A-Za-z0-9_.-]{0,127}$')
     context_id: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
     target_host_id: str = Field(min_length=1, max_length=128)
-    foundation: FoundationSpec
+    foundation: PreparationSpec
+    prepare_environment_networks: StrictBool = False
 
 
 class FoundationReservation(FoundationPreview):
@@ -59,15 +60,24 @@ async def reviewed(project_id, payload, selected):
     request = {'vmid_start': min(ids), 'vmid_end': max(ids), 'networks': [],
         'vms': [{'node_id': row['node_id'], 'vm_id': row['vm_id'], 'nics': []} for row in plan['assignments']]}
     authority = allocation_authority(payload.foundation, context, host, run_id='0'*16)
-    return descriptor, host, plan, request, authority
+    network_plan=None
+    if payload.prepare_environment_networks:
+        from app.core.environment_networks import compile_plan
+        network_plan=compile_plan(context)
+    return descriptor, host, plan, request, authority, network_plan
 
 
 @router.post('/projects/{project_id}/native-scenario/foundation/preview')
 async def preview_foundation(project_id: str, payload: FoundationPreview, selected=Depends(session)):
-    descriptor, _, plan, allocation, _ = await reviewed(project_id, payload, selected)
-    return {'preview_only': True, 'resources_reserved': False, 'execution_ready': False,
+    descriptor, _, plan, allocation, _, networks = await reviewed(project_id, payload, selected)
+    topology=foundation_topology(plan)
+    if networks is not None:
+        topology['networks']=[{'vnet':row['bridge'],'subnet':row['subnet'],'gateway':row['gateway']} for row in networks['networks']]
+        management=networks['management']
+        topology['networks'].append({'vnet':management['bridge'],'subnet':management['subnet'],'gateway':management['host_address'].split('/')[0]})
+    return {'environment_networks': networks, 'preview_only': True, 'resources_reserved': False, 'execution_ready': False,
         'assignments': plan['assignments'], 'allocation_request': allocation, 'capacity': plan['capacity'],
-        'topology': {**descriptor['topology'], **foundation_topology(plan),
+        'topology': {**descriptor['topology'], **topology,
             'reservations': {'status': 'missing', 'issues': ['Reserve these exact template copies before creating their foundation deployment.']}}}
 
 
@@ -77,7 +87,7 @@ async def reserve_foundation(project_id: str, payload: FoundationReservation,
     token_digest(x_range42_reservation_token)
     factory = db.get_session_factory()
     async with factory() as selected:
-        _, host, _, allocation, authority = await reviewed(project_id, payload, selected)
+        _, host, _, allocation, authority, _ = await reviewed(project_id, payload, selected)
     if not config.settings.wwwapp_playbooks_dir:
         raise Range42Error(status=409, code='ALLOCATION_OCCUPANCY_UNAVAILABLE', message='Configure the installed scenario reservation registry.')
     reserved = await asyncio.to_thread(load_installed_reservations, Path(config.settings.wwwapp_playbooks_dir))
